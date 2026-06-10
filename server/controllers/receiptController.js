@@ -1,6 +1,6 @@
 const Receipt = require('../models/Receipt');
 const Sale = require('../models/Sale');
-const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { getBaseFilter, getCreateData, getSettingQuery } = require('../utils/queryHelper');
 
 const getReceipts = async (req, res) => {
   try {
@@ -40,7 +40,7 @@ const getReceipts = async (req, res) => {
 const getReceiptById = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const receipt = await Receipt.findById(req.params.id).populate('customer', 'name phone email');
+    const receipt = await Receipt.findOne({ _id: req.params.id, ...baseFilter }).populate('customer', 'name phone email');
     if (!receipt) return res.status(404).json({ message: 'Receipt not found' });
     res.json(receipt);
   } catch (error) {
@@ -51,12 +51,11 @@ const getReceiptById = async (req, res) => {
 const generateReceiptPDF = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const receipt = await Receipt.findById(req.params.id);
+    const receipt = await Receipt.findOne({ _id: req.params.id, ...baseFilter });
     if (!receipt) return res.status(404).json({ message: 'Receipt not found' });
-    if (receipt.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     const Setting = require('../models/Setting');
-    const settings = await Setting.findOne(baseFilter);
+    const settings = await Setting.findOne(getSettingQuery(req));
     const PDFDocument = require('pdfkit');
 
     const doc = new PDFDocument({ margin: 40, size: 'A4' });

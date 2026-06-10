@@ -3,6 +3,7 @@ import GSTFilterBar from '../../../components/gst/GSTFilterBar';
 import GSTTable from '../../../components/gst/GSTTable';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
 
 const columns = [
   { key: 'gstin', label: 'GSTIN/UIN', width: '140px' },
@@ -61,7 +62,9 @@ const GSTR1 = () => {
 
   return (
     <div className="bg-white dark:bg-[#0F172A] min-h-full">
-      <GSTFilterBar title="GSTR 1" onDateChange={setDate} startDate={dates.start} endDate={dates.end} />
+      <GSTFilterBar title="GSTR 1" onDateChange={setDate} startDate={dates.start} endDate={dates.end}
+        onExcel={() => exportToExcel(mappedData, columns, 'GSTR1 Report')}
+        onPrint={() => printReport('GSTR1 Report', columns, mappedData)} />
       <div className="px-6 pt-6">
         {summary && (
           <div className="grid grid-cols-4 gap-4 mb-4">

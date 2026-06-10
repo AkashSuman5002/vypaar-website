@@ -26,13 +26,11 @@ const getCustomerBalance = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const { customerId } = req.params;
-    const balance = await LoyaltyPoint.aggregate([
-      { $match: { ...baseFilter, customer: require('mongoose').Types.ObjectId.createFromHexString(customerId) } },
-      { $group: { _id: null, totalEarned: { $sum: '$points' }, totalRedeemed: { $sum: { $cond: ['$isRedeemed', '$points', 0] } } } },
-    ]);
-    const result = balance[0] || { totalEarned: 0, totalRedeemed: 0 };
-    result.balance = result.totalEarned - result.totalRedeemed;
-    res.json(result);
+    const entries = await LoyaltyPoint.find({ ...baseFilter, customer: customerId }).select('points isRedeemed').lean();
+    const totalEarned = entries.reduce((sum, e) => sum + (e.points || 0), 0);
+    const totalRedeemed = entries.reduce((sum, e) => sum + (e.isRedeemed ? (e.points || 0) : 0), 0);
+    const balance = totalEarned - totalRedeemed;
+    res.json({ totalEarned, totalRedeemed, balance });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -53,7 +51,7 @@ const earnPoints = async (req, res) => {
       transactionType: 'earn', points, balance: newBalance,
       description: description || 'Points earned', referenceNumber,
     }) });
-    await Customer.findByIdAndUpdate(customer, { $set: { loyaltyPoints: newBalance } });
+    await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $set: { loyaltyPoints: newBalance } });
     res.status(201).json(loyaltyPoint);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -79,7 +77,7 @@ const redeemPoints = async (req, res) => {
       isRedeemed: true, redeemedAt: new Date(),
       description: description || 'Points redeemed', referenceNumber,
     }) });
-    await Customer.findByIdAndUpdate(customer, { $set: { loyaltyPoints: newBalance } });
+    await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $set: { loyaltyPoints: newBalance } });
     res.status(201).json(loyaltyPoint);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -104,7 +102,7 @@ const adjustPoints = async (req, res) => {
       transactionType: 'adjustment', points: Math.abs(points), balance: newBalance,
       description: description || `Adjustment: ${points > 0 ? '+' : ''}${points}`,
     }) });
-    await Customer.findByIdAndUpdate(customer, { $set: { loyaltyPoints: newBalance } });
+    await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $set: { loyaltyPoints: newBalance } });
     res.status(201).json(loyaltyPoint);
   } catch (error) {
     res.status(500).json({ message: error.message });

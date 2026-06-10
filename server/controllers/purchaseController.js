@@ -6,7 +6,9 @@ const Account = require('../models/Account');
 const JournalEntry = require('../models/JournalEntry');
 const Setting = require('../models/Setting');
 const { recordStockMovement } = require('./stockController');
-const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { getBaseFilter, getCreateData, getSettingQuery } = require('../utils/queryHelper');
+const { createNotification } = require('../controllers/notificationController');
+const { sendAutoMessage } = require('../services/messageService');
 
 const getPurchases = async (req, res) => {
   try {
@@ -45,8 +47,9 @@ const createPurchase = async (req, res) => {
       totalAmount, paidAmount, paymentStatus, paymentMethod, notes, isInterState,
     } = req.body;
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const calcTaxOnMRP = setting?.preferences?.item?.calculateTaxOnMRP === true;
+    const stockMaintenance = setting?.preferences?.item?.stockMaintenance !== false;
 
     // Validate items
     if (!items || items.length === 0) {
@@ -112,13 +115,14 @@ const createPurchase = async (req, res) => {
     });
 
     // Update stock + record movement
+    if (stockMaintenance) {
     for (const item of processedItems) {
       const prod = item.product
-        ? await Product.findById(item.product)
+        ? await Product.findOne({ _id: item.product, user: req.user._id })
         : await Product.findOne({ ...baseFilter, name: item.productName });
 
       if (prod) {
-        await Product.findByIdAndUpdate(prod._id, { $inc: { stock: item.quantity } });
+        await Product.findOneAndUpdate({ _id: prod._id, user: req.user._id }, { $inc: { stock: item.quantity } });
         await recordStockMovement({
           userId: req.user._id,
           businessId: req.businessId,
@@ -135,12 +139,13 @@ const createPurchase = async (req, res) => {
         });
       }
     }
+    }
 
     // Auto-update sale price if setting enabled
     if (setting?.preferences?.item?.updateSalePriceAuto) {
       for (const item of processedItems) {
         if (item.product && item.rate) {
-          await Product.findByIdAndUpdate(item.product, { price: item.rate }).catch(() => {});
+          await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { price: item.rate }).catch(() => {});
         }
       }
     }
@@ -194,17 +199,31 @@ const createPurchase = async (req, res) => {
           postedAt: new Date(),
         });
         for (const line of lines) {
-          const acc = await Account.findById(line.account);
+          const acc = await Account.findOne({ _id: line.account, user: req.user._id });
           if (!acc) continue;
           const balanceChange = ['asset', 'expense'].includes(acc.type)
             ? line.debit - line.credit
             : line.credit - line.debit;
-          await Account.findByIdAndUpdate(line.account, { $inc: { balance: balanceChange } });
+          await Account.findOneAndUpdate({ _id: line.account, user: req.user._id }, { $inc: { balance: balanceChange } });
         }
       } catch (jeErr) {
         console.error('Failed to create journal entry for purchase:', jeErr.message);
       }
     }
+
+    createNotification(req.user._id, 'new_purchase', 'New Purchase Created',
+      `Purchase from ${supplierName || 'supplier'} for Rs.${purchase.totalAmount?.toFixed(2) || '0'}`,
+      purchase._id, 'Purchase'
+    ).catch(() => {});
+
+    sendAutoMessage(req.user._id, req.businessId, 'purchase', {
+      supplierName,
+      invoiceNumber: billNumber || String(purchase._id),
+      invoiceId: purchase._id,
+      date: date || new Date(),
+      totalAmount,
+      remainingBalance: totalAmount - (paidAmount || 0),
+    }).catch(() => {});
 
     res.status(201).json(purchase);
   } catch (error) {
@@ -215,11 +234,8 @@ const createPurchase = async (req, res) => {
 const updatePurchase = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const purchase = await Purchase.findById(req.params.id);
+    const purchase = await Purchase.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!purchase) return res.status(404).json({ message: 'Purchase not found' });
-    if (purchase.user.toString() !== req.user._id.toString()) {
-      return res.status(401).json({ message: 'Not authorized' });
-    }
 
     const body = req.body;
     const isPaymentOnly = Object.keys(body).every(k =>
@@ -230,7 +246,7 @@ const updatePurchase = async (req, res) => {
       // Restore old stock (only when items may have changed)
       for (const item of purchase.items) {
         if (item.product) {
-          await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
+          await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: -item.quantity } });
         }
       }
     }
@@ -250,8 +266,8 @@ const updatePurchase = async (req, res) => {
       setFields.paymentDate = new Date();
     }
 
-    const updated = await Purchase.findByIdAndUpdate(
-      req.params.id,
+    const updated = await Purchase.findOneAndUpdate(
+      { _id: req.params.id, ...getBaseFilter(req) },
       { $set: setFields },
       { new: true, runValidators: true }
     );
@@ -260,7 +276,7 @@ const updatePurchase = async (req, res) => {
       // Apply new stock
       for (const item of updated.items) {
         if (item.product) {
-          await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+          await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } });
         }
       }
     }
@@ -274,16 +290,13 @@ const updatePurchase = async (req, res) => {
 const deletePurchase = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const purchase = await Purchase.findById(req.params.id);
+    const purchase = await Purchase.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!purchase) return res.status(404).json({ message: 'Purchase not found' });
-    if (purchase.user.toString() !== req.user._id.toString()) {
-      return res.status(401).json({ message: 'Not authorized' });
-    }
 
     // Delete purchase: reverse the stock addition that happened during creation
     for (const item of purchase.items) {
       if (item.product) {
-        await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
+        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: -item.quantity } });
       }
     }
 
@@ -291,22 +304,22 @@ const deletePurchase = async (req, res) => {
     try {
       const JournalEntry = require('../models/JournalEntry');
       const Account = require('../models/Account');
-      const journalEntry = await JournalEntry.findOne({ referenceType: 'Purchase', referenceId: purchase._id });
+      const journalEntry = await JournalEntry.findOne({ referenceType: 'Purchase', referenceId: purchase._id, user: req.user._id });
       if (journalEntry) {
         for (const line of journalEntry.lines) {
           if (line.account) {
-            await Account.findByIdAndUpdate(line.account, {
+            await Account.findOneAndUpdate({ _id: line.account, user: req.user._id }, {
               $inc: { balance: line.type === 'debit' ? -line.amount : line.amount },
             });
           }
         }
-        await JournalEntry.findByIdAndDelete(journalEntry._id);
+        await JournalEntry.findOneAndDelete({ _id: journalEntry._id, user: req.user._id });
       }
     } catch (jeErr) {
       console.error('Failed to reverse journal entry on purchase delete:', jeErr.message);
     }
 
-    await Purchase.findByIdAndDelete(req.params.id);
+    await Purchase.findOneAndDelete({ _id: req.params.id, ...getBaseFilter(req) });
     res.json({ message: 'Purchase removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -316,9 +329,8 @@ const deletePurchase = async (req, res) => {
 const getPurchaseById = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const purchase = await Purchase.findById(req.params.id).populate('supplier', 'name phone');
+    const purchase = await Purchase.findOne({ _id: req.params.id, ...getBaseFilter(req) }).populate('supplier', 'name phone');
     if (!purchase) return res.status(404).json({ message: 'Purchase not found' });
-    if (purchase.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
     res.json(purchase);
   } catch (error) {
     res.status(500).json({ message: error.message });

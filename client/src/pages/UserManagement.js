@@ -150,8 +150,8 @@ const UserManagement = () => {
   };
 
   const handleResetPassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (!newPassword || newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
       return;
     }
     try {
@@ -581,7 +581,7 @@ const UserManagement = () => {
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
-                    placeholder="Min 6 characters"
+                    placeholder="Min 8 characters"
                   />
                 </div>
                 <div className="flex items-center justify-end gap-3">

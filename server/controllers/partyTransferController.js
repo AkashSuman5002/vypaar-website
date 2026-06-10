@@ -43,15 +43,15 @@ const createPartyTransfer = async (req, res) => {
     const transferDesc = `Transfer ${amount} from ${fromPartyName} (${fromPartyType}) to ${toPartyName} (${toPartyType})`;
 
     if (fromPartyType === 'customer') {
-      await Customer.findByIdAndUpdate(fromParty, { $inc: { openingBalance: -amount } });
+      await Customer.findByIdAndUpdate({ _id: fromParty, user: req.user._id }, { $inc: { openingBalance: -amount } });
     } else {
-      await Supplier.findByIdAndUpdate(fromParty, { $inc: { openingBalance: -amount } });
+      await Supplier.findByIdAndUpdate({ _id: fromParty, user: req.user._id }, { $inc: { openingBalance: -amount } });
     }
 
     if (toPartyType === 'customer') {
-      await Customer.findByIdAndUpdate(toParty, { $inc: { openingBalance: amount } });
+      await Customer.findByIdAndUpdate({ _id: toParty, user: req.user._id }, { $inc: { openingBalance: amount } });
     } else {
-      await Supplier.findByIdAndUpdate(toParty, { $inc: { openingBalance: amount } });
+      await Supplier.findByIdAndUpdate({ _id: toParty, user: req.user._id }, { $inc: { openingBalance: amount } });
     }
 
     await Transaction.create({
@@ -82,18 +82,18 @@ const deletePartyTransfer = async (req, res) => {
     if (transfer.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     if (transfer.fromPartyType === 'customer') {
-      await Customer.findByIdAndUpdate(transfer.fromParty, { $inc: { openingBalance: transfer.amount } });
+      await Customer.findByIdAndUpdate({ _id: transfer.fromParty, user: req.user._id }, { $inc: { openingBalance: transfer.amount } });
     } else {
-      await Supplier.findByIdAndUpdate(transfer.fromParty, { $inc: { openingBalance: transfer.amount } });
+      await Supplier.findByIdAndUpdate({ _id: transfer.fromParty, user: req.user._id }, { $inc: { openingBalance: transfer.amount } });
     }
 
     if (transfer.toPartyType === 'customer') {
-      await Customer.findByIdAndUpdate(transfer.toParty, { $inc: { openingBalance: -transfer.amount } });
+      await Customer.findByIdAndUpdate({ _id: transfer.toParty, user: req.user._id }, { $inc: { openingBalance: -transfer.amount } });
     } else {
-      await Supplier.findByIdAndUpdate(transfer.toParty, { $inc: { openingBalance: -transfer.amount } });
+      await Supplier.findByIdAndUpdate({ _id: transfer.toParty, user: req.user._id }, { $inc: { openingBalance: -transfer.amount } });
     }
 
-    await PartyToPartyTransfer.findByIdAndDelete(req.params.id);
+    await PartyToPartyTransfer.findOneAndDelete({ _id: req.params.id, ...getBaseFilter(req) });
     res.json({ message: 'Transfer removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

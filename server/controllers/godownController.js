@@ -62,7 +62,7 @@ const deleteGodown = async (req, res) => {
     if (productCount > 0) {
       return res.status(400).json({ message: `Cannot delete: ${productCount} products are assigned to this godown` });
     }
-    await Godown.findByIdAndDelete(req.params.id);
+    await Godown.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Godown deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -3,6 +3,7 @@ import GSTFilterBar from '../../../components/gst/GSTFilterBar';
 import GSTTable from '../../../components/gst/GSTTable';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
 
 const columns = [
   { key: 'gstin', label: 'GSTIN/UIN', width: '140px' },
@@ -46,7 +47,9 @@ const GSTR2 = () => {
 
   return (
     <>
-      <GSTFilterBar title="GSTR 2" onDateChange={setDate} startDate={dates.start} endDate={dates.end} />
+      <GSTFilterBar title="GSTR 2" onDateChange={setDate} startDate={dates.start} endDate={dates.end}
+        onExcel={() => exportToExcel(data, columns, 'GSTR2 Report')}
+        onPrint={() => printReport('GSTR2 Report', columns, data)} />
       <GSTTable columns={columns} data={data} />
     </>
   );

@@ -3,7 +3,6 @@ const Business = require('../models/Business');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
-const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 
 const stripPasscodeHash = (doc) => {
   if (!doc) return doc;
@@ -16,10 +15,9 @@ const stripPasscodeHash = (doc) => {
 
 const getSettings = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    let settings = await Setting.findOne({ ...baseFilter });
+    let settings = await Setting.findOne({ user: req.user._id });
     if (!settings) {
-      settings = await Setting.create({ ...getCreateData(req, {}) });
+      settings = await Setting.create({ user: req.user._id });
     }
     res.json(stripPasscodeHash(settings));
   } catch (error) {
@@ -39,15 +37,14 @@ const setNestedValue = (obj, path, value) => {
 
 const updateSettings = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    let settings = await Setting.findOne({ ...baseFilter });
+    let settings = await Setting.findOne({ user: req.user._id });
     if (!settings) {
-      settings = await Setting.create({ ...getCreateData(req, {}) });
+      settings = await Setting.create({ user: req.user._id });
     }
 
     const topLevelFields = [
       'businessName', 'phone', 'email', 'address', 'gstNumber',
-      'gstNumber', 'invoicePrefix', 'invoiceNote', 'currency',
+      'invoicePrefix', 'invoiceNote', 'currency',
       'state', 'isInterState', 'bankName', 'bankAccountNumber',
       'bankIfsc', 'bankBranch', 'upiId',
       'businessType', 'businessCategory', 'pincode', 'accountBooksBeginningDate',
@@ -60,7 +57,6 @@ const updateSettings = async (req, res) => {
       }
     }
 
-    // Handle plain-text passcode sent in body — hash and store in preferences.general.passcodeHash
     if (req.body.passcode !== undefined) {
       if (req.body.passcode) {
         const salt = await bcrypt.genSalt(10);
@@ -71,7 +67,6 @@ const updateSettings = async (req, res) => {
       }
     }
 
-    // Handle preferences object (nested settings)
     if (req.body.preferences) {
       const prefs = typeof req.body.preferences === 'string'
         ? JSON.parse(req.body.preferences)
@@ -100,8 +95,7 @@ const updateSettings = async (req, res) => {
 
     const updated = await settings.save();
 
-    // Auto-create or update Business profile
-    const existingBiz = await Business.findOne({ owner: req.user._id, isActive: true });
+    const existingBiz = await Business.findOne({ owner: req.user._id }).sort({ createdAt: -1 });
     if (existingBiz && updated.businessName) {
       existingBiz.name = updated.businessName || existingBiz.name;
       if (updated.email !== undefined) existingBiz.email = updated.email;
@@ -117,7 +111,6 @@ const updateSettings = async (req, res) => {
         address: updated.address,
         gstNumber: updated.gstNumber,
         owner: req.user._id,
-        isActive: true,
       });
     }
 
@@ -131,8 +124,7 @@ const verifyPasscode = async (req, res) => {
   try {
     const { passcode } = req.body;
     if (!passcode) return res.status(400).json({ valid: false, message: 'Passcode required' });
-    const baseFilter = getBaseFilter(req);
-    const settings = await Setting.findOne({ ...baseFilter });
+    const settings = await Setting.findOne({ user: req.user._id });
     const hash = settings?.preferences?.general?.passcodeHash;
     if (!hash) return res.json({ valid: false, message: 'No passcode set' });
     const match = await bcrypt.compare(String(passcode), hash);
@@ -144,8 +136,7 @@ const verifyPasscode = async (req, res) => {
 
 const clearPasscode = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    const settings = await Setting.findOne({ ...baseFilter });
+    const settings = await Setting.findOne({ user: req.user._id });
     if (!settings) return res.json({ ok: true });
     settings.preferences = settings.preferences || {};
     settings.preferences.general = settings.preferences.general || {};
@@ -160,10 +151,9 @@ const clearPasscode = async (req, res) => {
 
 const getTheme = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    let settings = await Setting.findOne({ ...baseFilter });
+    let settings = await Setting.findOne({ user: req.user._id });
     if (!settings) {
-      settings = await Setting.create({ ...getCreateData(req, {}) });
+      settings = await Setting.create({ user: req.user._id });
     }
     res.json({ darkMode: settings.preferences?.general?.darkMode === true });
   } catch (error) {
@@ -173,10 +163,9 @@ const getTheme = async (req, res) => {
 
 const updateTheme = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    let settings = await Setting.findOne({ ...baseFilter });
+    let settings = await Setting.findOne({ user: req.user._id });
     if (!settings) {
-      settings = await Setting.create({ ...getCreateData(req, {}) });
+      settings = await Setting.create({ user: req.user._id });
     }
     if (!settings.preferences) settings.preferences = {};
     if (!settings.preferences.general) settings.preferences.general = {};

@@ -3,6 +3,7 @@ import ReportHeader from '../../components/reports/common/ReportHeader';
 import EmptyState from '../../components/reports/common/EmptyState';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
 import { reportAPI } from '../../services/api';
+import { exportToExcel, printReport } from '../../utils/exportUtils';
 
 const TrialBalanceReport = () => {
   const [accounts, setAccounts] = useState([]);
@@ -39,6 +40,10 @@ const TrialBalanceReport = () => {
     <div className="bg-white dark:bg-[#0F172A] min-h-full">
       <ReportHeader title="Trial Balance" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} />
       <div className="p-6 space-y-5">
+        <div className="flex gap-2">
+          <button onClick={() => exportToExcel(accounts.map(a=>({account:a.name,code:a.code,debit:a.debit,credit:a.credit,balance:a.balance})), [{key:'account',label:'Account'},{key:'code',label:'Code'},{key:'debit',label:'Debit'},{key:'credit',label:'Credit'},{key:'balance',label:'Balance'}], 'Trial Balance')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Excel</button>
+          <button onClick={() => printReport('Trial Balance', [{key:'account',label:'Account'},{key:'code',label:'Code'},{key:'debit',label:'Debit'},{key:'credit',label:'Credit'},{key:'balance',label:'Balance'}], accounts.map(a=>({account:a.name,code:a.code,debit:a.debit,credit:a.credit,balance:a.balance})))} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Print</button>
+        </div>
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-4">
             <p className="text-xs text-gray-500 dark:text-[#64748B]">Total Debit</p>

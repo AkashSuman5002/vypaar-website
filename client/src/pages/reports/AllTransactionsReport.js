@@ -6,6 +6,7 @@ import ReportSummary from '../../components/reports/common/ReportSummary';
 import EmptyState from '../../components/reports/common/EmptyState';
 import { transactionAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../utils/exportUtils';
 
 const typeMap = { cash_in: 'Cash In', cash_out: 'Cash Out', bank_in: 'Bank In', bank_out: 'Bank Out' };
 const typeFilters = ['All', 'Cash In', 'Cash Out', 'Bank In', 'Bank Out'];
@@ -127,6 +128,10 @@ const AllTransactionsReport = () => {
           } title="No Transactions" description={data.length === 0 ? 'Transactions will appear here once you record them.' : 'No transactions match your filters. Try adjusting the search or date range.'} />
         ) : (
           <>
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => exportToExcel(filteredData, columns, 'All Transactions Report')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+              <button onClick={() => printReport('All Transactions Report', columns, filteredData)} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
+            </div>
             <ReportTable columns={columns.map(c => c.key === 'date' ? { ...c, render: (v) => formatDate(v) } : c)} data={filteredData} />
             <ReportSummary>
               <span className="text-gray-500 dark:text-[#64748B]">Total: <strong className="text-gray-900 dark:text-[#F8FAFC]">₹{totalAmount.toLocaleString()}</strong></span>

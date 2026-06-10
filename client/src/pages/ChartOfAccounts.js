@@ -6,14 +6,14 @@ import { formatCurrency } from '../utils/format';
 import { chartOfAccountsAPI } from '../services/api';
 import {
   Plus, Search, ChevronDown, ChevronRight, Info, X, Save,
-  Loader2, MoreVertical, Edit2, Trash2, Lock, Eye,
+  Loader2, MoreVertical, Edit2, Trash2, Lock, Eye, Filter,
 } from 'lucide-react';
 
 const TYPE_CONFIG = [
-  { key: 'asset', label: 'Assets', types: ['asset'] },
-  { key: 'equity_liability', label: 'Equities & Liabilities', types: ['equity', 'liability'] },
-  { key: 'income', label: 'Incomes', types: ['income'] },
-  { key: 'expense', label: 'Expenses', types: ['expense'] },
+  { key: 'asset', label: 'Assets', types: ['asset'], color: 'blue', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+  { key: 'equity_liability', label: 'Equities & Liabilities', types: ['equity', 'liability'], color: 'purple', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  { key: 'income', label: 'Incomes', types: ['income'], color: 'green', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
+  { key: 'expense', label: 'Expenses', types: ['expense'], color: 'red', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
 ];
 
 const SIDEBAR_TREE = {
@@ -97,6 +97,11 @@ const CHART_CATEGORIES = {
   ],
 };
 
+const CATEGORY_LABELS = {};
+Object.values(CHART_CATEGORIES).forEach(cats => {
+  cats.forEach(c => { CATEGORY_LABELS[c.value] = c.label; });
+});
+
 const ChartOfAccounts = () => {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState([]);
@@ -107,6 +112,7 @@ const ChartOfAccounts = () => {
   const [highlightCode, setHighlightCode] = useState(null);
   const [allExpanded, setAllExpanded] = useState(true);
   const [selectedType, setSelectedType] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
@@ -199,6 +205,19 @@ const ChartOfAccounts = () => {
     return `${formatted} ${isDr ? 'Cr.' : 'Dr.'}`;
   };
 
+  const summary = useMemo(() => {
+    let totalAssets = 0, totalLiabilities = 0, totalEquity = 0, totalIncome = 0, totalExpenses = 0;
+    accounts.forEach(a => {
+      const bal = Math.abs(a.balance);
+      if (a.type === 'asset') totalAssets += bal;
+      else if (a.type === 'liability') totalLiabilities += bal;
+      else if (a.type === 'equity') totalEquity += bal;
+      else if (a.type === 'income') totalIncome += bal;
+      else if (a.type === 'expense') totalExpenses += bal;
+    });
+    return { totalAssets, totalLiabilities, totalEquity, totalIncome, totalExpenses };
+  }, [accounts]);
+
   const filteredAccounts = searchQuery
     ? accounts.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.code?.toLowerCase().includes(searchQuery.toLowerCase()))
     : null;
@@ -273,12 +292,13 @@ const ChartOfAccounts = () => {
     const isExpanded = expandedCodes[account.code] !== false;
     const groupTotal = hasChildren ? getGroupBalance(account) : account.balance;
     const isHighlighted = highlightCode === account.code;
+    const typeConfig = TYPE_CONFIG.find(tc => tc.types.includes(account.type));
 
     return (
       <React.Fragment key={account._id}>
         <tr
           id={`account-row-${account._id}`}
-          className={`border-t border-slate-50 transition-colors group ${isHighlighted ? 'bg-blue-50' : 'hover:bg-slate-50/50'}`}
+          className={`border-t border-slate-100 transition-colors group ${isHighlighted ? 'bg-blue-50' : 'hover:bg-slate-50/50'} ${hasChildren ? 'bg-slate-50/30' : ''}`}
         >
           <td className="py-2.5" style={{ paddingLeft: `${24 + depth * 24}px` }}>
             <div className="flex items-center gap-1.5">
@@ -296,10 +316,15 @@ const ChartOfAccounts = () => {
               </span>
             </div>
           </td>
-          <td className="px-6 py-2.5">
-            <span className="text-sm text-slate-500">{account.code || '-'}</span>
+          <td className="px-4 py-2.5">
+            <span className="text-xs font-mono text-slate-500">{account.code || '-'}</span>
           </td>
-          <td className="px-6 py-2.5 text-right">
+          <td className="px-4 py-2.5">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig?.bg || 'bg-slate-50'} ${typeConfig?.text || 'text-slate-700'}`}>
+              {CATEGORY_LABELS[account.category] || account.type}
+            </span>
+          </td>
+          <td className="px-4 py-2.5 text-right">
             <span className={`text-sm font-semibold ${groupTotal >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
               {formatBalance(groupTotal, account.type)}
             </span>
@@ -342,55 +367,63 @@ const ChartOfAccounts = () => {
     if (results.length === 0) {
       return (
         <tr>
-          <td colSpan="4" className="px-6 py-12 text-center text-sm text-slate-500">
+          <td colSpan="5" className="px-6 py-12 text-center text-sm text-slate-500">
             No accounts found matching "{searchQuery}"
           </td>
         </tr>
       );
     }
-    return results.map(account => (
-      <tr key={account._id} className="border-t border-slate-50 hover:bg-slate-50/50 transition-colors group">
-        <td className="py-2.5" style={{ paddingLeft: '24px' }}>
-          <div className="flex items-center gap-1.5">
-            <span className="w-5" />
-            {account.isDefault && <Lock className="w-3 h-3 text-slate-400 flex-shrink-0" />}
-            <span className="text-sm text-slate-700">{account.name}</span>
-          </div>
-        </td>
-        <td className="px-6 py-2.5">
-          <span className="text-sm text-slate-500">{account.code || '-'}</span>
-        </td>
-        <td className="px-6 py-2.5 text-right">
-          <span className={`text-sm font-semibold ${account.balance >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-            {formatBalance(account.balance, account.type)}
-          </span>
-        </td>
-        <td className="px-3 py-2.5 w-10">
-          <div className="relative">
-            <button onClick={() => setMenuOpen(menuOpen === account._id ? null : account._id)}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"
-            ><MoreVertical className="w-4 h-4" /></button>
-            {menuOpen === account._id && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
-                <button onClick={() => { navigate(`/accounting/account-statements?account=${account._id}`); setMenuOpen(null); }}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                ><Eye className="w-3.5 h-3.5" /> View Statement</button>
-                {!account.isDefault && (
-                  <>
-                    <button onClick={() => handleEdit(account)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left">
-                      <Edit2 className="w-3.5 h-3.5" /> Edit
-                    </button>
-                    <button onClick={() => { setShowDeleteConfirm(account); setMenuOpen(null); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left">
-                      <Trash2 className="w-3.5 h-3.5" /> Delete
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </td>
-      </tr>
-    ));
+    return results.map(account => {
+      const typeConfig = TYPE_CONFIG.find(tc => tc.types.includes(account.type));
+      return (
+        <tr key={account._id} className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors group">
+          <td className="py-2.5" style={{ paddingLeft: '24px' }}>
+            <div className="flex items-center gap-1.5">
+              <span className="w-5" />
+              {account.isDefault && <Lock className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+              <span className="text-sm text-slate-700">{account.name}</span>
+            </div>
+          </td>
+          <td className="px-4 py-2.5">
+            <span className="text-xs font-mono text-slate-500">{account.code || '-'}</span>
+          </td>
+          <td className="px-4 py-2.5">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig?.bg || 'bg-slate-50'} ${typeConfig?.text || 'text-slate-700'}`}>
+              {CATEGORY_LABELS[account.category] || account.type}
+            </span>
+          </td>
+          <td className="px-4 py-2.5 text-right">
+            <span className={`text-sm font-semibold ${account.balance >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+              {formatBalance(account.balance, account.type)}
+            </span>
+          </td>
+          <td className="px-3 py-2.5 w-10">
+            <div className="relative">
+              <button onClick={() => setMenuOpen(menuOpen === account._id ? null : account._id)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"
+              ><MoreVertical className="w-4 h-4" /></button>
+              {menuOpen === account._id && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
+                  <button onClick={() => { navigate(`/accounting/account-statements?account=${account._id}`); setMenuOpen(null); }}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  ><Eye className="w-3.5 h-3.5" /> View Statement</button>
+                  {!account.isDefault && (
+                    <>
+                      <button onClick={() => handleEdit(account)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left">
+                        <Edit2 className="w-3.5 h-3.5" /> Edit
+                      </button>
+                      <button onClick={() => { setShowDeleteConfirm(account); setMenuOpen(null); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left">
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      );
+    });
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
@@ -458,8 +491,26 @@ const ChartOfAccounts = () => {
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-5 gap-3 mb-6">
+            {TYPE_CONFIG.map(tc => {
+              let total = 0;
+              if (tc.key === 'asset') total = summary.totalAssets;
+              else if (tc.key === 'equity_liability') total = summary.totalLiabilities + summary.totalEquity;
+              else if (tc.key === 'income') total = summary.totalIncome;
+              else if (tc.key === 'expense') total = summary.totalExpenses;
+              return (
+                <div key={tc.key} className={`rounded-xl border p-3 ${tc.border} ${tc.bg}`}>
+                  <div className={`text-xs font-semibold ${tc.text} mb-1`}>{tc.label}</div>
+                  <div className={`text-lg font-bold ${tc.text}`}>{formatCurrency(total)}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-slate-900">Chart of Accounts</h1>
               <Info className="w-4 h-4 text-slate-400" />
             </div>
@@ -468,18 +519,16 @@ const ChartOfAccounts = () => {
             ><Plus className="w-4 h-4" /> New Account</button>
           </div>
 
+          {/* Filters */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               {selectedType && (
                 <button onClick={() => setSelectedType(null)} className="flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
-                  <X className="w-3 h-3" /> {TYPE_CONFIG.find(tc => tc.key === selectedType)?.label} — Showing {accounts.filter(a => {
-                    const config = TYPE_CONFIG.find(tc => tc.key === selectedType);
-                    return config && config.types.includes(a.type) && !a.parent;
-                  }).length} groups
+                  <X className="w-3 h-3" /> {TYPE_CONFIG.find(tc => tc.key === selectedType)?.label}
                 </button>
               )}
               <button onClick={toggleAll} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium">
-                {allExpanded ? 'Collapse All Accounts' : 'Expand All Accounts'}
+                {allExpanded ? 'Collapse All' : 'Expand All'}
                 {allExpanded
                   ? <ChevronDown className="w-4 h-4" />
                   : <ChevronRight className="w-4 h-4" />
@@ -495,15 +544,17 @@ const ChartOfAccounts = () => {
             </div>
           </div>
 
+          {/* Account Table */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="px-6 py-3.5 text-left text-2xs font-semibold text-slate-500 uppercase tracking-widest">ACCOUNT NAME</th>
-                    <th className="px-6 py-3.5 text-left text-2xs font-semibold text-slate-500 uppercase tracking-widest">ACCOUNT CODE</th>
-                    <th className="px-6 py-3.5 text-right text-2xs font-semibold text-slate-500 uppercase tracking-widest">ACCOUNT BALANCE</th>
-                    <th className="px-6 py-3.5 w-10"></th>
+                    <th className="px-4 py-3.5 text-left text-2xs font-semibold text-slate-500 uppercase tracking-widest">CODE</th>
+                    <th className="px-4 py-3.5 text-left text-2xs font-semibold text-slate-500 uppercase tracking-widest">TYPE</th>
+                    <th className="px-4 py-3.5 text-right text-2xs font-semibold text-slate-500 uppercase tracking-widest">BALANCE</th>
+                    <th className="px-3 py-3.5 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>

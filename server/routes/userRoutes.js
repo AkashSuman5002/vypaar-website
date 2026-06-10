@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Role = require('../models/Role');
 const { authorize, authorizeAdmin } = require('../middleware/authorize');
 const { getBaseFilter } = require('../utils/queryHelper');
+const { apiLimiter } = require('../middleware/rateLimit');
 
 // GET /api/users - List all users for the business
 router.get('/', authorizeAdmin, async (req, res) => {
@@ -14,7 +15,6 @@ router.get('/', authorizeAdmin, async (req, res) => {
       filter.$or = [
         { business: businessId },
         { _id: req.user._id },
-        { isOwner: true },
       ];
     } else {
       filter.$or = [{ _id: req.user._id }, { isOwner: true }];
@@ -56,7 +56,7 @@ router.get('/:id', authorizeAdmin, async (req, res) => {
 });
 
 // POST /api/users - Create a new user
-router.post('/', authorizeAdmin, async (req, res) => {
+router.post('/', authorizeAdmin, apiLimiter, async (req, res) => {
   try {
     const { name, email, password, phone, role, isActive, permissions } = req.body;
     if (!name || !email) {

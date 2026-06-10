@@ -6,6 +6,7 @@ const connectDB = require('./config/db');
 const { errorHandler } = require('./middleware/errorMiddleware');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { authMiddleware } = require('./middleware/auth');
+const { csrfProtection } = require('./middleware/csrf');
 const businessContext = require('./middleware/businessContext');
 const auditMiddleware = require('./middleware/audit');
 const multer = require('multer');
@@ -15,6 +16,7 @@ const sqliteService = require('./services/sqliteService');
 const { startRecurringService } = require('./services/recurringService');
 const { startAutoBackup } = require('./services/backupService');
 const { startPaymentReminder } = require('./services/paymentReminderService');
+const { startServiceReminderCheck } = require('./services/serviceReminderScheduler');
 
 connectDB();
 
@@ -38,6 +40,40 @@ setTimeout(async () => {
     if (err.codeName !== 'IndexNotFound') console.error('Index migration error:', err.message);
   }
 }, 5000);
+
+// Migration: backfill business field on all existing data
+setTimeout(async () => {
+  try {
+    const db = mongoose.connection.db;
+    if (!db) { console.log('Migration skipped: no DB connection'); return; }
+    const Business = require('./models/Business');
+    const collections = ['sales', 'purchases', 'expenses', 'products', 'customers', 'suppliers', 'transactions', 'accounts', 'stockmovements', 'staff', 'godowns', 'partyrates', 'loyaltytransactions', 'parttransfers', 'receipts', 'settings'];
+    const users = await db.collection('users').find({}).toArray();
+    console.log(`Migration: found ${users.length} users`);
+    for (const u of users) {
+      const biz = await Business.findOne({ owner: u._id }).sort({ createdAt: -1 });
+      if (!biz) { console.log(`Migration: no business for user ${u.name || u.email}`); continue; }
+      console.log(`Migration: backfilling business "${biz.name}" (${biz._id}) for user ${u.name || u.email}`);
+      let totalBackfilled = 0;
+      for (const col of collections) {
+        try {
+          const result = await db.collection(col).updateMany(
+            { user: u._id, $or: [{ business: { $exists: false } }, { business: null }] },
+            { $set: { business: biz._id } }
+          );
+          if (result.modifiedCount > 0) {
+            console.log(`  Backfilled ${result.modifiedCount} ${col} docs`);
+            totalBackfilled += result.modifiedCount;
+          }
+        } catch (e) { /* collection may not exist */ }
+      }
+      console.log(`Migration: total ${totalBackfilled} docs backfilled for ${u.name || u.email}`);
+    }
+    console.log('Business backfill migration complete');
+  } catch (err) {
+    console.error('Business backfill error:', err.message);
+  }
+}, 8000);
 
 const app = express();
 
@@ -82,7 +118,9 @@ app.use('/api/auth', require('./routes/authRoutes'));
 
 // Auth middleware for protected routes
 app.use('/api', authMiddleware);
+app.use('/api', csrfProtection);
 app.use('/api', businessContext);
+app.use('/api', auditMiddleware);
 
 app.use('/api/customers', require('./routes/customerRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
@@ -127,9 +165,7 @@ app.use('/api/utilities', require('./routes/utilityRoutes'));
 app.use('/api/support', require('./routes/supportRoutes'));
 app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes'));
-
-// Apply audit middleware to write operations
-app.use(auditMiddleware);
+app.use('/api/service-reminders', require('./routes/serviceReminderRoutes'));
 
 // Business setup with multer for logo upload
 const businessRoutes = require('./routes/businessRoutes');
@@ -191,7 +227,7 @@ const migrateExistingUsers = async () => {
 
     const users = await User.find({});
     for (const user of users) {
-      let business = await Business.findOne({ owner: user._id, isActive: true });
+      let business = await Business.findOne({ owner: user._id }).sort({ createdAt: -1 });
       if (!business) {
         business = await Business.create({ name: user.name + "'s Business", email: user.email, owner: user._id, isActive: true });
         await Branch.create({ name: 'Main Branch', business: business._id, isActive: true });
@@ -220,6 +256,7 @@ const migrateExistingUsers = async () => {
 startRecurringService();
 startAutoBackup();
 startPaymentReminder();
+startServiceReminderCheck();
 
 const PORT = process.env.PORT || 5000;
 sqliteService.waitForInit().then(() => {

@@ -8,13 +8,14 @@ const Account = require('../models/Account');
 const JournalEntry = require('../models/JournalEntry');
 const LoyaltyPoint = require('../models/LoyaltyPoint');
 const { sendAutoMessage, sendPaymentMessage } = require('../services/messageService');
+const { createNotification } = require('../controllers/notificationController');
 const Transaction = require('../models/Transaction');
-const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { getBaseFilter, getSettingQuery, getCreateData } = require('../utils/queryHelper');
 
 const getNextInvoiceNumber = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const type = req.query.type || 'invoice';
     let prefix;
     if (type === 'order') prefix = setting?.preferences?.transaction?.saleOrderPrefix || 'SO-';
@@ -85,17 +86,25 @@ const getSales = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
-    const dashboard = type === 'invoice' || !type ? await Sale.aggregate([
-      { $match: { ...filter, status: { $ne: 'cancelled' } } },
-      { $group: { _id: null, totalSales: { $sum: '$totalAmount' }, totalPaid: { $sum: '$paidAmount' }, totalOutstanding: { $sum: '$remainingBalance' }, count: { $sum: 1 } } }
-    ]) : [];
+    let dashboardData = { totalSales: 0, totalPaid: 0, totalOutstanding: 0, count: 0 };
+    if (type === 'invoice' || !type) {
+      const allMatching = await Sale.find(filter).select('totalAmount paidAmount remainingBalance').lean();
+      if (allMatching.length > 0) {
+        dashboardData = {
+          totalSales: allMatching.reduce((sum, s) => sum + (s.totalAmount || 0), 0),
+          totalPaid: allMatching.reduce((sum, s) => sum + (s.paidAmount || 0), 0),
+          totalOutstanding: allMatching.reduce((sum, s) => sum + (s.remainingBalance || 0), 0),
+          count: allMatching.length,
+        };
+      }
+    }
 
     res.json({
       sales,
       total,
       page: parseInt(page),
       pages: Math.ceil(total / parseInt(limit)),
-      dashboard: dashboard[0] || { totalSales: 0, totalPaid: 0, totalOutstanding: 0, count: 0 },
+      dashboard: dashboardData,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -125,21 +134,27 @@ const createSale = async (req, res) => {
       taxableAmount, discountTotal, cgstTotal, sgstTotal, igstTotal, cessTotal, taxTotal,
       shippingCharge, packingCharge, freightCharge, loadingCharge, otherCharge,
       additionalChargesTotal, discountOnInvoice,
-      roundOff, roundOffEnabled, roundingMethod,
+      roundOff, roundingMethod: roundingMethodInput,
       totalAmount, payments, paidAmount, remainingBalance, paymentStatus,
       eWayBill, transportMode, vehicleNo, poNumber,
       notes, internalNotes, termsConditions,
     } = req.body;
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const compositionScheme = setting?.preferences?.taxes?.compositionScheme === true;
     const enableTCS = setting?.preferences?.taxes?.enableTCS === true;
-    const enableTDS = setting?.preferences?.taxes?.enableTDS === true;
+    const enableTDS = setting?.preferences?.taxes?.tdsRate > 0;
+    const enableGST = setting?.preferences?.taxes?.enableGST !== false;
+    const reverseCharge = setting?.preferences?.taxes?.reverseCharge === true;
     const stopOnNegative = setting?.preferences?.general?.stopSaleOnNegativeStock === true;
+    const stockMaintenance = setting?.preferences?.item?.stockMaintenance !== false;
+    const cashSaleByDefault = setting?.preferences?.transaction?.cashSaleByDefault === true;
+    const roundOffEnabled = setting?.preferences?.transaction?.roundOffTotal === true;
+    const roundingMethod = roundingMethodInput || setting?.preferences?.transaction?.roundingMethod || 'nearest';
 
     for (const item of items) {
       if (item.product) {
-        const prod = await Product.findById(item.product);
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         if (!prod) return res.status(400).json({ message: `Product not found: ${item.productName}` });
         if (stopOnNegative && prod.stock < item.quantity) {
           return res.status(400).json({ message: `Insufficient stock for ${prod.name}. Available: ${prod.stock}, Requested: ${item.quantity}` });
@@ -158,6 +173,24 @@ const createSale = async (req, res) => {
     }
 
     const allowJE = setting?.preferences?.accounting?.allowJournalEntries !== false;
+
+    // Apply default terms & conditions from settings if not provided
+    if (!termsConditions && setting?.preferences?.transaction?.termsAndConditions) {
+      termsConditions = setting.preferences.transaction.termsAndConditions;
+    }
+
+    // Apply round off from settings if enabled
+    if (roundOffEnabled && totalAmount && !roundOff) {
+      const method = roundingMethod || 'nearest';
+      if (method === 'nearest') {
+        roundOff = Math.round(totalAmount) - totalAmount;
+      } else if (method === 'up') {
+        roundOff = Math.ceil(totalAmount) - totalAmount;
+      } else if (method === 'down') {
+        roundOff = Math.floor(totalAmount) - totalAmount;
+      }
+      if (roundOff !== 0) totalAmount = Math.round(totalAmount);
+    }
 
     if (invoiceNumber) {
       const exists = await Sale.findOne({ ...baseFilter, invoiceNumber, type: { $in: [type || 'invoice', 'order', 'quotation', 'challan', 'estimate', 'proforma'] } });
@@ -214,10 +247,10 @@ const createSale = async (req, res) => {
     });
 
     for (const item of items) {
-      if (item.product && sale.type === 'invoice' && sale.status !== 'draft') {
-        const prod = await Product.findById(item.product);
+      if (item.product && sale.type === 'invoice' && sale.status !== 'draft' && stockMaintenance) {
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         const balBefore = prod.stock;
-        await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
+        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: -item.quantity } }, { new: true });
         await StockMovement.create({
           user: req.user._id,
           business: req.businessId,
@@ -235,6 +268,12 @@ const createSale = async (req, res) => {
           description: `Sale invoice ${invoiceNumber}`,
           date: date || new Date(),
         });
+        if (prod && (balBefore - item.quantity) <= (prod.minStock || 0) && prod.minStock > 0) {
+          createNotification(req.user._id, 'low_stock', 'Low Stock Alert',
+            `${item.productName || prod.name} is low on stock (${balBefore - item.quantity} remaining, min: ${prod.minStock})`,
+            prod._id, 'Product'
+          ).catch(() => {});
+        }
       }
     }
 
@@ -287,12 +326,12 @@ const createSale = async (req, res) => {
           postedAt: new Date(),
         });
         for (const line of lines) {
-          const acc = await Account.findById(line.account);
+          const acc = await Account.findOne({ _id: line.account, user: req.user._id });
           if (!acc) continue;
           const balanceChange = ['asset', 'expense'].includes(acc.type)
             ? line.debit - line.credit
             : line.credit - line.debit;
-          await Account.findByIdAndUpdate(line.account, { $inc: { balance: balanceChange } });
+          await Account.findOneAndUpdate({ _id: line.account, user: req.user._id }, { $inc: { balance: balanceChange } }, { new: true });
         }
       } catch (jeErr) {
         console.error('Failed to create journal entry for sale:', jeErr.message);
@@ -301,12 +340,12 @@ const createSale = async (req, res) => {
     }
 
     if (customer) {
-      await Customer.findByIdAndUpdate(customer, { $inc: { openingBalance: remainingBalance || totalAmount } });
+      await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $inc: { openingBalance: remainingBalance || totalAmount } }, { new: true });
     }
 
     // Earn loyalty points
     if (customer) {
-      const loyaltySetting = await Setting.findOne(baseFilter);
+      const loyaltySetting = await Setting.findOne(getSettingQuery(req));
       if (loyaltySetting?.preferences?.party?.enableLoyalty) {
         const earningRate = 10;
         const pointsEarned = Math.floor((paidAmount || totalAmount) / earningRate);
@@ -322,7 +361,7 @@ const createSale = async (req, res) => {
             description: `Points earned from sale ${invoiceNumber}`,
             referenceNumber: invoiceNumber,
           });
-          await Customer.findByIdAndUpdate(customer, { $set: { loyaltyPoints: currentBalance + pointsEarned } });
+          await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $set: { loyaltyPoints: currentBalance + pointsEarned } }, { new: true });
         }
       }
     }
@@ -338,6 +377,11 @@ const createSale = async (req, res) => {
       remainingBalance: remainingBalance || totalAmount,
     }).catch(() => {});
 
+    createNotification(req.user._id, 'new_sale', 'New Sale Created',
+      `Invoice ${invoiceNumber} for Rs.${totalAmount.toFixed(2)}${customerName ? ` - ${customerName}` : ''}`,
+      sale._id, 'Sale'
+    ).catch(() => {});
+
     res.status(201).json(sale);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -347,9 +391,8 @@ const createSale = async (req, res) => {
 const updateSale = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const sale = await Sale.findById(req.params.id);
+    const sale = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!sale) return res.status(404).json({ message: 'Sale not found' });
-    if (sale.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     const oldPaidAmount = sale.paidAmount;
     const itemsChanged = req.body.items && JSON.stringify(req.body.items) !== JSON.stringify(sale.items);
@@ -358,7 +401,7 @@ const updateSale = async (req, res) => {
       // Restore old stock
       for (const item of sale.items) {
         if (item.product) {
-          await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+          await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } }, { new: true });
         }
       }
     }
@@ -384,9 +427,9 @@ const updateSale = async (req, res) => {
       // Apply new stock
       for (const item of sale.items) {
         if (item.product) {
-          const prod = await Product.findById(item.product);
+          const prod = await Product.findOne({ _id: item.product, user: req.user._id });
           const balBefore = prod ? prod.stock : 0;
-          await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
+          await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: -item.quantity } }, { new: true });
           const StockMovement = require('../models/StockMovement');
           await StockMovement.create({
             user: req.user._id,
@@ -431,15 +474,14 @@ const updateSale = async (req, res) => {
 const deleteSale = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const sale = await Sale.findById(req.params.id);
+    const sale = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!sale) return res.status(404).json({ message: 'Sale not found' });
-    if (sale.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     for (const item of sale.items) {
       if (item.product) {
-        const prod = await Product.findById(item.product);
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         const balBefore = prod ? prod.stock : 0;
-        await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } }, { new: true });
         await StockMovement.create({
           user: req.user._id,
           business: req.businessId,
@@ -461,21 +503,21 @@ const deleteSale = async (req, res) => {
     }
 
     if (sale.customer) {
-      await Customer.findByIdAndUpdate(sale.customer, { $inc: { openingBalance: -sale.remainingBalance } });
+      await Customer.findOneAndUpdate({ _id: sale.customer, user: req.user._id }, { $inc: { openingBalance: -sale.remainingBalance } }, { new: true });
     }
 
     // Reverse journal entry if one was created
     try {
-      const journalEntry = await JournalEntry.findOne({ referenceType: 'Sale', referenceId: sale._id });
+      const journalEntry = await JournalEntry.findOne({ referenceType: 'Sale', referenceId: sale._id, user: req.user._id });
       if (journalEntry) {
         for (const line of journalEntry.lines) {
           if (line.account) {
-            await Account.findByIdAndUpdate(line.account, {
+            await Account.findOneAndUpdate({ _id: line.account, user: req.user._id }, {
               $inc: { balance: line.type === 'debit' ? -line.amount : line.amount },
-            });
+            }, { new: true });
           }
         }
-        await JournalEntry.findByIdAndDelete(journalEntry._id);
+        await JournalEntry.findOneAndDelete({ _id: journalEntry._id, user: req.user._id });
       }
     } catch (jeErr) {
       console.error('Failed to reverse journal entry on sale delete:', jeErr.message);
@@ -492,10 +534,10 @@ const deleteSale = async (req, res) => {
 const duplicateSale = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const original = await Sale.findById(req.params.id);
+    const original = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!original) return res.status(404).json({ message: 'Sale not found' });
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const prefix = setting?.preferences?.transaction?.salePrefix || setting?.invoicePrefix || 'INV-';
     const lastSale = await Sale.findOne({ ...baseFilter, type: 'invoice' }).sort({ createdAt: -1 });
     let nextNum = 1;
@@ -531,10 +573,10 @@ const duplicateSale = async (req, res) => {
 const convertToReturn = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const original = await Sale.findById(req.params.id);
+    const original = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!original) return res.status(404).json({ message: 'Sale not found' });
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const prefix = setting?.preferences?.transaction?.creditNotePrefix || 'CN-';
     const lastSale = await Sale.findOne({ ...baseFilter, type: 'credit_note' }).sort({ createdAt: -1 });
     let nextNum = 1;
@@ -560,9 +602,9 @@ const convertToReturn = async (req, res) => {
 
     for (const item of returnData.items) {
       if (item.product) {
-        const prod = await Product.findById(item.product);
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         const balBefore = prod ? prod.stock : 0;
-        await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } }, { new: true });
         await StockMovement.create({
           user: req.user._id,
           business: req.businessId,
@@ -620,10 +662,10 @@ const convertToReturn = async (req, res) => {
 const convertToChallan = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const original = await Sale.findById(req.params.id);
+    const original = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!original) return res.status(404).json({ message: 'Sale not found' });
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const goodsReturn = setting?.preferences?.general?.goodsReturnOnDC !== false;
     const prefix = setting?.preferences?.transaction?.deliveryChallanPrefix || 'DC-';
     const lastChallan = await Sale.findOne({ ...baseFilter, type: 'challan' }).sort({ createdAt: -1 });
@@ -680,10 +722,10 @@ const convertToChallan = async (req, res) => {
 const convertToEstimate = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const original = await Sale.findById(req.params.id);
+    const original = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!original) return res.status(404).json({ message: 'Sale not found' });
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const prefix = setting?.preferences?.transaction?.estimatePrefix || 'EST-';
     const lastEst = await Sale.findOne({ ...baseFilter, type: 'estimate' }).sort({ createdAt: -1 });
     let nextNum = 1;
@@ -739,10 +781,10 @@ const getSalesByCustomer = async (req, res) => {
 const convertToInvoice = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const original = await Sale.findById(req.params.id);
+    const original = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!original) return res.status(404).json({ message: 'Sale not found' });
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const prefix = setting?.preferences?.transaction?.salePrefix || setting?.invoicePrefix || 'INV-';
     const stopOnNegative = setting?.preferences?.general?.stopSaleOnNegativeStock === true;
     const lastSale = await Sale.findOne({ ...baseFilter, type: 'invoice' }).sort({ createdAt: -1 });
@@ -766,7 +808,7 @@ const convertToInvoice = async (req, res) => {
 
     for (const item of invoiceData.items) {
       if (item.product) {
-        const prod = await Product.findById(item.product);
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         if (!prod) return res.status(400).json({ message: `Product not found: ${item.productName}` });
         if (stopOnNegative && prod.stock < item.quantity) {
           return res.status(400).json({ message: `Insufficient stock for ${prod.name}. Available: ${prod.stock}, Requested: ${item.quantity}` });
@@ -776,9 +818,9 @@ const convertToInvoice = async (req, res) => {
 
     for (const item of invoiceData.items) {
       if (item.product) {
-        const prod = await Product.findById(item.product);
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         const balBefore = prod.stock;
-        await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
+        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: -item.quantity } }, { new: true });
         await StockMovement.create({
           user: req.user._id,
           business: req.businessId,
@@ -796,7 +838,7 @@ const convertToInvoice = async (req, res) => {
     const invoice = await Sale.create(invoiceData);
 
     if (invoiceData.customer) {
-      await Customer.findByIdAndUpdate(invoiceData.customer, { $inc: { openingBalance: invoiceData.remainingBalance || invoiceData.totalAmount } });
+      await Customer.findOneAndUpdate({ _id: invoiceData.customer, user: req.user._id }, { $inc: { openingBalance: invoiceData.remainingBalance || invoiceData.totalAmount } }, { new: true });
     }
 
     res.status(201).json(invoice);
@@ -808,15 +850,14 @@ const convertToInvoice = async (req, res) => {
 const receivePayment = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const sale = await Sale.findById(req.params.id);
+    const sale = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!sale) return res.status(404).json({ message: 'Sale not found' });
-    if (sale.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     const { amount, mode, transactionNo, bankName, chequeNo, referenceNo, date, notes } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ message: 'Invalid payment amount' });
     if (amount > sale.remainingBalance) return res.status(400).json({ message: `Amount exceeds remaining balance of ${sale.remainingBalance}` });
 
-    const setting = await Setting.findOne(baseFilter);
+    const setting = await Setting.findOne(getSettingQuery(req));
     const prefix = setting?.preferences?.transaction?.paymentInPrefix || setting?.receiptPrefix || 'RCP-';
     const lastReceipt = await Receipt.findOne(baseFilter).sort({ createdAt: -1 });
     let nextNum = 1;
@@ -865,6 +906,18 @@ const receivePayment = async (req, res) => {
       paymentMode: mode || 'cash',
       date: date || new Date(),
     }).catch(() => {});
+
+    createNotification(req.user._id, 'new_sale', 'Sale with Payment',
+      `Invoice ${sale.invoiceNumber} for Rs.${Number(amount).toFixed(2)}${sale.customerName ? ` - ${sale.customerName}` : ''}`,
+      sale._id, 'Sale'
+    ).catch(() => {});
+
+    if (Number(amount) > 0) {
+      createNotification(req.user._id, 'payment_received', 'Payment Received',
+        `Rs.${Number(amount).toFixed(2)} received for Invoice ${sale.invoiceNumber}`,
+        receipt._id, 'Receipt'
+      ).catch(() => {});
+    }
 
     res.status(201).json({ sale, receipt });
   } catch (error) {

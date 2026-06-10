@@ -3,6 +3,7 @@ import { Filter } from 'lucide-react';
 import StockHeader from './StockHeader';
 import { productAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
 
 const columns = [
   { key: 'index', label: '#', width: 'w-[50px]' },
@@ -41,6 +42,10 @@ const StockSummary = () => {
       <StockHeader title="Stock Summary" search={search} onSearchChange={setSearch} />
 
       <div className="flex-1 px-4 pb-4">
+        <div className="flex gap-2 mb-3">
+          <button onClick={() => exportToExcel(filteredData, columns, 'Stock Summary')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+          <button onClick={() => printReport('Stock Summary', columns, filteredData)} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
+        </div>
         <div className="border border-gray-200 dark:border-[#334155] rounded-xl overflow-hidden">
           <div className="overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#A0A0A0 transparent' }}>
             <table className="w-full text-xs whitespace-nowrap">

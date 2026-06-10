@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate } from '../utils/format';
@@ -9,22 +8,7 @@ import {
   Send, Save, Share2, Loader2, Hash, Calendar, CheckCircle, AlertTriangle, Clock,
 } from 'lucide-react';
 
-const API = axios.create({ baseURL: 'http://localhost:5000/api', withCredentials: true });
-API.interceptors.request.use((req) => {
-  try {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (user?.token) req.headers.Authorization = `Bearer ${user.token}`;
-  } catch {}
-  return req;
-});
-
-const purchaseOrderAPI = {
-  getAll: (params) => API.get('/purchase-orders', { params }),
-  getById: (id) => API.get(`/purchase-orders/${id}`),
-  create: (data) => API.post('/purchase-orders', data),
-  update: (id, data) => API.put(`/purchase-orders/${id}`, data),
-  delete: (id) => API.delete(`/purchase-orders/${id}`),
-};
+import { purchaseOrderAPI } from '../services/api';
 
 const containerVariants = {
   hidden: { opacity: 0 },

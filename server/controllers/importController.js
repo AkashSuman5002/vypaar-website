@@ -350,8 +350,8 @@ const backupAnalyze = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const { historyId } = req.params;
-    const history = await ImportHistory.findById(historyId);
-    if (!history) return res.status(404).json({ message: 'Import not found' });
+    const history = await ImportHistory.findOne({ _id: historyId, ...getBaseFilter(req) });
+    if (!history) return res.status(404).json({ message: 'Import history not found' });
 
     const detected = { customers: 0, suppliers: 0, products: 0, sales: 0, purchases: 0, expenses: 0, stock: 0, payments: 0, gstRecords: 0 };
 
@@ -425,7 +425,7 @@ const backupExecute = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const { historyId, selectedTables, duplicateHandling } = req.body;
     const mode = duplicateHandling || 'skip';
-    const history = await ImportHistory.findById(historyId);
+    const history = await ImportHistory.findOne({ _id: historyId, ...getBaseFilter(req) });
     if (!history) return res.status(404).json({ message: 'Import not found' });
 
     const results = { customers: 0, suppliers: 0, products: 0, sales: 0, purchases: 0, expenses: 0, stockMovements: 0, payments: 0, gstRecords: 0 };

@@ -3,6 +3,7 @@ import GSTFilterBar from '../../../components/gst/GSTFilterBar';
 import GSTTable from '../../../components/gst/GSTTable';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
 
 const section1Cols = [
   { key: 'nature', label: 'Nature Of Supplies', width: '300px' },
@@ -62,7 +63,9 @@ const GSTR3B = () => {
 
   return (
     <div className="bg-white dark:bg-[#0F172A] min-h-full">
-      <GSTFilterBar title="GSTR 3B" showNonTax={false} onDateChange={setDate} startDate={dates.start} endDate={dates.end} />
+      <GSTFilterBar title="GSTR 3B" showNonTax={false} onDateChange={setDate} startDate={dates.start} endDate={dates.end}
+        onExcel={() => exportToExcel([...supplyData, ...itcData], [...section1Cols, ...section3Cols], 'GSTR3B Report')}
+        onPrint={() => printReport('GSTR3B Report', section1Cols, supplyData)} />
       {!dates.start ? (
         <div className="p-6 text-center text-sm text-gray-500 dark:text-[#64748B]">Select a period to load GSTR 3B data.</div>
       ) : gstr3b ? (

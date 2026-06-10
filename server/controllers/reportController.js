@@ -9,7 +9,7 @@ const JournalEntry = require('../models/JournalEntry');
 const Account = require('../models/Account');
 const Expense = require('../models/Expense');
 const PurchaseReturn = require('../models/PurchaseReturn');
-const { getBaseFilter } = require('../utils/queryHelper');
+const { getBaseFilter, getSettingQuery } = require('../utils/queryHelper');
 
 const getSalesReport = async (req, res) => {
   try {
@@ -496,7 +496,7 @@ const getCashFlow = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const { startDate, endDate } = req.query;
     const Setting = require('../models/Setting');
-    const userSetting = await Setting.findOne({ ...baseFilter });
+    const userSetting = await Setting.findOne(getSettingQuery(req));
     const defaultStart = userSetting?.accountBooksBeginningDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     
     const filter = { ...baseFilter };
@@ -847,7 +847,7 @@ const getPartyStatement = async (req, res) => {
     let party, transactions, totalDue = 0, totalPaid = 0;
 
     if (partyType === 'customer') {
-      party = await Customer.findById(partyId);
+      party = await Customer.findOne({ _id: partyId, ...getBaseFilter(req) });
       if (!party) return res.status(404).json({ message: 'Customer not found' });
 
       const allSales = await Sale.find({ ...baseFilter, customer: partyId, type: 'invoice' }).sort({ date: -1 });
@@ -866,7 +866,7 @@ const getPartyStatement = async (req, res) => {
         payableBalance: 0,
       }));
     } else {
-      party = await Supplier.findById(partyId);
+      party = await Supplier.findOne({ _id: partyId, ...getBaseFilter(req) });
       if (!party) return res.status(404).json({ message: 'Supplier not found' });
 
       const allPurchases = await Purchase.find({ ...baseFilter, supplier: partyId }).sort({ date: -1 });
@@ -1070,7 +1070,7 @@ const getSalePurchaseByPartyGroup = async (req, res) => {
     }
 
     const Setting = require('../models/Setting');
-    const userSetting = await Setting.findOne({ ...baseFilter });
+    const userSetting = await Setting.findOne(getSettingQuery(req));
     const partyGrouping = userSetting?.preferences?.party?.partyGrouping !== false;
 
     const customers = await Customer.find({ ...baseFilter }).lean();

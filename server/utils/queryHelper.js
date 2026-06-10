@@ -1,13 +1,11 @@
 const getBaseFilter = (req) => {
   if (req.businessId) {
-    return {
-      $or: [
-        { business: req.businessId },
-        { user: req.user._id, business: { $exists: false } },
-        { user: req.user._id, business: null },
-      ],
-    };
+    return { business: req.businessId };
   }
+  return { user: req.user._id };
+};
+
+const getSettingQuery = (req) => {
   return { user: req.user._id };
 };
 
@@ -17,4 +15,4 @@ const getCreateData = (req, extra = {}) => {
   return data;
 };
 
-module.exports = { getBaseFilter, getCreateData };
+module.exports = { getBaseFilter, getSettingQuery, getCreateData };

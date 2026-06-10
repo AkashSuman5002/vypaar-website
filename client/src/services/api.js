@@ -1,11 +1,9 @@
 import axios from 'axios';
 
 const API = axios.create({ baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api', withCredentials: true });
+const CSRF_STORAGE_KEY = 'vyapar_csrf_token';
 
-const getCsrfToken = () => {
-  const match = document.cookie.match(/(?:^|;\s*)vyapar-csrf=([^;]*)/);
-  return match ? match[1] : '';
-};
+const getCsrfToken = () => sessionStorage.getItem(CSRF_STORAGE_KEY) || '';
 
 API.interceptors.request.use((req) => {
   const user = JSON.parse(localStorage.getItem('user'));
@@ -22,12 +20,35 @@ API.interceptors.request.use((req) => {
   return req;
 });
 
-export const fetchCsrfToken = () => API.get('/auth/csrf-token');
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      localStorage.removeItem('user');
+      localStorage.removeItem('activeBusiness');
+      sessionStorage.removeItem('vyapar_csrf_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const fetchCsrfToken = async () => {
+  const response = await API.get('/auth/csrf-token');
+  const token = response?.data?.csrfToken;
+  if (token) {
+    sessionStorage.setItem(CSRF_STORAGE_KEY, token);
+  }
+  return response;
+};
 
 export const authAPI = {
   login: (data) => API.post('/auth/login', data),
   register: (data) => API.post('/auth/register', data),
   getProfile: () => API.get('/auth/profile'),
+  refresh: () => API.get('/auth/refresh'),
+  forgotPassword: (data) => API.post('/auth/forgot-password', data),
+  resetPassword: (data) => API.post('/auth/reset-password', data),
   logout: () => API.post('/auth/logout'),
 };
 
@@ -193,6 +214,10 @@ export const loanAccountAPI = {
 
 export const chequeAPI = {
   getAll: () => API.get('/accounting/cheques'),
+  getById: (id) => API.get(`/accounting/cheques/${id}`),
+  create: (data) => API.post('/accounting/cheques', data),
+  update: (id, data) => API.put(`/accounting/cheques/${id}`, data),
+  delete: (id) => API.delete(`/accounting/cheques/${id}`),
 };
 
 export const advReportAPI = {
@@ -382,6 +407,15 @@ export const staffAPI = {
   update: (id, data) => API.put(`/staff/${id}`, data),
   delete: (id) => API.delete(`/staff/${id}`),
   getStats: (id, params) => API.get(`/staff/${id}/stats`, { params }),
+};
+
+export const serviceReminderAPI = {
+  getAll: () => API.get('/service-reminders'),
+  getById: (id) => API.get(`/service-reminders/${id}`),
+  create: (data) => API.post('/service-reminders', data),
+  update: (id, data) => API.put(`/service-reminders/${id}`, data),
+  delete: (id) => API.delete(`/service-reminders/${id}`),
+  getItems: (params) => API.get('/service-reminders/items', { params }),
 };
 
 export default API;

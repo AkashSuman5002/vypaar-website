@@ -13,7 +13,7 @@ const Transaction = require('../models/Transaction');
 const GstRecord = require('../models/GstRecord');
 const Setting = require('../models/Setting');
 const ExportHistory = require('../models/ExportHistory');
-const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { getBaseFilter, getCreateData, getSettingQuery } = require('../utils/queryHelper');
 
 const EXPORT_DIR = path.join(__dirname, '..', 'exports');
 if (!fs.existsSync(EXPORT_DIR)) fs.mkdirSync(EXPORT_DIR, { recursive: true });
@@ -253,7 +253,7 @@ const backupExport = async (req, res) => {
       StockMovement.find({ ...baseFilter }).lean(),
       Transaction.find({ ...baseFilter, type: { $in: ['cash_in', 'cash_out'] } }).lean(),
       GstRecord.find({ ...baseFilter }).lean(),
-      Setting.findOne({ ...baseFilter }).lean(),
+      Setting.findOne(getSettingQuery(req)).lean(),
     ]);
 
     const sanitize = (arr) => arr.map(item => {

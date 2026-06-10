@@ -2,19 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate } from '../utils/format';
-import { customerAPI, supplierAPI } from '../services/api';
+import API, { customerAPI, supplierAPI } from '../services/api';
 import {
   Plus, Search, Trash2, X, ChevronLeft, ChevronRight, ArrowRightLeft,
   Save, Loader2, ArrowRight, Users, Building2, IndianRupee,
 } from 'lucide-react';
-import axios from 'axios';
-
-const API = axios.create({ baseURL: 'http://localhost:5000/api', withCredentials: true });
-API.interceptors.request.use((req) => {
-  const user = JSON.parse(localStorage.getItem('user'));
-  if (user?.token) req.headers.Authorization = `Bearer ${user.token}`;
-  return req;
-});
 
 const transferAPI = {
   getAll: (params) => API.get('/party-transfers', { params }),

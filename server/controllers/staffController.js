@@ -44,7 +44,7 @@ const updateStaff = async (req, res) => {
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
-    const updated = await Staff.findByIdAndUpdate(req.params.id, updates, { new: true });
+    const updated = await Staff.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, updates, { new: true });
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });

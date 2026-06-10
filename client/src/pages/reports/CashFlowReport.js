@@ -32,9 +32,13 @@ const CashFlowReport = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
+        const params = {};
+        if (dates.start) params.dateFrom = dates.start;
+        if (dates.end) params.dateTo = dates.end;
         const [txnRes, balRes] = await Promise.all([
-          transactionAPI.getAll(),
+          transactionAPI.getAll(params),
           transactionAPI.getBalance(),
         ]);
         const mapped = (txnRes.data || []).map(item => ({
@@ -52,7 +56,7 @@ const CashFlowReport = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [dates]);
 
   const openingCash = cashBalance;
   const cashIn = data.filter(r => r.type?.includes('in')).reduce((s, r) => s + (r.amount || 0), 0);

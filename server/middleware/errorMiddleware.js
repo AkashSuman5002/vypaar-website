@@ -4,7 +4,7 @@ const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     message: isProduction ? 'Internal server error' : err.message,
     ...(err.code && { code: err.code }),
-    stack: isProduction ? null : err.stack,
+    stack: null,
   });
 };
 

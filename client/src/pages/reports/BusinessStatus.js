@@ -35,8 +35,12 @@ const BusinessStatus = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        const res = await dashboardAPI.getData();
+        const params = {};
+        if (dates.start) params.startDate = dates.start;
+        if (dates.end) params.endDate = dates.end;
+        const res = await dashboardAPI.getData(params);
         setData(res.data);
       } catch (err) {
         console.error('Failed to load', err);
@@ -45,7 +49,7 @@ const BusinessStatus = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [dates]);
 
   const summaryCards = data
     ? [

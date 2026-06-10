@@ -24,9 +24,8 @@ const getPurchaseOrders = async (req, res) => {
 const getPurchaseOrderById = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const order = await PurchaseOrder.findById(req.params.id);
+    const order = await PurchaseOrder.findOne({ _id: req.params.id, ...baseFilter });
     if (!order) return res.status(404).json({ message: 'Purchase order not found' });
-    if (order.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -78,11 +77,10 @@ const createPurchaseOrder = async (req, res) => {
 const updatePurchaseOrder = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const order = await PurchaseOrder.findById(req.params.id);
+    const order = await PurchaseOrder.findOne({ _id: req.params.id, ...baseFilter });
     if (!order) return res.status(404).json({ message: 'Purchase order not found' });
-    if (order.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
     const { orderNumber, supplier, supplierName, orderDate, expectedDate, items, totalAmount, paidAmount, paymentStatus, status, notes, isInterState } = req.body;
-    const updated = await PurchaseOrder.findByIdAndUpdate(req.params.id, { orderNumber, supplier, supplierName, orderDate, expectedDate, items, totalAmount, paidAmount, paymentStatus, status, notes, isInterState }, { new: true });
+    const updated = await PurchaseOrder.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, { orderNumber, supplier, supplierName, orderDate, expectedDate, items, totalAmount, paidAmount, paymentStatus, status, notes, isInterState }, { new: true });
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -92,10 +90,9 @@ const updatePurchaseOrder = async (req, res) => {
 const deletePurchaseOrder = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const order = await PurchaseOrder.findById(req.params.id);
+    const order = await PurchaseOrder.findOne({ _id: req.params.id, ...baseFilter });
     if (!order) return res.status(404).json({ message: 'Purchase order not found' });
-    if (order.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
-    await PurchaseOrder.findByIdAndDelete(req.params.id);
+    await PurchaseOrder.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Purchase order removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

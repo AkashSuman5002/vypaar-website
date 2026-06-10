@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Download, Printer } from 'lucide-react';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 import { reportAPI } from '../../../services/api';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
 
 const GSTReport = () => {
   const [data, setData] = useState([]);
@@ -32,8 +33,8 @@ const GSTReport = () => {
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search..." className="pl-7 pr-3 py-1.5 border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] rounded text-xs w-[180px] placeholder-gray-500 dark:placeholder-[#64748B]" />
           </div>
-          <button className="p-1.5 border border-gray-300 dark:border-[#334155] rounded hover:bg-gray-50 dark:hover:bg-[#1E293B]"><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
-          <button className="p-1.5 border border-gray-300 dark:border-[#334155] rounded hover:bg-gray-50 dark:hover:bg-[#1E293B]"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button onClick={() => exportToExcel(filteredData, [{key:'rate',label:'GST Rate'},{key:'taxableAmount',label:'Taxable Value'},{key:'cgst',label:'CGST'},{key:'sgst',label:'SGST'},{key:'igst',label:'IGST'}], 'GST Report')} className="p-1.5 border border-gray-300 dark:border-[#334155] rounded hover:bg-gray-50 dark:hover:bg-[#1E293B]"><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button onClick={printReport} className="p-1.5 border border-gray-300 dark:border-[#334155] rounded hover:bg-gray-50 dark:hover:bg-[#1E293B]"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
         </div>
       </div>
       <div className="border border-gray-200 dark:border-[#334155] rounded-xl overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>

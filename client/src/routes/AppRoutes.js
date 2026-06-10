@@ -13,6 +13,8 @@ const LazyLoad = (Component) => (props) => (
 
 const Login = LazyLoad(lazy(() => import('../pages/Login')));
 const Register = LazyLoad(lazy(() => import('../pages/Register')));
+const ForgotPassword = LazyLoad(lazy(() => import('../pages/ForgotPassword')));
+const ResetPassword = LazyLoad(lazy(() => import('../pages/ResetPassword')));
 const Dashboard = LazyLoad(lazy(() => import('../pages/Dashboard')));
 const Customers = LazyLoad(lazy(() => import('../pages/Customers')));
 const Products = LazyLoad(lazy(() => import('../pages/Products')));
@@ -132,6 +134,8 @@ const AppRoutes = () => {
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
       <Route
         element={

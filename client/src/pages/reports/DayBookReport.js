@@ -7,6 +7,7 @@ import ReportSummary from '../../components/reports/common/ReportSummary';
 import EmptyState from '../../components/reports/common/EmptyState';
 import { transactionAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../utils/exportUtils';
 
 const KPI = ({ icon: Icon, label, value, color = 'text-gray-900 dark:text-[#F8FAFC]', bg = 'bg-blue-50 dark:bg-[#3B82F6]/10' }) => (
   <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-4 flex items-center gap-3 flex-1 min-w-[160px]">
@@ -124,6 +125,10 @@ const DayBookReport = () => {
           <KPI icon={TrendingUp} label="Money In" value={`₹${totalIn.toLocaleString()}`} color="text-green-600 dark:text-[#10B981]" bg="bg-green-50 dark:bg-[#10B981]/10" />
           <KPI icon={TrendingDown} label="Money Out" value={`₹${totalOut.toLocaleString()}`} color="text-red-600 dark:text-[#EF4444]" bg="bg-red-50 dark:bg-[#EF4444]/10" />
           <KPI icon={Wallet} label="Running Balance" value={`₹${runningBal.toLocaleString()}`} color={runningBal >= 0 ? 'text-green-600 dark:text-[#10B981]' : 'text-red-600 dark:text-[#EF4444]'} bg={runningBal >= 0 ? 'bg-green-50 dark:bg-[#10B981]/10' : 'bg-red-50 dark:bg-[#EF4444]/10'} />
+        </div>
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => exportToExcel(filteredData, columns, 'Day Book Report')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+          <button onClick={() => printReport('Day Book Report', columns, filteredData)} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
         </div>
         <ReportTable columns={columns} data={filteredData} />
         <ReportSummary>

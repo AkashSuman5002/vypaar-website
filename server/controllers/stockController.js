@@ -8,18 +8,20 @@ const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 
 const VALUATION_METHODS = ['fifo', 'lifo', 'average'];
 
-const calculateCOGS = async (productId, quantitySold, method = 'average') => {
+const calculateCOGS = async (req, productId, quantitySold, method = 'average') => {
   const movements = await StockMovement.find({
     product: productId,
+    ...getBaseFilter(req),
     type: { $in: ['purchase', 'sale'] },
   }).sort({ date: method === 'lifo' ? -1 : 1 });
 
   return calculateCOGSFromMovements(movements, quantitySold, method);
 };
 
-const getWeightedAverageCost = async (productId) => {
+const getWeightedAverageCost = async (req, productId) => {
   const purchases = await StockMovement.find({
     product: productId,
+    ...getBaseFilter(req),
     type: 'purchase',
   }).sort({ date: 1 });
 
@@ -30,7 +32,7 @@ const recordStockMovement = async ({
   userId, businessId, productId, productName, type, quantity, rate, totalAmount,
   referenceType, referenceId, referenceNumber, description,
 }) => {
-  const product = await Product.findById(productId);
+  const product = await Product.findOne({ _id: productId, user: userId });
   if (!product) throw new Error('Product not found');
 
   const balanceBefore = product.stock;
@@ -110,11 +112,8 @@ const getStockValuation = async (req, res) => {
 const adjustStock = async (req, res) => {
   try {
     const { productId, newStock, reason } = req.body;
-    const product = await Product.findById(productId);
+    const product = await Product.findOne({ _id: productId, ...getBaseFilter(req) });
     if (!product) return res.status(404).json({ message: 'Product not found' });
-    if (product.user.toString() !== req.user._id.toString()) {
-      return res.status(401).json({ message: 'Not authorized' });
-    }
 
     const diff = newStock - product.stock;
 
@@ -148,9 +147,9 @@ const getValuationByMethod = async (req, res) => {
     const valuation = await Promise.all(products.map(async (p) => {
       let costPrice = p.costPrice || 0;
       if (method === 'fifo' || method === 'lifo') {
-        costPrice = await calculateCOGS(p._id, 1, method);
+        costPrice = await calculateCOGS(req, p._id, 1, method);
       } else if (method === 'average') {
-        costPrice = await getWeightedAverageCost(p._id);
+        costPrice = await getWeightedAverageCost(req, p._id);
       }
       return {
         _id: p._id,

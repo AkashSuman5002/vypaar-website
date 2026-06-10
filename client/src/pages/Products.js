@@ -293,7 +293,7 @@ const Products = () => {
   const TableHeader = () => (
     <thead>
       <tr className="border-b border-slate-100 dark:border-gray-700">
-        {['Item', 'Category', 'HSN/SAC', 'Unit', 'Selling Price', 'Purchase Price', ...(wholesalePriceEnabled ? ['Wholesale Price'] : []), 'Stock', 'GST', ...(serialTrackingEnabled ? ['Serial No'] : []), ...(batchTrackingEnabled ? ['Batch No'] : []), ...(expiryDateEnabled ? ['Expiry'] : []), ...(modelNoEnabled ? ['Model No'] : []), ...(sizeEnabled ? ['Size'] : []), ...(manufacturingEnabled ? ['Mfg Date'] : []), ...(godownEnabled ? ['Godown'] : []), 'Status', ''].map(h => (
+        {['Item', 'Category', 'HSN/SAC', 'Unit', 'Selling Price', 'Purchase Price', ...(wholesalePriceEnabled ? ['Wholesale Price'] : []), ...(stockEnabled ? ['Stock'] : []), 'GST', ...(serialTrackingEnabled ? ['Serial No'] : []), ...(batchTrackingEnabled ? ['Batch No'] : []), ...(expiryDateEnabled ? ['Expiry'] : []), ...(modelNoEnabled ? ['Model No'] : []), ...(sizeEnabled ? ['Size'] : []), ...(manufacturingEnabled ? ['Mfg Date'] : []), ...(godownEnabled ? ['Godown'] : []), 'Status', ''].map(h => (
           <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">{h}</th>
         ))}
       </tr>
@@ -351,6 +351,7 @@ const Products = () => {
             {product.wholesalePrices?.length > 0 ? product.wholesalePrices.map(wp => `${wp.quantity}+: ${formatCurrency(wp.price)}`).join(', ') : '-'}
           </td>
         )}
+        {stockEnabled && (
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${
@@ -365,6 +366,7 @@ const Products = () => {
             </span>
           </div>
         </td>
+        )}
         <td className="px-4 py-3">
           <Badge variant="default">{(product.gstRate || 0)}%</Badge>
         </td>

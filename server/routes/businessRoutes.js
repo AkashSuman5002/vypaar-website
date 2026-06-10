@@ -1,12 +1,13 @@
 const express = require('express');
 const { getBusinessStatus, getAllBusinesses, createBusiness, updateBusiness, updateBusinessById, deleteBusiness, switchBusiness } = require('../controllers/businessController');
 const Setting = require('../models/Setting');
+const { authorize } = require('../middleware/authorize');
 const router = express.Router();
 
-router.get('/status', getBusinessStatus);
-router.get('/all', getAllBusinesses);
-router.post('/', createBusiness);
-router.post('/setup', async (req, res) => {
+router.get('/status', authorize('settings:view'), getBusinessStatus);
+router.get('/all', authorize('settings:view'), getAllBusinesses);
+router.post('/', authorize('settings:manage'), createBusiness);
+router.post('/setup', authorize('settings:manage'), async (req, res) => {
   try {
     const { name, email, phone, address, gstNumber, state, businessType, currency } = req.body;
     if (!name) return res.status(400).json({ message: 'Business name is required' });
@@ -36,9 +37,9 @@ router.post('/setup', async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-router.put('/profile', updateBusiness);
-router.put('/:id', updateBusinessById);
-router.delete('/:id', deleteBusiness);
-router.post('/:businessId/switch', switchBusiness);
+router.put('/profile', authorize('settings:manage'), updateBusiness);
+router.put('/:id', authorize('settings:manage'), updateBusinessById);
+router.delete('/:id', authorize('settings:manage'), deleteBusiness);
+router.post('/:businessId/switch', authorize('settings:manage'), switchBusiness);
 
 module.exports = router;

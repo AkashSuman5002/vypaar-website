@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Download, Printer, Search } from 'lucide-react';
 import { reportAPI, customerAPI, supplierAPI } from '../../../services/api';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
 
 const columns = [
   { key: 'date', label: 'Date', width: 'w-[100px]' },
@@ -77,8 +78,8 @@ const PartyStatement = () => {
               ))}
             </select>
           </div>
-          <button className="p-1.5 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"><Download className="w-4 h-4 text-gray-500 dark:text-gray-400" /></button>
-          <button className="p-1.5 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"><Printer className="w-4 h-4 text-gray-500 dark:text-gray-400" /></button>
+          <button onClick={() => exportToExcel(transactions, columns, `Party Statement - ${data?.partyName || 'Report'}`)} className="p-1.5 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"><Download className="w-4 h-4 text-gray-500 dark:text-gray-400" /></button>
+          <button onClick={printReport} className="p-1.5 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"><Printer className="w-4 h-4 text-gray-500 dark:text-gray-400" /></button>
         </div>
       </div>
 

@@ -118,6 +118,9 @@ const CreateSale = () => {
   const blockNewParties = getPref('general', 'blockNewPartiesFromTransaction');
   const blockNewItems = getPref('general', 'blockNewItemsFromTransaction');
   const managePartyStatus = getPref('party', 'managePartyStatus');
+  const stockEnabled = getPref('item', 'stockMaintenance');
+  const lowStockDialog = getPref('item', 'lowStockDialog');
+  const godownEnabled = getPref('general', 'enableGodown');
   const passcodeForEditDelete = getPref('transaction', 'passcodeForEditDelete');
   const passcodeEnabled = getPref('general', 'enablePasscode');
   const transactionWiseDiscountEnabled = getPref('transaction', 'transactionWiseDiscount');
@@ -346,6 +349,9 @@ const CreateSale = () => {
             updated.unit = prod.unit || 'Pcs';
             updated.mrp = prod.price || 0;
             updated.costPrice = prod.costPrice || 0;
+            if (lowStockDialog && stockEnabled && prod.stock <= (prod.minStock || 5) && prod.stock > 0) {
+              setTimeout(() => toast.warning(`Low stock: ${prod.name} has only ${prod.stock} units left`), 100);
+            }
           }
         }
         return updated;
@@ -534,6 +540,14 @@ const CreateSale = () => {
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Invoice Date <span className="text-red-500">*</span></label>
             <input type="date" value={form.date} onChange={(e) => handleFieldChange('date', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
           </div>
+          {godownEnabled && (
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Warehouse</label>
+            <select value={form.warehouse || ''} onChange={(e) => handleFieldChange('warehouse', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
+              <option value="">Main Warehouse</option>
+            </select>
+          </div>
+          )}
           {placeOfSupplyEnabled && (
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">State of Supply</label>
@@ -551,6 +565,12 @@ const CreateSale = () => {
           <div className="flex items-center gap-2 mt-2">
             <input type="checkbox" checked={form.reverseCharge || false} onChange={(e) => handleFieldChange('reverseCharge', e.target.checked)} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
             <label className="text-xs text-slate-600">Reverse Charge Applicable</label>
+          </div>
+          )}
+          {shippingAddrEnabled && (
+          <div className="md:col-span-2">
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Shipping Address</label>
+            <textarea value={form.shippingAddress || ''} onChange={(e) => handleFieldChange('shippingAddress', e.target.value)} placeholder="Enter shipping address (if different from billing)" rows={2} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none" />
           </div>
           )}
         </div>
@@ -617,6 +637,7 @@ const CreateSale = () => {
                 <th className="px-3 py-3 text-center w-20">Tax</th>
                 <th className="px-3 py-3 text-right w-28">Amount</th>
                 {showProfit && <th className="px-3 py-3 text-right w-24">Profit</th>}
+                {stockEnabled && <th className="px-3 py-3 text-right w-20">Stock</th>}
                 <th className="px-3 py-3 w-10"></th>
               </tr>
             </thead>
@@ -658,6 +679,11 @@ const CreateSale = () => {
                       ) : <span className="text-slate-300">-</span>}
                     </td>
                   )}
+                  {stockEnabled && (
+                    <td className="px-3 py-2.5 text-right text-xs text-slate-500">
+                      {(() => { const p = products.find(pr => pr._id === item.product); return p ? <span className={p.stock <= (p.minStock || 0) ? 'text-red-600 font-medium' : ''}>{p.stock ?? 0}</span> : '-'; })()}
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 text-center">
                     {form.items.length > 1 && <button onClick={() => removeItem(item._id)} className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><X className="w-3.5 h-3.5" /></button>}
                   </td>
@@ -666,7 +692,7 @@ const CreateSale = () => {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100/50">
-                <td colSpan={showProfit ? 8 : 7} className="px-3 py-3">
+                <td colSpan={(showProfit ? 8 : 7) + (stockEnabled ? 1 : 0)} className="px-3 py-3">
                   <button onClick={addItem} disabled={blockNewItems} className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded inline-flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><Plus className="w-4 h-4" /> Add Row</button>
                 </td>
                 <td className="px-3 py-3 text-right text-sm font-bold text-slate-900 tabular-nums">{fmt(form.totalAmount)}</td>

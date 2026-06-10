@@ -19,6 +19,7 @@ const productSchema = new mongoose.Schema({
   brand: { type: String, trim: true },
   mrp: { type: Number, default: 0, min: 0 },
   description: { type: String, trim: true },
+  type: { type: String, enum: ['product', 'service'], default: 'product' },
 }, { timestamps: true });
 
 productSchema.index({ user: 1, name: 1 });

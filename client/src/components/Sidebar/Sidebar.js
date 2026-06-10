@@ -115,7 +115,6 @@ const searchItems = [
   { name: 'Journal Entries', path: '/journal-entry' },
   { name: 'Chart of Accounts', path: '/chart-of-accounts' },
   { name: 'Account Statements', path: '/account-statements' },
-  { name: 'Other Income', path: '/journal-entry' },
   { name: 'Fixed Assets', path: '/chart-of-accounts' },
   { name: 'Party to Party Transfer', path: '/party-transfer' },
   { name: 'User Management', path: '/user-management' },
@@ -566,9 +565,6 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
                     {accountingSubLinks.map((link) => (
                       <SubNavItem key={link.to} to={link.to} label={link.label} icon={link.icon} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
                     ))}
-                    {otherIncomeEnabled && (
-                      <SubNavItem to="/journal-entry" label="Other Income" icon={DollarSign} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
-                    )}
                     {fixedAssetsEnabled && (
                       <SubNavItem to="/chart-of-accounts" label="Fixed Assets" icon={Building2} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
                     )}
@@ -643,9 +639,6 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
           {/* Reports */}
           {getPref('accounting', 'enableAccounting') !== false && canAccess.reports && (
           <NavItem to="/reports" label="Reports" icon={BarChart3} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
-          )}
-          {getPref('accounting', 'enableAccounting') !== false && canAccess.reports && otherIncomeEnabled && (
-          <NavItem to="/reports?tab=other-income" label="Other Income Report" icon={DollarSign} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
           )}
           {getPref('accounting', 'enableAccounting') !== false && canAccess.reports && fixedAssetsEnabled && (
           <NavItem to="/reports?tab=fixed-assets" label="Fixed Assets Report" icon={Building2} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />

@@ -5,6 +5,7 @@ import ReportHeader from '../../components/reports/common/ReportHeader';
 import EmptyState from '../../components/reports/common/EmptyState';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
 import { reportAPI } from '../../services/api';
+import { exportToExcel, printReport } from '../../utils/exportUtils';
 
 const SummaryCard = ({ label, amount, trendUp = true }) => (
   <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-5 flex-1 min-w-[200px]">
@@ -69,6 +70,10 @@ const BalanceSheetReport = () => {
     <div className="bg-white dark:bg-[#0F172A] min-h-full">
       <ReportHeader title="Balance Sheet" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} />
       <div className="p-6 space-y-5">
+        <div className="flex gap-2">
+          <button onClick={() => { const rows = [...(data.liabilities||[]).map(i=>({name:i.name,amount:i.amount,type:'Liability'})),...(data.equity||[]).map(i=>({name:i.name,amount:i.amount,type:'Equity'})),...(data.assets||[]).map(i=>({name:i.name,amount:i.amount,type:'Asset'}))]; exportToExcel(rows,[{key:'name',label:'Account'},{key:'amount',label:'Amount'},{key:'type',label:'Type'}],'Balance Sheet'); }} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Excel</button>
+          <button onClick={() => { const rows = [...(data.liabilities||[]).map(i=>({name:i.name,amount:i.amount,type:'Liability'})),...(data.equity||[]).map(i=>({name:i.name,amount:i.amount,type:'Equity'})),...(data.assets||[]).map(i=>({name:i.name,amount:i.amount,type:'Asset'}))]; printReport('Balance Sheet',[{key:'name',label:'Account'},{key:'amount',label:'Amount'},{key:'type',label:'Type'}],rows); }} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Print</button>
+        </div>
         {!data ? (
           <EmptyState title="No Balance Sheet Data" description="Balance sheet data will appear once you have transactions." />
         ) : (

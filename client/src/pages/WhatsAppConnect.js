@@ -25,6 +25,7 @@ const WhatsAppConnect = () => {
   const [msgStats, setMsgStats] = useState({ total: 0, sent: 0, failed: 0, pending: 0 });
   const [tab, setTab] = useState('connection');
   const eventSourceRef = useRef(null);
+  const connectingRef = useRef(false);
 
   const checkStatus = useCallback(async () => {
     try {
@@ -63,48 +64,87 @@ const WhatsAppConnect = () => {
   };
 
   const handleConnect = async () => {
+    if (connectingRef.current) return;
+    connectingRef.current = true;
     setConnecting(true);
+    setQrImage('');
+
     try {
-      await whatsappAPI.connect();
       const es = new EventSource(whatsappAPI.getQRStream());
       eventSourceRef.current = es;
+      let sessionStarted = false;
 
       es.onmessage = (event) => {
         try {
           const parsed = JSON.parse(event.data);
+
           if (parsed.type === 'qr' && parsed.data) {
             setQrImage(parsed.data);
           }
+
           if (parsed.type === 'status') {
             if (parsed.data?.status === 'connected') {
-              setStatus(parsed.data);
+              setStatus({ connected: true, status: 'connected', phoneNumber: parsed.data.phoneNumber || '', name: parsed.data.name || '' });
               setQrImage('');
               setConnecting(false);
+              connectingRef.current = false;
               toast.success('WhatsApp connected!');
               es.close();
-            } else if (parsed.data?.status === 'disconnected') {
-              setStatus(parsed.data);
+              eventSourceRef.current = null;
+            }
+            // Ignore 'disconnected' status here — it's the initial status push from qrStream
+            // Only handle it if we previously started a session and were waiting for QR
+            if (parsed.data?.status === 'disconnected' && sessionStarted) {
               setConnecting(false);
+              connectingRef.current = false;
               es.close();
+              eventSourceRef.current = null;
             }
           }
         } catch {}
       };
 
       es.onerror = () => {
-        es.close();
+        // EventSource has built-in reconnection — only close if we're no longer connecting
+        if (!connectingRef.current) {
+          es.close();
+          eventSourceRef.current = null;
+        }
       };
 
+      // Now start the Baileys session (EventSource is already listening)
+      const result = await whatsappAPI.connect();
+      sessionStarted = true;
+
+      // If already connected, the status event from qrStream already handled it
+      if (result.data?.status === 'already_connected') {
+        const statusRes = await whatsappAPI.getStatus();
+        setStatus(statusRes.data);
+        setConnecting(false);
+        connectingRef.current = false;
+        es.close();
+        eventSourceRef.current = null;
+        toast.info('Already connected');
+      }
+
+      // Timeout safety: close after 120s if nothing happened
       setTimeout(() => {
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close();
+        if (eventSourceRef.current === es) {
+          es.close();
+          eventSourceRef.current = null;
           checkStatus();
           setConnecting(false);
+          connectingRef.current = false;
         }
       }, 120000);
     } catch (err) {
       toast.error('Failed to connect');
       setConnecting(false);
+      connectingRef.current = false;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
     }
   };
 

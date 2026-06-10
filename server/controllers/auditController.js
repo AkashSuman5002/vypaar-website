@@ -34,15 +34,14 @@ const getAuditStats = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const filter = { ...baseFilter };
-    const [total, today, byEntity] = await Promise.all([
+    const [total, today, allLogs] = await Promise.all([
       AuditLog.countDocuments(filter),
       AuditLog.countDocuments({ ...filter, createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
-      AuditLog.aggregate([
-        { $match: { ...baseFilter } },
-        { $group: { _id: '$entity', count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-      ]),
+      AuditLog.find(filter).select('entity').lean(),
     ]);
+    const entityMap = {};
+    allLogs.forEach(l => { entityMap[l.entity] = (entityMap[l.entity] || 0) + 1; });
+    const byEntity = Object.entries(entityMap).map(([entity, count]) => ({ _id: entity, count })).sort((a, b) => b.count - a.count);
     res.json({ total, today, byEntity });
   } catch (error) {
     res.status(500).json({ message: error.message });

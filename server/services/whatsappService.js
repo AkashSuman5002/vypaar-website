@@ -28,17 +28,36 @@ const startSession = async (userId, onQR, onStatus) => {
 
   if (sessions.has(uid)) {
     const existing = sessions.get(uid);
-    if (existing) return { status: 'already_connected' };
+    if (existing) {
+      try {
+        if (existing.ws && existing.ws.readyState === 1) {
+          return { status: 'already_connected' };
+        }
+      } catch {}
+      // Stale socket — clean it up
+      try { existing.end(); } catch {}
+      sessions.delete(uid);
+    }
   }
 
   qrCallbacks.set(uid, onQR);
   statusCallbacks.set(uid, onStatus);
+
+  await WhatsAppSession.findOneAndUpdate(
+    { user: uid },
+    { status: 'qr_pending', qrCode: '', failReason: '', sessionData: null },
+    { upsert: true }
+  );
+
+  console.log(`[WhatsApp] Starting session for user ${uid}`);
 
   try {
     const BA = await loadBaileys();
     const sessionDir = getSessionDir(uid);
     const { state, saveCreds } = await BA.useMultiFileAuthState(sessionDir);
     const { version } = await BA.fetchLatestBaileysVersion();
+
+    console.log(`[WhatsApp] Baileys version: ${version.join('.')}, session dir: ${sessionDir}`);
 
     const sock = BA.makeWASocket({
       version,
@@ -59,6 +78,7 @@ const startSession = async (userId, onQR, onStatus) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
+        console.log(`[WhatsApp] QR received for user ${uid}`);
         await WhatsAppSession.findOneAndUpdate(
           { user: uid },
           { status: 'qr_pending', qrCode: qr },
@@ -71,6 +91,7 @@ const startSession = async (userId, onQR, onStatus) => {
       if (connection === 'close') {
         const reason = lastDisconnect?.error?.output?.statusCode;
         const shouldReconnect = reason !== BA.DisconnectReason.loggedOut;
+        console.log(`[WhatsApp] Connection closed for user ${uid}, reason: ${reason}, reconnect: ${shouldReconnect}`);
 
         await WhatsAppSession.findOneAndUpdate(
           { user: uid },
@@ -94,6 +115,7 @@ const startSession = async (userId, onQR, onStatus) => {
       if (connection === 'open') {
         const phone = sock.user?.id?.replace(/:.*@/, '@')?.split('@')[0] || '';
         const name = sock.user?.name || '';
+        console.log(`[WhatsApp] Connected for user ${uid}, phone: ${phone}`);
         await WhatsAppSession.findOneAndUpdate(
           { user: uid },
           { status: 'connected', qrCode: '', phoneNumber: phone, name, lastConnected: new Date(), sessionData: null }
@@ -106,7 +128,7 @@ const startSession = async (userId, onQR, onStatus) => {
     sessions.set(uid, sock);
     return { status: 'started' };
   } catch (err) {
-    console.error('WhatsApp session start error:', err.message);
+    console.error(`[WhatsApp] Session start error for user ${uid}:`, err.message);
     await WhatsAppSession.findOneAndUpdate(
       { user: uid },
       { status: 'failed', failReason: err.message }

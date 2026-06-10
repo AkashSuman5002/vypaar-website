@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Moon, Sun, Search, Bell, User, LogOut, Settings as SettingsIcon, X, TrendingUp, ShoppingBag, BookOpen, List, BarChart3, TrendingDown, Scale, FileText, Users, Package, RefreshCw, Layers, Hash, Globe, UserCheck, AlertTriangle, ClipboardList, Info, Activity, Landmark, Percent, Receipt, Wallet, FolderOpen, ShoppingCart, Banknote, ArrowUpRight, ArrowDownRight, LayoutDashboard, ChevronRight, Clock, CheckCircle, DollarSign, CreditCard, Phone, Headphones, Building2, HelpCircle, History, Zap } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Menu, Moon, Sun, Search, Bell, User, LogOut, Settings as SettingsIcon, X, TrendingUp, ShoppingBag, BookOpen, List, BarChart3, TrendingDown, Scale, FileText, Users, Package, RefreshCw, Layers, Hash, Globe, UserCheck, AlertTriangle, ClipboardList, Info, Activity, Landmark, Percent, Receipt, Wallet, FolderOpen, ShoppingCart, Banknote, ArrowUpRight, ArrowDownRight, LayoutDashboard, ChevronRight, Clock, CheckCircle, DollarSign, CreditCard, Phone, Headphones, Building2, HelpCircle, History, Zap, UserPlus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { notificationAPI, themeAPI } from '../../services/api';
+import { notificationAPI, themeAPI, customerAPI, productAPI, saleAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 
 const searchItems = [
@@ -61,7 +61,7 @@ const Header = ({ onMenuClick }) => {
   }, [dark, themeLoaded]);
 
   const removeNotification = async (id) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    setNotifications(prev => prev.filter(n => n._id !== id));
     try { await notificationAPI.delete(id); } catch {}
   };
 
@@ -85,12 +85,16 @@ const Header = ({ onMenuClick }) => {
 
   useEffect(() => {
     loadNotifications();
+    const interval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const searchRef = useRef(null);
   const notifRef = useRef(null);
   const profileRef = useRef(null);
   const inputRef = useRef(null);
+  const [dynamicResults, setDynamicResults] = useState([]);
+  const searchTimer = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -121,6 +125,41 @@ const Header = ({ onMenuClick }) => {
     ? searchItems.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : searchItems.slice(0, 8);
 
+  const allResults = [...filteredSearch, ...dynamicResults];
+
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) { setDynamicResults([]); return; }
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const q = searchQuery.trim();
+        const [custRes, prodRes, saleRes] = await Promise.allSettled([
+          customerAPI.getAll({ search: q, limit: 3 }),
+          productAPI.getAll({ search: q, limit: 3 }),
+          saleAPI.getAll({ search: q, limit: 3 }),
+        ]);
+        const results = [];
+        if (custRes.status === 'fulfilled') {
+          (custRes.value.data?.customers || custRes.value.data || []).slice(0, 3).forEach(c => {
+            results.push({ name: `Customer: ${c.name}`, path: `/customers`, icon: Users, type: 'data' });
+          });
+        }
+        if (prodRes.status === 'fulfilled') {
+          (Array.isArray(prodRes.value.data) ? prodRes.value.data : prodRes.value.data?.products || []).slice(0, 3).forEach(p => {
+            results.push({ name: `Product: ${p.name}`, path: `/products`, icon: Package, type: 'data' });
+          });
+        }
+        if (saleRes.status === 'fulfilled') {
+          (Array.isArray(saleRes.value.data) ? saleRes.value.data : saleRes.value.data?.sales || []).slice(0, 3).forEach(s => {
+            results.push({ name: `Sale: ${s.invoiceNumber || s._id}`, path: `/sales/view/${s._id}`, icon: TrendingUp, type: 'data' });
+          });
+        }
+        setDynamicResults(results);
+      } catch { setDynamicResults([]); }
+    }, 300);
+    return () => clearTimeout(searchTimer.current);
+  }, [searchQuery]);
+
   const handleSearchSelect = (path) => {
     setSearchOpen(false);
     setSearchQuery('');
@@ -144,6 +183,11 @@ const Header = ({ onMenuClick }) => {
     purchase_return: { icon: RefreshCw, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10' },
     sale_return: { icon: RefreshCw, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10' },
     expense_created: { icon: DollarSign, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10' },
+    service_reminder: { icon: Bell, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10' },
+    party_added: { icon: UserPlus, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+    bank_transaction: { icon: Landmark, color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-500/10' },
+    sale_cancelled: { icon: X, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10' },
+    purchase_cancelled: { icon: X, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10' },
   };
 
   return (
@@ -240,12 +284,12 @@ const Header = ({ onMenuClick }) => {
                     <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-2xs text-slate-400 bg-slate-100 dark:bg-gray-700 rounded">ESC</kbd>
                   </div>
                   <div className="max-h-72 overflow-y-auto p-2">
-                    {filteredSearch.length === 0 ? (
+                    {allResults.length === 0 ? (
                       <p className="text-center text-sm text-slate-400 dark:text-slate-500 py-8">No results found</p>
                     ) : (
-                      filteredSearch.map((item) => (
+                      allResults.map((item, idx) => (
                         <button
-                          key={item.path}
+                          key={item.path + idx}
                           onClick={() => handleSearchSelect(item.path)}
                           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors text-left"
                         >

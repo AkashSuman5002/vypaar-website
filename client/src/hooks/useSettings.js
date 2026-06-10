@@ -68,6 +68,7 @@ const defaultPrefs = {
     youSaved: true,
     printAmountWithGrouping: true,
     amountInWords: true,
+    amountInWordsFormat: 'Indian',
     footerSettings: true,
     printDescription: true,
     termsConditions: true,
@@ -83,6 +84,39 @@ const defaultPrefs = {
     printOriginalDuplicate: 'Original',
     topPDFMargin: '10',
     printerType: 'regular',
+    makeThermalDefault: false,
+    thermalPageSize: '3inch',
+    thermalCustomChars: '48',
+    printingType: 'Text Printing',
+    useTextStyling: true,
+    autoCutPaper: false,
+    openCashDrawer: false,
+    extraLinesAtEnd: '0',
+    numberOfCopies: '1',
+    showCompanyName: true,
+    showCompanyLogo: true,
+    showAddress: true,
+    showEmail: true,
+    showPhone: true,
+    showGSTIN: true,
+    thermalTheme1: true,
+    thermalTheme2: false,
+    thermalTheme3: false,
+    thermalTheme4: false,
+    showItemSNo: true,
+    showItemHSN: true,
+    showItemUOM: true,
+    showItemMRP: true,
+    showItemDescription: true,
+    showBatchNo: true,
+    showExpDate: true,
+    showMfgDate: true,
+    showSize: true,
+    showModelNo: true,
+    showSerialNo: true,
+    showTotalItemQty: true,
+    showAmountDecimal: true,
+    receivedAmount: true,
     tallyTheme: false,
     landscapeTheme1: false,
     landscapeTheme2: false,
@@ -222,7 +256,13 @@ const saveCategory = async (category, values) => {
   }
 };
 
-export { defaultPrefs, loadSettings, saveCategory };
+const clearCache = () => {
+  cache.settings = null;
+  cache.loading = false;
+  loadPromise = null;
+};
+
+export { defaultPrefs, loadSettings, saveCategory, clearCache };
 
 const useSettings = () => {
   const [settings, setSettings] = useState(cache.settings);

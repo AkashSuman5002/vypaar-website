@@ -13,6 +13,8 @@ const ROLE_PERMISSIONS = {
     'expenses:view', 'expenses:create', 'expenses:manage',
     'settings:view', 'settings:manage',
     'staff:view', 'staff:create', 'staff:manage',
+    'dashboard:view', 'notifications:view', 'notifications:manage',
+    'support:view', 'support:manage',
   ],
   Accountant: [
     'sales:view', 'purchases:view',
@@ -21,11 +23,13 @@ const ROLE_PERMISSIONS = {
     'accounting:view', 'accounting:manage',
     'cashbank:view',
     'expenses:view',
+    'dashboard:view', 'notifications:view',
   ],
   Staff: [
     'sales:view', 'sales:create',
     'products:view', 'customers:view',
     'staff:view',
+    'dashboard:view', 'notifications:view', 'support:view',
   ],
 };
 

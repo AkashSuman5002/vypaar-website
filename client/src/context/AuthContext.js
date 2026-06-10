@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { authAPI, fetchCsrfToken, businessAPI } from '../services/api';
+import { clearCache } from '../hooks/useSettings';
 
 const AuthContext = createContext();
 
@@ -10,21 +11,37 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (stored) {
+    const bootstrapAuth = async () => {
+      const stored = localStorage.getItem('user');
+      if (!stored) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const parsed = JSON.parse(stored);
-        if (parsed && parsed.token) {
-          setUser(parsed);
-          loadActiveBusiness();
-        } else {
+        if (!parsed?.token) {
           localStorage.removeItem('user');
+          setLoading(false);
+          return;
         }
+
+        setUser(parsed);
+        const { data } = await authAPI.refresh();
+        localStorage.setItem('user', JSON.stringify(data));
+        setUser(data);
+        await fetchCsrfToken().catch(() => {});
+        await loadActiveBusiness();
       } catch {
         localStorage.removeItem('user');
+        localStorage.removeItem('activeBusiness');
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-    }
-    setLoading(false);
+    };
+
+    bootstrapAuth();
   }, []);
 
   useEffect(() => {
@@ -44,6 +61,7 @@ export const AuthProvider = ({ children }) => {
     const { data } = await authAPI.login({ email, password });
     localStorage.setItem('user', JSON.stringify(data));
     setUser(data);
+    clearCache();
     fetchCsrfToken().catch(() => {});
     setTimeout(() => loadActiveBusiness(), 500);
     return data;
@@ -58,9 +76,14 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch {}
+    sessionStorage.removeItem('vyapar_csrf_token');
     localStorage.removeItem('user');
     localStorage.removeItem('activeBusiness');
+    clearCache();
     setUser(null);
   };
 

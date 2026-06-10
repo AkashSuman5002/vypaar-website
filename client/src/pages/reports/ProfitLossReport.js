@@ -4,6 +4,7 @@ import { reportAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
 import ReportHeader from '../../components/reports/common/ReportHeader';
 import EmptyState from '../../components/reports/common/EmptyState';
+import { exportToExcel, printReport } from '../../utils/exportUtils';
 
 const ProfitLossReport = () => {
   const [view, setView] = useState('vyapar');
@@ -49,7 +50,9 @@ const ProfitLossReport = () => {
     return (
       <div className="bg-white dark:bg-[#0F172A] min-h-full">
         <ReportHeader title="Profit & Loss" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} />
-        <div className="flex items-center gap-2 px-6">
+          <div className="flex items-center gap-2 px-6">
+          <button onClick={() => exportToExcel([{particular:'Total Income',amount:0},{particular:'Total Expenses',amount:0},{particular:'Net Profit',amount:0}], [{key:'particular',label:'Particulars'},{key:'amount',label:'Amount'}], 'Profit & Loss Report')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Excel</button>
+          <button onClick={() => printReport('Profit & Loss Report', [{key:'particular',label:'Particulars'},{key:'amount',label:'Amount'}], [{particular:'Total Income',amount:totalIncome},{particular:'Total Expenses',amount:totalExpenses},{particular:'Net Profit',amount:netProfit}])} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Print</button>
           {['vyapar', 'accounting'].map((v) => (
             <button key={v} onClick={() => setView(v)}
               className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${view === v ? 'bg-blue-600 dark:bg-[#3B82F6] text-white' : 'bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70'}`}>
@@ -69,6 +72,8 @@ const ProfitLossReport = () => {
     <div className="bg-white dark:bg-[#0F172A] min-h-full">
       <ReportHeader title="Profit & Loss" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} />
       <div className="px-6 pb-2 flex items-center gap-2">
+        <button onClick={() => { const rows = view === 'vyapar' ? [{particular:'Total Sales',amount:totalIncome},{particular:'Cost of Goods Sold',amount:data?.totalCOGS||0},{particular:'Total Purchases/Expenses',amount:totalExpenses},{particular:'Net Profit/Loss',amount:netProfit}] : [...incomeAccounts.map(a=>({particular:a.name,amount:a.amount})),{particular:'Total Revenue',amount:totalIncome},...expenseAccounts.map(a=>({particular:a.name,amount:a.amount})),{particular:'Total Expenses',amount:totalExpenses},{particular:'Net Profit/Loss',amount:netProfit}]; exportToExcel(rows,[{key:'particular',label:'Particulars'},{key:'amount',label:'Amount'}],'Profit & Loss Report'); }} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Excel</button>
+        <button onClick={() => { const rows = view === 'vyapar' ? [{particular:'Total Sales',amount:totalIncome},{particular:'Cost of Goods Sold',amount:data?.totalCOGS||0},{particular:'Total Purchases/Expenses',amount:totalExpenses},{particular:'Net Profit/Loss',amount:netProfit}] : [...incomeAccounts.map(a=>({particular:a.name,amount:a.amount})),{particular:'Total Revenue',amount:totalIncome},...expenseAccounts.map(a=>({particular:a.name,amount:a.amount})),{particular:'Total Expenses',amount:totalExpenses},{particular:'Net Profit/Loss',amount:netProfit}]; printReport('Profit & Loss Report',[{key:'particular',label:'Particulars'},{key:'amount',label:'Amount'}],rows); }} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Print</button>
         {['vyapar', 'accounting'].map((v) => (
           <button key={v} onClick={() => setView(v)}
             className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${view === v ? 'bg-blue-600 dark:bg-[#3B82F6] text-white' : 'bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70'}`}>

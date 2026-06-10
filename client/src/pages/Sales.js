@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import API, { saleAPI, settingAPI, customerAPI } from '../services/api';
+import API, { saleAPI, settingAPI, customerAPI, whatsappAPI } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import EmptyState from '../components/UI/EmptyState';
 import Badge from '../components/UI/Badge';
@@ -159,10 +159,15 @@ ${sale.customer ? `<div class="bill-to"><p class="section-title">Bill To</p><p c
     } catch { toast.error('Failed to download PDF'); }
   };
 
-  const handleShareWhatsApp = (sale) => {
+  const handleShareWhatsApp = async (sale) => {
     const msg = `*Invoice ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}\nStatus: ${sale.paymentStatus}`;
-    const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank');
+    try {
+      await whatsappAPI.send({ phone: sale.customerPhone || sale.customer?.phone, message: msg });
+      toast.success('WhatsApp message sent');
+    } catch {
+      const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
+    }
   };
 
   const handleReceivePayment = async () => {

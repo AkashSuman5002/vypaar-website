@@ -10,6 +10,7 @@ import { formatCurrency } from '../utils/format';
 
 const BankAccounts = () => {
   const [accounts, setAccounts] = useState([]);
+  const [totalBankBalance, setTotalBankBalance] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -32,19 +33,38 @@ const BankAccounts = () => {
     setLoading(true);
     try {
       const res = await bankAccountAPI.getAll();
-      setAccounts(res.data.map(a => ({
-        id: a._id,
-        displayName: a.name,
-        openingBalance: String(a.balance || 0),
-        bankName: a.metadata?.bankName || '',
-        accountNumber: a.metadata?.accountNumber || '',
-        ifscCode: a.metadata?.ifscCode || '',
-        upiId: a.metadata?.upiId || '',
-        accountHolderName: a.metadata?.accountHolderName || '',
-        printQr: a.metadata?.printQr || false,
-        printDetails: a.metadata?.printDetails || false,
-        acceptPayments: a.metadata?.acceptPayments || false,
-      })));
+      const data = res.data;
+      if (Array.isArray(data)) {
+        setAccounts(data.map(a => ({
+          id: a._id,
+          displayName: a.name,
+          openingBalance: String(a.balance || 0),
+          bankName: a.metadata?.bankName || '',
+          accountNumber: a.metadata?.accountNumber || '',
+          ifscCode: a.metadata?.ifscCode || '',
+          upiId: a.metadata?.upiId || '',
+          accountHolderName: a.metadata?.accountHolderName || '',
+          printQr: a.metadata?.printQr || false,
+          printDetails: a.metadata?.printDetails || false,
+          acceptPayments: a.metadata?.acceptPayments || false,
+        })));
+        setTotalBankBalance(0);
+      } else {
+        setAccounts((data.accounts || []).map(a => ({
+          id: a._id,
+          displayName: a.name,
+          openingBalance: String(a.balance || 0),
+          bankName: a.metadata?.bankName || '',
+          accountNumber: a.metadata?.accountNumber || '',
+          ifscCode: a.metadata?.ifscCode || '',
+          upiId: a.metadata?.upiId || '',
+          accountHolderName: a.metadata?.accountHolderName || '',
+          printQr: a.metadata?.printQr || false,
+          printDetails: a.metadata?.printDetails || false,
+          acceptPayments: a.metadata?.acceptPayments || false,
+        })));
+        setTotalBankBalance(data.totalBankBalance || 0);
+      }
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
@@ -61,7 +81,7 @@ const BankAccounts = () => {
     try {
       const payload = {
         name: form.displayName || form.bankName,
-        openingBalance: parseFloat(form.openingBalance) || 0,
+        balance: parseFloat(form.openingBalance) || 0,
         metadata: {
           bankName: form.bankName,
           accountNumber: form.accountNumber,
@@ -344,6 +364,21 @@ const BankAccounts = () => {
             + Add Bank Account
           </button>
         </div>
+        {totalBankBalance !== 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <Landmark className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">Total Bank Balance</p>
+                  <p className="text-lg font-bold text-gray-900">{formatCurrency(totalBankBalance)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="space-y-3">
           {accounts.map((acc) => (
             <div key={acc.id} className="bg-white rounded-lg border border-gray-200 p-4">

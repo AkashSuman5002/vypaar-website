@@ -45,10 +45,9 @@ const createPaymentOut = async (req, res) => {
 const deletePaymentOut = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const payment = await Transaction.findById(req.params.id);
+    const payment = await Transaction.findOne({ _id: req.params.id, user: req.user._id });
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
-    if (payment.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
-    await Transaction.findByIdAndDelete(req.params.id);
+    await Transaction.findOneAndDelete({ _id: req.params.id, user: req.user._id });
     res.json({ message: 'Payment removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

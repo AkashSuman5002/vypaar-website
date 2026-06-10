@@ -26,9 +26,8 @@ const getPurchaseReturns = async (req, res) => {
 const getPurchaseReturnById = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const ret = await PurchaseReturn.findById(req.params.id);
+    const ret = await PurchaseReturn.findOne({ _id: req.params.id, ...baseFilter });
     if (!ret) return res.status(404).json({ message: 'Purchase return not found' });
-    if (ret.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
     res.json(ret);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -89,9 +88,9 @@ const createPurchaseReturn = async (req, res) => {
 
     for (const item of processedItems) {
       if (item.product) {
-        const prod = await Product.findById(item.product);
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         const balBefore = prod ? prod.stock : 0;
-        await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
+        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: -item.quantity } });
         await StockMovement.create({
           user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
           type: 'purchase_return', quantity: -item.quantity,
@@ -114,9 +113,8 @@ const createPurchaseReturn = async (req, res) => {
 const updatePurchaseReturn = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const ret = await PurchaseReturn.findById(req.params.id);
+    const ret = await PurchaseReturn.findOne({ _id: req.params.id, ...baseFilter });
     if (!ret) return res.status(404).json({ message: 'Purchase return not found' });
-    if (ret.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     const updateData = { ...req.body };
     if (typeof updateData.items === 'string') {
@@ -136,7 +134,7 @@ const updatePurchaseReturn = async (req, res) => {
       if (updateData[field] !== undefined) filtered[field] = updateData[field];
     }
 
-    const updated = await PurchaseReturn.findByIdAndUpdate(req.params.id, filtered, { new: true });
+    const updated = await PurchaseReturn.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, filtered, { new: true });
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -146,16 +144,15 @@ const updatePurchaseReturn = async (req, res) => {
 const deletePurchaseReturn = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const ret = await PurchaseReturn.findById(req.params.id);
+    const ret = await PurchaseReturn.findOne({ _id: req.params.id, ...baseFilter });
     if (!ret) return res.status(404).json({ message: 'Purchase return not found' });
-    if (ret.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     // Restore stock that was decremented during creation
     for (const item of ret.items) {
       if (item.product) {
-        const prod = await Product.findById(item.product);
+        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
         const balBefore = prod ? prod.stock : 0;
-        await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } });
         await StockMovement.create({
           user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
           type: 'return', quantity: item.quantity,
@@ -169,7 +166,7 @@ const deletePurchaseReturn = async (req, res) => {
       }
     }
 
-    await PurchaseReturn.findByIdAndDelete(req.params.id);
+    await PurchaseReturn.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Purchase return removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authorize } = require('../middleware/authorize');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const Supplier = require('../models/Supplier');
@@ -15,7 +16,7 @@ const StockMovement = require('../models/StockMovement');
 const Receipt = require('../models/Receipt');
 
 // Verify data integrity across all modules
-router.get('/verify', async (req, res) => {
+router.get('/verify', authorize('settings:view'), async (req, res) => {
   try {
     const userId = req.user.id;
     const results = {};
@@ -83,7 +84,7 @@ router.get('/verify', async (req, res) => {
 });
 
 // Financial year status
-router.get('/financial-year-status', async (req, res) => {
+router.get('/financial-year-status', authorize('settings:view'), async (req, res) => {
   try {
     const userId = req.user.id;
     const now = new Date();
@@ -111,7 +112,7 @@ router.get('/financial-year-status', async (req, res) => {
 });
 
 // Close financial year - create closing entries
-router.post('/close-financial-year', async (req, res) => {
+router.post('/close-financial-year', authorize('accounting:manage'), async (req, res) => {
   try {
     const { confirmation } = req.body;
     if (confirmation !== 'CLOSE') {
@@ -174,7 +175,7 @@ router.post('/close-financial-year', async (req, res) => {
 });
 
 // Export to Tally - generate XML from real data
-router.post('/export-tally', async (req, res) => {
+router.post('/export-tally', authorize('reports:export'), async (req, res) => {
   try {
     const userId = req.user.id;
     const { modules, dateFrom, dateTo } = req.body;
@@ -229,7 +230,7 @@ router.post('/export-tally', async (req, res) => {
 });
 
 // Import from Tally
-router.post('/import-tally', async (req, res) => {
+router.post('/import-tally', authorize('settings:manage'), async (req, res) => {
   try {
     const userId = req.user.id;
     const { data, type } = req.body;
@@ -259,7 +260,7 @@ router.post('/import-tally', async (req, res) => {
 });
 
 // Accountant access - list users
-router.get('/accountant-access', async (req, res) => {
+router.get('/accountant-access', authorize('settings:view'), async (req, res) => {
   try {
     const userId = req.user.id;
     const setting = await Setting.findOne({ user: userId });
@@ -272,7 +273,7 @@ router.get('/accountant-access', async (req, res) => {
 });
 
 // Invite accountant
-router.post('/accountant-access/invite', async (req, res) => {
+router.post('/accountant-access/invite', authorize('settings:manage'), async (req, res) => {
   try {
     const { email, name, role } = req.body;
     const userId = req.user.id;
@@ -300,7 +301,7 @@ router.post('/accountant-access/invite', async (req, res) => {
 });
 
 // Remove accountant access
-router.delete('/accountant-access/:id', async (req, res) => {
+router.delete('/accountant-access/:id', authorize('settings:manage'), async (req, res) => {
   try {
     const userId = req.user.id;
     const setting = await Setting.findOne({ user: userId });
@@ -315,7 +316,7 @@ router.delete('/accountant-access/:id', async (req, res) => {
 });
 
 // Track salesmen - aggregate sales by salesman field on customers
-router.get('/track-salesmen', async (req, res) => {
+router.get('/track-salesmen', authorize('reports:view'), async (req, res) => {
   try {
     const userId = req.user.id;
     const customers = await Customer.find({ user: userId });
@@ -359,7 +360,7 @@ router.get('/track-salesmen', async (req, res) => {
 });
 
 // Bulk update items
-router.post('/bulk-update-items', async (req, res) => {
+router.post('/bulk-update-items', authorize('products:manage'), async (req, res) => {
   try {
     const { updates } = req.body;
     if (!updates || !Array.isArray(updates)) {

@@ -1,5 +1,6 @@
 const Supplier = require('../models/Supplier');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { createNotification } = require('../controllers/notificationController');
 
 const getSuppliers = async (req, res) => {
   try {
@@ -34,6 +35,10 @@ const createSupplier = async (req, res) => {
       notes: notes || '',
       customFields: customFields || {},
     });
+    createNotification(req.user._id, 'party_added', 'New Supplier Added',
+      `${name}${phone ? ` (${phone})` : ''} added to your party list`,
+      supplier._id, 'Supplier'
+    ).catch(() => {});
     res.status(201).json(supplier);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -51,7 +56,7 @@ const updateSupplier = async (req, res) => {
     ];
     const patch = {};
     for (const k of allowed) if (req.body[k] !== undefined) patch[k] = req.body[k];
-    const updated = await Supplier.findByIdAndUpdate(req.params.id, patch, { new: true });
+    const updated = await Supplier.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, patch, { new: true });
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -63,7 +68,7 @@ const deleteSupplier = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const supplier = await Supplier.findOne({ ...baseFilter, _id: req.params.id });
     if (!supplier) return res.status(404).json({ message: 'Supplier not found' });
-    await Supplier.findByIdAndDelete(req.params.id);
+    await Supplier.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Supplier removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

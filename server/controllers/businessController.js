@@ -2,10 +2,19 @@ const Business = require('../models/Business');
 const Branch = require('../models/Branch');
 const Role = require('../models/Role');
 const Setting = require('../models/Setting');
+const { getBaseFilter } = require('../utils/queryHelper');
+
+const getPreferredBusiness = async (ownerId) => {
+  let business = await Business.findOne({ owner: ownerId, isActive: true }).sort({ updatedAt: -1, createdAt: -1 });
+  if (!business) {
+    business = await Business.findOne({ owner: ownerId }).sort({ createdAt: -1 });
+  }
+  return business;
+};
 
 const getBusinessStatus = async (req, res) => {
   try {
-    const business = await Business.findOne({ owner: req.user._id, isActive: true });
+    const business = await getPreferredBusiness(req.user._id);
     res.json({ hasBusiness: !!business, business: business || null });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -67,7 +76,7 @@ const createBusiness = async (req, res) => {
 
 const updateBusiness = async (req, res) => {
   try {
-    let business = await Business.findOne({ owner: req.user._id, isActive: true });
+    let business = await getPreferredBusiness(req.user._id);
     if (!business) {
       business = await Business.create({
         name: req.body.businessName || req.body.name || 'My Business',
@@ -138,7 +147,7 @@ const deleteBusiness = async (req, res) => {
     if (!business) return res.status(404).json({ message: 'Business not found' });
     if (business.isActive) return res.status(400).json({ message: 'Cannot delete active business. Switch to another first.' });
 
-    await Business.findByIdAndDelete(req.params.id);
+    await Business.findOneAndDelete({ _id: req.params.id, ...getBaseFilter(req) });
     res.json({ message: 'Business deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

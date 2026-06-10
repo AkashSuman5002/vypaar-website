@@ -1,11 +1,10 @@
 const Notification = require('../models/Notification');
-const { getBaseFilter } = require('../utils/queryHelper');
 
 const getNotifications = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    const notes = await Notification.find({ ...baseFilter }).sort({ createdAt: -1 }).limit(50);
-    const unreadCount = await Notification.countDocuments({ ...baseFilter, read: false });
+    const filter = { user: req.user._id };
+    const notes = await Notification.find(filter).sort({ createdAt: -1 }).limit(50);
+    const unreadCount = await Notification.countDocuments({ ...filter, read: false });
     res.json({ notifications: notes, unreadCount });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -14,9 +13,8 @@ const getNotifications = async (req, res) => {
 
 const markAsRead = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
     const note = await Notification.findOneAndUpdate(
-      { _id: req.params.id, ...baseFilter },
+      { _id: req.params.id, user: req.user._id },
       { read: true },
       { new: true }
     );
@@ -29,8 +27,7 @@ const markAsRead = async (req, res) => {
 
 const markAllAsRead = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    await Notification.updateMany({ ...baseFilter, read: false }, { read: true });
+    await Notification.updateMany({ user: req.user._id, read: false }, { read: true });
     res.json({ message: 'All notifications marked as read' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -39,8 +36,7 @@ const markAllAsRead = async (req, res) => {
 
 const deleteNotification = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    const note = await Notification.findOneAndDelete({ _id: req.params.id, ...baseFilter });
+    const note = await Notification.findOneAndDelete({ _id: req.params.id, user: req.user._id });
     if (!note) return res.status(404).json({ message: 'Notification not found' });
     res.json({ message: 'Notification deleted' });
   } catch (error) {
@@ -50,8 +46,7 @@ const deleteNotification = async (req, res) => {
 
 const getUnreadCount = async (req, res) => {
   try {
-    const baseFilter = getBaseFilter(req);
-    const count = await Notification.countDocuments({ ...baseFilter, read: false });
+    const count = await Notification.countDocuments({ user: req.user._id, read: false });
     res.json({ count });
   } catch (error) {
     res.status(500).json({ message: error.message });

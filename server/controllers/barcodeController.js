@@ -283,7 +283,7 @@ const executeCSV = async (req, res) => {
             if (row.data.description) updateData.description = row.data.description;
             updateData.minStock = row.data.minStock !== undefined ? parseFloat(row.data.minStock) : existingProduct.minStock;
             if (duplicateHandling === 'replace') {
-              await Product.findByIdAndDelete(existingProduct._id);
+              await Product.findOneAndDelete({ _id: existingProduct._id, user: userId });
               const newProduct = await Product.create({
                 user: userId, business: req.businessId,
                 name: row.data.name || existingProduct.name,
@@ -304,7 +304,7 @@ const executeCSV = async (req, res) => {
               productsCreated++;
               logs.push({ rowNumber: row.rowNumber, barcode, productName: newProduct.name, action: 'replaced', reason: 'Existing product replaced' });
             } else {
-              await Product.findByIdAndUpdate(existingProduct._id, updateData);
+              await Product.findOneAndUpdate({ _id: existingProduct._id, user: userId }, updateData, { new: true });
               productsUpdated++;
               logs.push({ rowNumber: row.rowNumber, barcode, productName: existingProduct.name, action: 'updated', reason: 'Product updated' });
             }
@@ -406,7 +406,7 @@ const bulkImport = async (req, res) => {
           if (item.unit) updateData.unit = item.unit;
           if (item.hsn) updateData.hsn = item.hsn;
           if (item.brand) updateData.brand = item.brand;
-          await Product.findByIdAndUpdate(existing._id, updateData);
+          await Product.findOneAndUpdate({ _id: existing._id, user: userId }, updateData, { new: true });
           updated++;
           logs.push({ barcode, productName: item.name || existing.name, action: 'updated' });
         } else {
@@ -528,7 +528,7 @@ const updateProduct = async (req, res) => {
     if (updates.hsn !== undefined) updateData.hsn = updates.hsn;
     if (updates.brand !== undefined) updateData.brand = updates.brand;
     if (updates.description !== undefined) updateData.description = updates.description;
-    const updated = await Product.findByIdAndUpdate(id, updateData, { new: true });
+    const updated = await Product.findOneAndUpdate({ _id: id, ...baseFilter }, updateData, { new: true });
     res.json({ message: 'Product updated', product: updated });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

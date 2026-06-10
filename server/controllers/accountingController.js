@@ -3,6 +3,7 @@ const JournalEntry = require('../models/JournalEntry');
 const Receipt = require('../models/Receipt');
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
+const Transaction = require('../models/Transaction');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 
 // Seed default chart of accounts for a new user+business (runs once per user+business)
@@ -93,25 +94,29 @@ const getAccounts = async (req, res) => {
 
     let accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
     // Query ALL journal entries for this user (ignore business filter) to compute balances correctly
-    // JournalEntries may have been created with different business context
-    const entries = await JournalEntry.find({ ...baseFilter, isPosted: true });
+    // JournalEntries may have been created with different business context or before business feature
+    const entries = await JournalEntry.find({ user: userId, isPosted: true });
     const accountsWithBalance = [];
     for (const acc of accounts) {
       let totalDebit = 0;
       let totalCredit = 0;
+      let hasJournalEntries = false;
       entries.forEach((je) => {
         je.lines.forEach((line) => {
           if (line.account.toString() === acc._id.toString()) {
             totalDebit += line.debit;
             totalCredit += line.credit;
+            hasJournalEntries = true;
           }
         });
       });
-      const balance = ['asset', 'expense'].includes(acc.type)
-        ? totalDebit - totalCredit
-        : totalCredit - totalDebit;
-      if (Math.abs(acc.balance - balance) > 0.01) {
-        await Account.findByIdAndUpdate(acc._id, { balance });
+      // Use journal entry computed balance if entries exist, otherwise use stored balance
+      // (stored balance was correctly updated via $inc during sale/purchase/payment creation)
+      const balance = hasJournalEntries
+        ? (['asset', 'expense'].includes(acc.type) ? totalDebit - totalCredit : totalCredit - totalDebit)
+        : acc.balance;
+      if (hasJournalEntries && Math.abs(acc.balance - balance) > 0.01) {
+        await Account.findByIdAndUpdate({ _id: acc._id, user: req.user._id, business: req.businessId || undefined }, { balance });
       }
       accountsWithBalance.push({ ...acc.toObject(), balance });
     }
@@ -153,7 +158,7 @@ const postJournalEntry = async (userId, entry, businessId) => {
   });
 
   for (const line of entry.lines) {
-    const account = await Account.findById(line.account);
+    const account = await Account.findOne({ _id: line.account, user: userId, business: businessId || undefined });
     if (!account) continue;
     let balanceChange = 0;
     if (['asset', 'expense'].includes(account.type)) {
@@ -161,7 +166,7 @@ const postJournalEntry = async (userId, entry, businessId) => {
     } else {
       balanceChange = line.credit - line.debit;
     }
-    await Account.findByIdAndUpdate(line.account, { $inc: { balance: balanceChange } });
+    await Account.findByIdAndUpdate({ _id: line.account, user: userId, business: businessId || undefined }, { $inc: { balance: balanceChange } });
   }
 
   return je;
@@ -171,7 +176,7 @@ const getJournalEntries = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const { startDate, endDate, referenceType, page = 1, limit = 50 } = req.query;
-    const filter = { ...baseFilter };
+    const filter = { user: req.user._id };
     if (startDate && endDate) {
       filter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
     }
@@ -200,13 +205,13 @@ const getTrialBalance = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     let { startDate, endDate } = req.query;
-    const filter = { ...baseFilter, isPosted: true };
+    const journalFilter = { user: req.user._id, isPosted: true };
     if (startDate && endDate) {
-      filter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
+      journalFilter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
     }
 
     const accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
-    const entries = await JournalEntry.find(filter);
+    const entries = await JournalEntry.find(journalFilter);
 
     const result = accounts.map((acc) => {
       let totalDebit = 0;
@@ -243,17 +248,17 @@ const getTrialBalance = async (req, res) => {
   }
 };
 
-const calcProfitLoss = async (baseFilter, query) => {
-  const filter = { ...baseFilter, isPosted: true };
+const calcProfitLoss = async (baseFilter, query, userId) => {
   const { startDate, endDate } = query || {};
+  const journalFilter = { user: userId, isPosted: true };
   if (startDate && endDate) {
-    filter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    journalFilter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
   }
 
   const [incomeAccounts, expenseAccounts, entries] = await Promise.all([
     Account.find({ ...baseFilter, type: 'income', isActive: true }),
     Account.find({ ...baseFilter, type: 'expense', isActive: true }),
-    JournalEntry.find(filter),
+    JournalEntry.find(journalFilter),
   ]);
 
   const calculateBalance = (acc) => {
@@ -292,9 +297,8 @@ const getProfitLoss = async (req, res) => {
 const getBalanceSheet = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const filter = { ...baseFilter, isPosted: true };
     const accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
-    const entries = await JournalEntry.find(filter);
+    const entries = await JournalEntry.find({ user: req.user._id, isPosted: true });
 
     const getBalance = (acc) => {
       let d = 0, c = 0;
@@ -311,7 +315,7 @@ const getBalanceSheet = async (req, res) => {
     const assets = accounts.filter((a) => a.type === 'asset').map((a) => ({ name: a.name, amount: getBalance(a) }));
     const liabilities = accounts.filter((a) => a.type === 'liability').map((a) => ({ name: a.name, amount: getBalance(a) }));
     const equity = accounts.filter((a) => a.type === 'equity').map((a) => ({ name: a.name, amount: getBalance(a) }));
-    const pl = await calcProfitLoss(baseFilter, req.query);
+    const pl = await calcProfitLoss(baseFilter, req.query, req.user._id);
 
     const totalAssets = assets.reduce((s, a) => s + a.amount, 0);
     const totalLiabilities = liabilities.reduce((s, l) => s + l.amount, 0);
@@ -348,8 +352,39 @@ const createJournalEntry = async (req, res) => {
 const getBankAccounts = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const accounts = await Account.find({ ...baseFilter, type: 'asset', category: 'bank', isActive: true }).sort({ code: 1 });
-    res.json(accounts);
+    const userId = req.user._id;
+    const [accounts, entries, transactions] = await Promise.all([
+      Account.find({ ...baseFilter, type: 'asset', category: 'bank', isActive: true }).sort({ code: 1 }),
+      JournalEntry.find({ user: userId, isPosted: true }),
+      Transaction.find(baseFilter).select('type amount').lean(),
+    ]);
+
+    const txnMap = {};
+    transactions.forEach(t => {
+      if (!txnMap[t.type]) txnMap[t.type] = 0;
+      txnMap[t.type] += t.amount || 0;
+    });
+    const totalBankTxnBalance = (txnMap.bank_in || 0) - (txnMap.bank_out || 0);
+
+    const accountsWithBalance = accounts.map(acc => {
+      let totalDebit = 0, totalCredit = 0, hasEntries = false;
+      entries.forEach(je => {
+        je.lines.forEach(line => {
+          if (line.account.toString() === acc._id.toString()) {
+            totalDebit += line.debit;
+            totalCredit += line.credit;
+            hasEntries = true;
+          }
+        });
+      });
+      const balance = hasEntries ? (totalDebit - totalCredit) : (acc.balance || 0);
+      return { ...acc.toObject(), balance };
+    });
+
+    const totalAccountBalance = accountsWithBalance.reduce((sum, a) => sum + (a.balance || 0), 0);
+    const totalBankBalance = totalAccountBalance + totalBankTxnBalance;
+
+    res.json({ accounts: accountsWithBalance, totalBankBalance });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -408,10 +443,12 @@ const createAccount = async (req, res) => {
 const updateAccount = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const { name, code, type, group, description, metadata, isActive } = req.body;
+    const { name, code, type, category, group, parent, description, metadata, isActive, balance } = req.body;
+    const update = { name, code, type, category, group, parent, description, metadata, isActive };
+    if (balance !== undefined) update.balance = parseFloat(balance) || 0;
     const account = await Account.findOneAndUpdate(
       { _id: req.params.id, ...baseFilter },
-      { $set: { name, code, type, group, description, metadata, isActive } },
+      { $set: update },
       { new: true }
     );
     if (!account) return res.status(404).json({ message: 'Account not found' });
@@ -443,62 +480,144 @@ const getAccountStatement = async (req, res) => {
     const account = await Account.findOne({ _id: req.params.id, ...baseFilter });
     if (!account) return res.status(404).json({ message: 'Account not found' });
 
-    const allFilter = { ...baseFilter, isPosted: true, 'lines.account': req.params.id };
+    const isAsset = ['asset', 'expense'].includes(account.type);
+    const isCash = account.code === '1001' || account.category === 'cash';
+    const isBank = account.category === 'bank' || (account.code >= '1002' && account.code <= '1099');
+
+    const allFilter = { user: req.user._id, isPosted: true, 'lines.account': req.params.id };
     const allEntries = await JournalEntry.find(allFilter).sort({ entryDate: 1 });
 
     let openingBalance = 0;
     const start = startDate ? new Date(startDate) : null;
     allEntries.forEach((je) => {
       if (start && je.entryDate >= start) return;
-      const line = je.lines.find(l => l.account.toString() === req.params.id);
+      const line = je.lines.find(l => {
+        const accId = l.account?._id ? l.account._id.toString() : l.account?.toString();
+        return accId === req.params.id;
+      });
       if (!line) return;
-      if (['asset', 'expense'].includes(account.type)) {
+      if (isAsset) {
         openingBalance += line.debit - line.credit;
       } else {
         openingBalance += line.credit - line.debit;
       }
     });
 
-    const filter = { ...baseFilter, isPosted: true, 'lines.account': req.params.id };
-    if (startDate && endDate) {
-      filter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    // Build combined entries from JournalEntry + Transaction
+    const combinedEntries = [];
+
+    // Add journal entry entries
+    allEntries.forEach(e => {
+      const line = e.lines.find(l => {
+        const accId = l.account?._id ? l.account._id.toString() : l.account?.toString();
+        return accId === req.params.id;
+      });
+      if (!line) return;
+      combinedEntries.push({
+        _id: e._id,
+        entryDate: e.entryDate,
+        entryNumber: e.entryNumber,
+        narration: e.narration || e.description || '',
+        referenceType: e.referenceType,
+        debit: line.debit || 0,
+        credit: line.credit || 0,
+        source: 'journal',
+      });
+    });
+
+    // Also include Transaction records for cash/bank accounts
+    if (isCash || isBank) {
+      const txnFilter = { user: req.user._id };
+      if (startDate || endDate) {
+        txnFilter.date = {};
+        if (startDate) txnFilter.date.$gte = new Date(startDate);
+        if (endDate) txnFilter.date.$lte = new Date(endDate);
+      }
+      if (isCash) {
+        txnFilter.type = { $in: ['cash_in', 'cash_out'] };
+      } else {
+        txnFilter.type = { $in: ['bank_in', 'bank_out'] };
+      }
+
+      const txns = await Transaction.find(txnFilter).sort({ date: 1 });
+      txns.forEach(t => {
+        const alreadyHasJE = combinedEntries.some(e =>
+          e.source === 'journal' &&
+          Math.abs(new Date(e.entryDate).getTime() - new Date(t.date).getTime()) < 86400000 &&
+          Math.abs((e.debit || e.credit || 0) - t.amount) < 0.01
+        );
+        if (alreadyHasJE) return;
+
+        const isCredit = (isCash && t.type === 'cash_in') || (isBank && t.type === 'bank_in');
+        combinedEntries.push({
+          _id: t._id,
+          entryDate: t.date,
+          entryNumber: t.reference || `TXN-${String(t._id).slice(-6).toUpperCase()}`,
+          narration: t.description || t.partyName || t.type,
+          referenceType: t.type.replace('_', ' '),
+          debit: isCredit ? 0 : t.amount,
+          credit: isCredit ? t.amount : 0,
+          source: 'transaction',
+        });
+      });
     }
 
-    const total = await JournalEntry.countDocuments(filter);
-    const entries = await JournalEntry.find(filter)
-      .sort({ entryDate: 1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .populate('lines.account', 'name code type');
+    // Sort all entries by date
+    combinedEntries.sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
 
-    let runningBalance = openingBalance;
-    const statement = entries.map(e => {
-      const line = e.lines.find(l => l.account.toString() === req.params.id);
-      const debit = line ? line.debit : 0;
-      const credit = line ? line.credit : 0;
-      if (['asset', 'expense'].includes(account.type)) {
-        runningBalance += debit - credit;
+    // Filter by date range if provided
+    let filtered = combinedEntries;
+    if (startDate || endDate) {
+      filtered = combinedEntries.filter(e => {
+        const d = new Date(e.entryDate);
+        if (startDate && d < new Date(startDate)) return false;
+        if (endDate && d > new Date(endDate)) return false;
+        return true;
+      });
+    }
+
+    // Recompute opening balance from combined entries before startDate
+    let finalOpening = 0;
+    const effectiveStart = startDate ? new Date(startDate) : null;
+    combinedEntries.forEach(e => {
+      if (effectiveStart && new Date(e.entryDate) >= effectiveStart) return;
+      if (isAsset) {
+        finalOpening += e.debit - e.credit;
       } else {
-        runningBalance += credit - debit;
+        finalOpening += e.credit - e.debit;
+      }
+    });
+
+    const total = filtered.length;
+    const pg = parseInt(page);
+    const pgSize = parseInt(limit);
+    const paged = filtered.slice((pg - 1) * pgSize, pg * pgSize);
+
+    let runningBalance = finalOpening;
+    const statement = paged.map(e => {
+      if (isAsset) {
+        runningBalance += e.debit - e.credit;
+      } else {
+        runningBalance += e.credit - e.debit;
       }
       return {
         _id: e._id,
         entryNumber: e.entryNumber,
         entryDate: e.entryDate,
-        narration: e.narration || e.description || '',
+        narration: e.narration,
         referenceType: e.referenceType,
-        debit,
-        credit,
+        debit: e.debit,
+        credit: e.credit,
         balance: runningBalance,
       };
     });
 
     res.json({
-      account: { _id: account._id, name: account.name, code: account.code, type: account.type, category: account.category, balance: openingBalance },
+      account: { _id: account._id, name: account.name, code: account.code, type: account.type, category: account.category, balance: account.balance },
       entries: statement,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit),
+      page: pg,
+      pages: Math.ceil(total / pgSize),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -551,6 +670,52 @@ const getCheques = async (req, res) => {
   }
 };
 
+const createCheque = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const receipt = await Receipt.create({
+      ...getCreateData(req, {
+        ...req.body,
+        mode: 'cheque',
+      }),
+    });
+    res.status(201).json(receipt);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const updateCheque = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const allowed = ['date', 'chequeNo', 'bankName', 'customerName', 'amount', 'status', 'partyName'];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    const receipt = await Receipt.findOneAndUpdate(
+      { ...baseFilter, _id: req.params.id, mode: 'cheque' },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+    if (!receipt) return res.status(404).json({ message: 'Cheque not found' });
+    res.json(receipt);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const deleteCheque = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const receipt = await Receipt.findOneAndDelete({ ...baseFilter, _id: req.params.id, mode: 'cheque' });
+    if (!receipt) return res.status(404).json({ message: 'Cheque not found' });
+    res.json({ message: 'Cheque deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   seedAccounts,
   getAccounts,
@@ -565,6 +730,9 @@ module.exports = {
   getLoanAccounts,
   createLoanAccount,
   getCheques,
+  createCheque,
+  updateCheque,
+  deleteCheque,
   createAccount,
   updateAccount,
   deleteAccount,

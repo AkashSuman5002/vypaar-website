@@ -17,6 +17,8 @@ const userSchema = new mongoose.Schema({
   business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },
   isOwner: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
+  passwordResetToken: { type: String, default: null },
+  passwordResetExpires: { type: Date, default: null },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

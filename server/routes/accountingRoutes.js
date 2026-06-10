@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getAccounts, getJournalEntries, createJournalEntry, getTrialBalance, getProfitLoss, getBalanceSheet,
   getBankAccounts, createBankAccount, getLoanAccounts, createLoanAccount, getCheques,
+  createCheque, updateCheque, deleteCheque,
   createAccount, updateAccount, deleteAccount, getAccountStatement,
 } = require('../controllers/accountingController');
 const reportCtrl = require('../controllers/reportController');
@@ -27,6 +28,9 @@ router.get('/accounts/:id/statement', authorize('accounting:view'), getAccountSt
 
 // Cheques
 router.get('/cheques', authorize('accounting:view'), getCheques);
+router.post('/cheques', authorize('accounting:manage'), createCheque);
+router.put('/cheques/:id', authorize('accounting:manage'), updateCheque);
+router.delete('/cheques/:id', authorize('accounting:manage'), deleteCheque);
 
 // Journal Entries
 router.get('/journal', authorize('accounting:view'), getJournalEntries);

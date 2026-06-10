@@ -33,7 +33,7 @@ const updateProduct = async (req, res) => {
     const product = await Product.findOne({ ...baseFilter, _id: req.params.id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
     const { name, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp } = req.body;
-    const updated = await Product.findByIdAndUpdate(req.params.id, { name, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp }, { new: true });
+    const updated = await Product.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, { name, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp }, { new: true });
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -82,7 +82,7 @@ const deleteProduct = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const product = await Product.findOne({ ...baseFilter, _id: req.params.id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
-    await Product.findByIdAndDelete(req.params.id);
+    await Product.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Product removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

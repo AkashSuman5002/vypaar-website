@@ -6,6 +6,7 @@ import ReportTable from '../../components/reports/common/ReportTable';
 import ReportSummary from '../../components/reports/common/ReportSummary';
 import { reportAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../utils/exportUtils';
 
 const columns = [
   { key: 'date', label: 'Date' },
@@ -57,6 +58,10 @@ const ExpenseReport = () => {
         </div>
       </ReportFilters>
       <div className="bg-white dark:bg-[#0F172A] min-h-full p-6 space-y-5">
+        <div className="flex gap-2">
+          <button onClick={() => exportToExcel(filteredData, columns, 'Expense Report')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Excel</button>
+          <button onClick={() => printReport('Expense Report', columns, filteredData)} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155]">Print</button>
+        </div>
         <ReportTable columns={columns} data={filteredData} emptyState="No data available. Please try again after making relevant changes." />
         <ReportSummary>
           <span className="text-gray-500 dark:text-[#64748B]">Total Expense: <strong className="text-gray-900 dark:text-[#F8FAFC]">₹{totalExpense.toLocaleString()}</strong></span>

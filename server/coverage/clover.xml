@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1780571203484" clover="3.2.0">
-  <project timestamp="1780571203485" name="All files">
+<coverage generated="1780998358949" clover="3.2.0">
+  <project timestamp="1780998358949" name="All files">
     <metrics statements="36" coveredstatements="36" conditionals="29" coveredconditionals="22" methods="9" coveredmethods="9" elements="74" coveredelements="67" complexity="0" loc="36" ncloc="36" packages="1" files="1" classes="1"/>
     <file name="valuation.js" path="C:\Users\asus\Desktop\vyapar\server\utils\valuation.js">
       <metrics statements="36" coveredstatements="36" conditionals="29" coveredconditionals="22" methods="9" coveredmethods="9"/>
