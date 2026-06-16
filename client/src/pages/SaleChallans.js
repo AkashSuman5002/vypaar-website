@@ -41,7 +41,7 @@ const SaleChallans = () => {
   const [actionMenu, setActionMenu] = useState(null);
 
   useEffect(() => {
-    customerAPI.getAll().then(({ data }) => setCustomers(data)).catch(() => {});
+    customerAPI.getAll().then(({ data }) => setCustomers(Array.isArray(data) ? data : data?.data || [])).catch(() => null);
   }, []);
 
   const loadChallans = useCallback(async () => {

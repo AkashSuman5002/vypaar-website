@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Mail, ArrowLeft, LifeBuoy } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authAPI } from '../services/api';
+import { validateEmail } from '../utils/validation';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -12,6 +13,11 @@ const ForgotPassword = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      toast.error(emailValidation.error);
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await authAPI.forgotPassword({ email });

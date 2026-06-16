@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import ToggleSwitch from './ToggleSwitch';
@@ -8,6 +9,7 @@ import { Plus, Tag, Save } from 'lucide-react';
 import { defaultPrefs, loadSettings, saveCategory } from '../../hooks/useSettings';
 
 const ItemTab = () => {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState(defaultPrefs.item);
   const [saving, setSaving] = useState(false);
 
@@ -53,7 +55,7 @@ const ItemTab = () => {
           </SettingsSection>
           <SettingsSection title="Categories">
             <ToggleSwitch label="Item Category" checked={settings.itemCategory} onChange={v => update('itemCategory', v)} />
-            <SettingsButtonRow label="Manage Categories" buttonLabel="Open" buttonColor="bg-gray-500" />
+            <SettingsButtonRow label="Manage Categories" buttonLabel="Open" buttonColor="bg-gray-500" onClick={() => navigate('/products')} />
           </SettingsSection>
         </div>
         <div className="space-y-6">
@@ -86,7 +88,7 @@ const ItemTab = () => {
                   </div>
                 </div>
               ))}
-              <button className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 py-2">
+              <button onClick={() => toast.info('Custom fields are saved but not yet displayed in party forms. This feature is under development.')} className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 py-2">
                 <Plus className="w-4 h-4" /> Add Custom Fields
               </button>
             </div>

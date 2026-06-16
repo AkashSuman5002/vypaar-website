@@ -8,6 +8,19 @@ const {
 } = require('../controllers/accountingController');
 const reportCtrl = require('../controllers/reportController');
 const { authorize } = require('../middleware/authorize');
+const Setting = require('../models/Setting');
+
+const checkJournalAccess = async (req, res, next) => {
+  try {
+    const setting = await Setting.findOne({ user: req.user._id });
+    if (setting?.accounting?.allowJournalEntries === false) {
+      return res.status(403).json({ message: 'Journal entries are disabled in settings' });
+    }
+    next();
+  } catch (error) {
+    next();
+  }
+};
 
 // Chart of Accounts
 router.get('/accounts', authorize('accounting:view'), getAccounts);
@@ -33,8 +46,8 @@ router.put('/cheques/:id', authorize('accounting:manage'), updateCheque);
 router.delete('/cheques/:id', authorize('accounting:manage'), deleteCheque);
 
 // Journal Entries
-router.get('/journal', authorize('accounting:view'), getJournalEntries);
-router.post('/journal', authorize('accounting:manage'), createJournalEntry);
+router.get('/journal', authorize('accounting:view'), checkJournalAccess, getJournalEntries);
+router.post('/journal', authorize('accounting:manage'), checkJournalAccess, createJournalEntry);
 
 // Financial Reports
 router.get('/trial-balance', authorize('accounting:view'), getTrialBalance);

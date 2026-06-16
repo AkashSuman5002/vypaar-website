@@ -759,7 +759,14 @@ const PrintTab = () => {
 
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="px-5 py-2">
-                  <CheckboxRow label="Make Thermal Printer Default" checked={settings.makeThermalDefault} onChange={v => update('makeThermalDefault', v)} />
+                  <div className="flex items-center justify-between py-2.5">
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={settings.makeThermalDefault} disabled
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
+                      <span className="text-sm text-[#1F2937]">Make Thermal Printer Default</span>
+                    </div>
+                    <span className="text-xs text-gray-400">(Requires printer API)</span>
+                  </div>
                 </div>
               </div>
 
@@ -797,13 +804,51 @@ const PrintTab = () => {
 
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="px-5 py-2">
-                  <SelectRow label="Printing Type" value={settings.printingType} onChange={v => update('printingType', v)}
-                    options={['Text Printing', 'Image Printing']} />
-                  <CheckboxRow label="Use Text Styling(Bold)" checked={settings.useTextStyling} onChange={v => update('useTextStyling', v)} />
-                  <CheckboxRow label="Auto Cut Paper After Printing" checked={settings.autoCutPaper} onChange={v => update('autoCutPaper', v)} />
-                  <CheckboxRow label="Open Cash Drawer After Printing" checked={settings.openCashDrawer} onChange={v => update('openCashDrawer', v)} />
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-[#1F2937]">Printing Type</span>
+                    <div className="flex items-center gap-2">
+                      <select value={settings.printingType} disabled
+                        className="w-40 px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white text-[#1F2937] opacity-50 cursor-not-allowed">
+                        <option>Text Printing</option>
+                        <option>Image Printing</option>
+                      </select>
+                      <span className="text-xs text-gray-400">(Requires printer API)</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={settings.useTextStyling} disabled
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
+                      <span className="text-sm text-[#1F2937]">Use Text Styling(Bold)</span>
+                    </div>
+                    <span className="text-xs text-gray-400">(Requires printer API)</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={settings.autoCutPaper} disabled
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
+                      <span className="text-sm text-[#1F2937]">Auto Cut Paper After Printing</span>
+                    </div>
+                    <span className="text-xs text-gray-400">(Requires printer API)</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={settings.openCashDrawer} disabled
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
+                      <span className="text-sm text-[#1F2937]">Open Cash Drawer After Printing</span>
+                    </div>
+                    <span className="text-xs text-gray-400">(Requires printer API)</span>
+                  </div>
                   <InputRow label="Extra lines at the end" value={settings.extraLinesAtEnd} onChange={v => update('extraLinesAtEnd', v)} placeholder="0" type="number" />
-                  <InputRow label="Number of copies" value={settings.numberOfCopies} onChange={v => update('numberOfCopies', v)} placeholder="1" type="number" />
+                  <div className="flex items-center justify-between py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-[#1F2937]">Number of copies</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" value={settings.numberOfCopies} onChange={e => update('numberOfCopies', e.target.value)} placeholder="1" min="1" max="10"
+                        className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white text-[#1F2937] text-center focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  </div>
                 </div>
               </div>
             </>
@@ -819,6 +864,12 @@ const PrintTab = () => {
                   <CheckboxRow label="Tax Details" checked={settings.taxDetails} onChange={v => update('taxDetails', v)} />
                   <CheckboxRow label="You Saved" checked={settings.youSaved} onChange={v => update('youSaved', v)} />
                   <CheckboxRow label="Print Amount with Grouping" checked={settings.printAmountWithGrouping} onChange={v => update('printAmountWithGrouping', v)} />
+                  <CheckboxRow label="Bank Details" checked={settings.showBankDetails !== false} onChange={v => update('showBankDetails', v)} />
+                  <CheckboxRow label="QR Code" checked={settings.showQRCode !== false} onChange={v => update('showQRCode', v)} />
+                  <CheckboxRow label="Party Phone" checked={settings.showPartyPhone !== false} onChange={v => update('showPartyPhone', v)} />
+                  <CheckboxRow label="Party GSTIN" checked={settings.showPartyGSTIN !== false} onChange={v => update('showPartyGSTIN', v)} />
+                  <CheckboxRow label="Party Address/Billing" checked={settings.showPartyAddress !== false} onChange={v => update('showPartyAddress', v)} />
+                  <CheckboxRow label="Transport Details" checked={settings.showTransportDetails !== false} onChange={v => update('showTransportDetails', v)} />
                   <div className="flex items-center justify-between py-2.5">
                     <span className="text-sm text-[#1F2937]">Amount in Words</span>
                     <select value={settings.amountInWordsFormat} onChange={e => update('amountInWordsFormat', e.target.value)}
@@ -840,6 +891,22 @@ const PrintTab = () => {
                   <CheckboxRow label="Signature" checked={settings.signature} onChange={v => update('signature', v)} />
                   <CheckboxRow label="Payment Mode" checked={settings.paymentMode} onChange={v => update('paymentMode', v)} />
                   <CheckboxRow label="Acknowledgement" checked={settings.acknowledgement} onChange={v => update('acknowledgement', v)} />
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-[#1F2937]">Additional Field 1 Label</span>
+                    <input type="text" value={settings.additionalField1Label || 'Additional Field 1'} onChange={e => update('additionalField1Label', e.target.value)}
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-[#1F2937]">Additional Field 2 Label</span>
+                    <input type="text" value={settings.additionalField2Label || 'Additional Field 2'} onChange={e => update('additionalField2Label', e.target.value)}
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-[#1F2937]">Custom Footer Text</span>
+                    <input type="text" value={settings.footerSettings || ''} onChange={e => update('footerSettings', e.target.value)}
+                      placeholder="e.g. Thank you for your business!"
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white text-[#1F2937]" />
+                  </div>
                 </div>
               </div>
 
@@ -1021,6 +1088,16 @@ const PrintTab = () => {
                 <div className="px-5 py-2">
                   <CheckboxRow label="Print Description" checked={settings.printDescription} onChange={v => update('printDescription', v)} />
                   <CheckboxRow label="Print Terms and Conditions" checked={settings.termsConditions} onChange={v => update('termsConditions', v)} />
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-[#1F2937]">Additional Field 1 Label</span>
+                    <input type="text" value={settings.additionalField1Label || 'Additional Field 1'} onChange={e => update('additionalField1Label', e.target.value)}
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-[#1F2937]">Additional Field 2 Label</span>
+                    <input type="text" value={settings.additionalField2Label || 'Additional Field 2'} onChange={e => update('additionalField2Label', e.target.value)}
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                  </div>
                 </div>
               </div>
 
@@ -1033,6 +1110,7 @@ const PrintTab = () => {
                     { label: '2 Inch (VYPRTP2002)', file: 'VYPRTP2002' },
                   ].map(printer => (
                     <button key={printer.file}
+                      onClick={() => toast.info(`Printer setup wizard for ${printer.label} coming soon`)}
                       className="w-full flex items-center justify-between px-4 py-2.5 bg-pink-50 border border-pink-200 rounded-lg text-pink-700 text-sm font-medium hover:bg-pink-100 transition-colors">
                       <span>{printer.label} - Quick Setup</span>
                       <Download className="w-4 h-4" />

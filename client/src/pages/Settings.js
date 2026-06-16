@@ -10,6 +10,7 @@ import TaxesTab from '../components/Settings/TaxesTab';
 import TransactionMessageTab from '../components/Settings/TransactionMessageTab';
 import PartyTab from '../components/Settings/PartyTab';
 import ItemTab from '../components/Settings/ItemTab';
+import NotificationPreferencesTab from '../components/Settings/NotificationPreferencesTab';
 import ServiceRemindersTab from '../components/Settings/ServiceRemindersTab';
 import AccountingTab from '../components/Settings/AccountingTab';
 
@@ -21,6 +22,7 @@ const TABS = [
   { key: 'transactionMessage', label: 'Transaction Message', component: TransactionMessageTab },
   { key: 'party', label: 'Party', component: PartyTab },
   { key: 'item', label: 'Item', component: ItemTab },
+  { key: 'notifications', label: 'Notifications', component: NotificationPreferencesTab },
   { key: 'serviceReminders', label: 'Service Reminders', component: ServiceRemindersTab },
   { key: 'accounting', label: 'Accounting', component: AccountingTab },
 ];

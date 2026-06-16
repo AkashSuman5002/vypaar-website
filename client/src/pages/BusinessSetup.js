@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { businessAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { validateMobile, validateEmail, validateGST, formatMobile, formatGST } from '../utils/validation';
+import StateDropdown from '../components/UI/StateDropdown';
 
 const BusinessSetup = () => {
   const navigate = useNavigate();
@@ -20,6 +22,7 @@ const BusinessSetup = () => {
     address: '',
     state: '',
   });
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -60,11 +63,25 @@ const BusinessSetup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
     setError('');
+    const newErrors = {};
+    if (!form.businessName.trim()) newErrors.businessName = 'Business Name is required';
+    const mobileResult = validateMobile(form.mobile);
+    if (!mobileResult.valid) newErrors.mobile = mobileResult.error;
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+    const gstResult = validateGST(form.gstNumber);
+    if (!gstResult.valid) newErrors.gstNumber = gstResult.error;
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+    setSubmitting(true);
     try {
       const fd = new FormData();
       fd.append('name', form.businessName);
+      fd.append('ownerName', form.ownerName);
       fd.append('gstNumber', form.gstNumber);
       fd.append('phone', form.mobile);
       fd.append('email', form.email);
@@ -120,8 +137,13 @@ const BusinessSetup = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Business Name <span className="text-red-500">*</span></label>
             <input type="text" required value={form.businessName} onChange={handleChange('businessName')}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className={`w-full border rounded-lg px-3 py-2 text-sm outline-none dark:bg-gray-700 dark:text-white ${
+                errors.businessName
+                  ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                  : 'border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+              }`}
               placeholder="Enter your business name" />
+            {errors.businessName && <p className="mt-1 text-xs text-red-500">{errors.businessName}</p>}
           </div>
 
           <div>
@@ -134,23 +156,41 @@ const BusinessSetup = () => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">GST Number</label>
-              <input type="text" value={form.gstNumber} onChange={handleChange('gstNumber')}
-                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              <input type="text" value={form.gstNumber}
+                onChange={(e) => setForm(prev => ({ ...prev, gstNumber: formatGST(e.target.value) }))}
+                maxLength={15}
+                className={`w-full border rounded-lg px-3 py-2 text-sm outline-none dark:bg-gray-700 dark:text-white ${
+                  errors.gstNumber
+                    ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                    : 'border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                }`}
                 placeholder="GSTIN" />
+              {errors.gstNumber && <p className="mt-1 text-xs text-red-500">{errors.gstNumber}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile Number <span className="text-red-500">*</span></label>
-              <input type="tel" required value={form.mobile} onChange={handleChange('mobile')}
-                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              <input type="tel" required value={form.mobile}
+                onChange={(e) => setForm(prev => ({ ...prev, mobile: formatMobile(e.target.value) }))}
+                className={`w-full border rounded-lg px-3 py-2 text-sm outline-none dark:bg-gray-700 dark:text-white ${
+                  errors.mobile
+                    ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                    : 'border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                }`}
                 placeholder="Mobile number" />
+              {errors.mobile && <p className="mt-1 text-xs text-red-500">{errors.mobile}</p>}
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
             <input type="email" value={form.email} onChange={handleChange('email')}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className={`w-full border rounded-lg px-3 py-2 text-sm outline-none dark:bg-gray-700 dark:text-white ${
+                errors.email
+                  ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                  : 'border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+              }`}
               placeholder="Email address" />
+            {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
           </div>
 
           <div>
@@ -162,9 +202,7 @@ const BusinessSetup = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
-            <input type="text" value={form.state} onChange={handleChange('state')}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="State" />
+            <StateDropdown value={form.state} onChange={(val) => setForm(prev => ({ ...prev, state: val }))} placeholder="Select State" />
           </div>
 
           <button type="submit" disabled={submitting}

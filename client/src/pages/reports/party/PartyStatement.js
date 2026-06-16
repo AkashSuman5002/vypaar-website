@@ -29,7 +29,7 @@ const PartyStatement = () => {
     const loadParties = async () => {
       try {
         const res = partyType === 'customer' ? await customerAPI.getAll() : await supplierAPI.getAll();
-        setParties(Array.isArray(res.data) ? res.data : res.data?.customers || res.data?.suppliers || []);
+        setParties(Array.isArray(res.data) ? res.data : res.data?.data || []);
       } catch { setParties([]); }
     };
     loadParties();

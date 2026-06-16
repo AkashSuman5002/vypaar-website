@@ -44,7 +44,7 @@ const SaleEstimates = () => {
   const [actionMenu, setActionMenu] = useState(null);
 
   useEffect(() => {
-    customerAPI.getAll().then(({ data }) => setCustomers(data)).catch(() => {});
+    customerAPI.getAll().then(({ data }) => setCustomers(Array.isArray(data) ? data : data?.data || [])).catch(() => null);
   }, []);
 
   const loadEstimates = useCallback(async () => {
@@ -204,6 +204,7 @@ const SaleEstimates = () => {
                   <th className="px-4 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Document</th>
                   <th className="px-4 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Customer</th>
                   <th className="px-4 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest hidden md:table-cell">Type</th>
+                  <th className="px-4 py-3 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Valid Until</th>
                   <th className="px-4 py-3 text-center text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest hidden lg:table-cell">Status</th>
                   <th className="px-4 py-3 text-right text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Amount</th>
                   <th className="px-4 py-3 text-center text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest w-24">Actions</th>
@@ -221,6 +222,14 @@ const SaleEstimates = () => {
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-400 capitalize">
                         {typeIcon(e.type)} {e.type}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {e.expiryDate ? (
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${new Date(e.expiryDate) < new Date() ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                          {new Date(e.expiryDate).toLocaleDateString('en-IN')}
+                          {new Date(e.expiryDate) < new Date() && ' (Expired)'}
+                        </span>
+                      ) : <span className="text-xs text-slate-400">-</span>}
                     </td>
                     <td className="px-4 py-3 text-center hidden lg:table-cell">
                       <Badge variant={e.status === 'confirmed' ? 'paid' : e.status === 'cancelled' ? 'cancelled' : 'default'}>{e.status}</Badge>

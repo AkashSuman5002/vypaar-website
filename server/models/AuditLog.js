@@ -10,6 +10,7 @@ const auditLogSchema = new mongoose.Schema({
   ipAddress: { type: String, default: '' },
   userAgent: { type: String, default: '' },
   description: { type: String, default: '' },
+  statusCode: { type: Number },
 }, { timestamps: true });
 
 auditLogSchema.index({ user: 1, createdAt: -1 });

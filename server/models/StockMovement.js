@@ -7,7 +7,7 @@ const stockMovementSchema = new mongoose.Schema({
   productName: { type: String, required: true },
   type: {
     type: String,
-    enum: ['purchase', 'sale', 'return', 'adjustment', 'transfer'],
+    enum: ['purchase', 'sale', 'return', 'adjustment', 'transfer', 'sale_adjustment', 'purchase_return'],
     required: true,
     index: true,
   },
@@ -19,12 +19,17 @@ const stockMovementSchema = new mongoose.Schema({
   referenceType: { type: String, trim: true },
   referenceId: { type: mongoose.Schema.Types.ObjectId },
   referenceNumber: { type: String, trim: true },
+  batchNo: { type: String, trim: true },
+  serialNo: { type: String, trim: true },
   description: { type: String, trim: true },
   date: { type: Date, default: Date.now, index: true },
 }, { timestamps: true });
 
 stockMovementSchema.index({ user: 1, product: 1, date: -1 });
+stockMovementSchema.index({ business: 1, product: 1, date: -1 });
 stockMovementSchema.index({ user: 1, type: 1, date: -1 });
+stockMovementSchema.index({ business: 1, type: 1, date: -1 });
 stockMovementSchema.index({ user: 1, referenceType: 1, referenceId: 1 });
+stockMovementSchema.index({ business: 1, referenceType: 1, referenceId: 1 });
 
 module.exports = mongoose.model('StockMovement', stockMovementSchema);

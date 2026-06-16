@@ -23,6 +23,14 @@ const expenseSchema = mongoose.Schema({
   items: [expenseItemSchema],
   isRecurring: { type: Boolean, default: false },
   recurringInterval: { type: String, enum: ['daily', 'weekly', 'monthly', 'yearly'] },
+  approvalStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'approved' },
+  approvedBy: { type: String, trim: true },
+  approvedAt: { type: Date },
+  receiptImage: { type: String },
+  rejectionReason: { type: String, trim: true },
 }, { timestamps: true });
+
+expenseSchema.index({ business: 1, date: -1 });
+expenseSchema.index({ business: 1, category: 1 });
 
 module.exports = mongoose.model('Expense', expenseSchema);

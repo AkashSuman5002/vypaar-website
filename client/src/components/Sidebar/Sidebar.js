@@ -6,8 +6,8 @@ import {
   Zap, Truck, DollarSign, ClipboardList, ClipboardList as OrderIcon, FileDigit,
   Users, MessageCircle, Network, Receipt, Wallet, FileText, Landmark,
   Package, ShoppingCart, ChevronLeft, ChevronDown, LayoutDashboard, Search, Upload, Download, BarChart3, Settings, ScanBarcode,
-  ArrowRightLeft, BookOpen, Wrench,
-  FileSpreadsheet, UserPlus, Barcode, Layers, RefreshCw, ClipboardCheck, Calendar, ShieldCheck, Database,
+  ArrowRightLeft, BookOpen, Wrench, Factory, FileBadge,
+  FileSpreadsheet, Barcode, Layers, ClipboardCheck, Calendar, ShieldCheck, Database, Warehouse,
   ScrollText, Truck as TruckIcon, Headphones,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -15,6 +15,8 @@ import useSettings from '../../hooks/useSettings';
 import usePermissions from '../../hooks/usePermissions';
 
 const partiesSubLinks = [
+  { to: '/customers', label: 'Customers', icon: Users },
+  { to: '/suppliers', label: 'Suppliers', icon: Users },
   { to: '/parties/details', label: 'Party Details', icon: Users },
   { to: '/parties/whatsapp', label: 'WhatsApp Connect', icon: MessageCircle },
   { to: '/parties/network', label: 'Vyapar Network', icon: Network },
@@ -23,12 +25,16 @@ const partiesSubLinks = [
 const itemsSubLinks = [
   { to: '/products', label: 'Items List', icon: Package },
   { to: '/products/barcode-labels', label: 'Barcode Labels', icon: ScanBarcode },
+  { to: '/godowns', label: 'Godowns', icon: Warehouse },
+  { to: '/godown-transfer', label: 'Godown Transfer', icon: ArrowRightLeft },
+  { to: '/stock-reconciliation', label: 'Stock Reconciliation', icon: ClipboardCheck },
 ];
 
 const purchaseSubLinks = [
   { to: '/purchases/bills', label: 'Purchase Bills', icon: Receipt },
   { to: '/purchases/payment-out', label: 'Payment-Out', icon: Wallet },
   { to: '/purchases/expenses', label: 'Expenses', icon: FileText },
+  { to: '/budgets', label: 'Expense Budgets', icon: Wallet },
   { to: '/purchases/orders', label: 'Purchase Order', icon: ShoppingBag },
   { to: '/purchases/returns', label: 'Purchase Return / Debit Note', icon: RotateCcw },
   { to: '/party-transfer', label: 'Party Transfer', icon: ArrowRightLeft },
@@ -65,6 +71,9 @@ const userManagementSubLinks = [
 ];
 
 const utilitiesSubLinks = [
+  { to: '/dashboard/import-data', label: 'Import Data', icon: Upload },
+  { to: '/dashboard/import-barcode', label: 'Import From Barcode', icon: Barcode },
+  { to: '/dashboard/export-data', label: 'Export Data', icon: Download },
   { to: '/utilities/import-items', label: 'Import Items', icon: Upload },
   { to: '/utilities/setup-business', label: 'Set Up My Business', icon: Building2 },
   { to: '/utilities/accountant-access', label: 'Accountant Access', icon: ShieldCheck },
@@ -83,10 +92,12 @@ const searchItems = [
   { name: 'Home', path: '/' },
   { name: 'Parties', path: '/parties/details' },
   { name: 'Party Details', path: '/parties/details' },
+  { name: 'Party Groups', path: '/party-groups' },
   { name: 'WhatsApp Connect', path: '/parties/whatsapp' },
   { name: 'Vyapar Network', path: '/parties/network' },
   { name: 'Items', path: '/products' },
   { name: 'Items List', path: '/products' },
+  { name: 'Manufacturing', path: '/manufacturing' },
   { name: 'Barcode Labels', path: '/products/barcode-labels' },
   { name: 'Sale', path: '/sales' },
   { name: 'Invoice List', path: '/sales' },
@@ -104,6 +115,7 @@ const searchItems = [
   { name: 'Purchase Bills', path: '/purchases/bills' },
   { name: 'Payment-Out', path: '/purchases/payment-out' },
   { name: 'Expenses', path: '/purchases/expenses' },
+  { name: 'Expense Budgets', path: '/budgets' },
   { name: 'Purchase Order', path: '/purchases/orders' },
   { name: 'Purchase Return', path: '/purchases/returns' },
   { name: 'Cash & Bank', path: '/cash-bank/accounts' },
@@ -117,6 +129,8 @@ const searchItems = [
   { name: 'Account Statements', path: '/account-statements' },
   { name: 'Fixed Assets', path: '/chart-of-accounts' },
   { name: 'Party to Party Transfer', path: '/party-transfer' },
+  { name: 'Godown Transfer', path: '/godown-transfer' },
+  { name: 'Stock Reconciliation', path: '/stock-reconciliation' },
   { name: 'User Management', path: '/user-management' },
   { name: 'Utilities', path: '/utilities/import-items' },
   { name: 'Import Items', path: '/utilities/import-items' },
@@ -134,6 +148,12 @@ const searchItems = [
   { name: 'Calendar', path: '/calendar' },
   { name: 'Staff', path: '/staff' },
   { name: 'Reports', path: '/reports' },
+  { name: 'GST Filing', path: '/gst-filing' },
+  { name: 'Customers', path: '/customers' },
+  { name: 'Suppliers', path: '/suppliers' },
+  { name: 'Import Data', path: '/dashboard/import-data' },
+  { name: 'Export Data', path: '/dashboard/export-data' },
+  { name: 'Budgets', path: '/budgets' },
   { name: 'Settings', path: '/settings' },
 ];
 
@@ -223,7 +243,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
   const [salesOpen, setSalesOpen] = useState(location.pathname.startsWith('/sales'));
   const [purchasesOpen, setPurchasesOpen] = useState(location.pathname.startsWith('/purchases'));
   const [cashBankOpen, setCashBankOpen] = useState(location.pathname.startsWith('/cash-bank'));
-  const [itemsOpen, setItemsOpen] = useState(location.pathname.startsWith('/products'));
+  const [itemsOpen, setItemsOpen] = useState(location.pathname.startsWith('/products') || location.pathname.startsWith('/godown') || location.pathname.startsWith('/stock'));
   const [accountingOpen, setAccountingOpen] = useState(location.pathname.startsWith('/journal-entry') || location.pathname.startsWith('/chart-of-accounts') || location.pathname.startsWith('/account-statements'));
   const [utilitiesOpen, setUtilitiesOpen] = useState(location.pathname.startsWith('/utilities'));
   const [userManagementOpen, setUserManagementOpen] = useState(location.pathname.startsWith('/user-management') || location.pathname.startsWith('/staff'));
@@ -233,7 +253,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
     setSalesOpen(location.pathname.startsWith('/sales'));
     setPurchasesOpen(location.pathname.startsWith('/purchases'));
     setCashBankOpen(location.pathname.startsWith('/cash-bank'));
-    setItemsOpen(location.pathname.startsWith('/products'));
+    setItemsOpen(location.pathname.startsWith('/products') || location.pathname.startsWith('/godown') || location.pathname.startsWith('/stock'));
     setAccountingOpen(location.pathname.startsWith('/journal-entry') || location.pathname.startsWith('/chart-of-accounts') || location.pathname.startsWith('/account-statements'));
     setUtilitiesOpen(location.pathname.startsWith('/utilities'));
     setUserManagementOpen(location.pathname.startsWith('/user-management') || location.pathname.startsWith('/staff'));
@@ -265,11 +285,15 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const accountingEnabled = getPref('accounting', 'enableAccounting') !== false;
+  const journalEntriesAllowed = getPref('accounting', 'allowJournalEntries') !== false;
   const docSearchFilter = (item) => {
     if (!estEnabled && (item.name === 'Estimates' || item.name === 'Quotations' || item.path === '/sales/estimates')) return false;
     if (!profEnabled && (item.name === 'Proforma Invoice' || item.path === '/sales/proforma')) return false;
     if (!orderEnabled && (item.name === 'Sale Order' || item.name === 'Purchase Order' || item.path === '/sales/orders' || item.path === '/purchases/orders')) return false;
     if (!dcEnabled && (item.name === 'Delivery Challan' || item.path === '/sales/challans')) return false;
+    if (!accountingEnabled && (item.name === 'Journal Entries' || item.name === 'Chart of Accounts' || item.name === 'Account Statements' || item.name === 'Fixed Assets' || item.name === 'Accounting' || item.path === '/journal-entry' || item.path === '/chart-of-accounts' || item.path === '/account-statements')) return false;
+    if (!journalEntriesAllowed && (item.name === 'Journal Entries' || item.name === 'Chart of Accounts' || item.name === 'Account Statements' || item.name === 'Fixed Assets' || item.path === '/journal-entry' || item.path === '/chart-of-accounts' || item.path === '/account-statements')) return false;
     return true;
   };
   const filteredSearch = searchQuery.trim()
@@ -446,6 +470,11 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
             </AnimatePresence>
           )}
 
+          {/* Manufacturing */}
+          {getPref('item', 'manufacturing') === true && (
+            <NavItem to="/manufacturing" label="Manufacturing" icon={Factory} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
+          )}
+
           {/* Sale */}
           {canAccess.sales && (
           <NavItem to="/sales" label="Sale" icon={ShoppingCart} collapsed={collapsed} onClick={() => setSalesOpen(!salesOpen)}>
@@ -543,7 +572,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
           )}
 
           {/* Accounting */}
-          {getPref('accounting', 'enableAccounting') !== false && canAccess.accounting && (
+          {accountingEnabled && journalEntriesAllowed && canAccess.accounting && (
           <NavItem to="/journal-entry" label="Accounting" icon={BookOpen} collapsed={collapsed} onClick={() => setAccountingOpen(!accountingOpen)}>
             <motion.div animate={{ rotate: accountingOpen ? 0 : -90 }} transition={{ duration: 0.2 }}>
               <ChevronDown size={16} className="text-[#C7D2FE]/70" />
@@ -551,7 +580,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
           </NavItem>
           )}
 
-          {!collapsed && getPref('accounting', 'enableAccounting') !== false && canAccess.accounting && (
+          {!collapsed && accountingEnabled && journalEntriesAllowed && canAccess.accounting && (
             <AnimatePresence>
               {accountingOpen && (
                 <motion.div
@@ -562,10 +591,13 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
                   className="overflow-hidden"
                 >
                   <div className="pb-1 space-y-0.5">
-                    {accountingSubLinks.map((link) => (
+                    {accountingSubLinks.filter(link => {
+                      if (!journalEntriesAllowed && (link.to === '/journal-entry' || link.to === '/chart-of-accounts' || link.to === '/account-statements')) return false;
+                      return true;
+                    }).map((link) => (
                       <SubNavItem key={link.to} to={link.to} label={link.label} icon={link.icon} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
                     ))}
-                    {fixedAssetsEnabled && (
+                    {fixedAssetsEnabled && journalEntriesAllowed && (
                       <SubNavItem to="/chart-of-accounts" label="Fixed Assets" icon={Building2} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
                     )}
                   </div>
@@ -637,12 +669,15 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
           )}
 
           {/* Reports */}
-          {getPref('accounting', 'enableAccounting') !== false && canAccess.reports && (
+          {accountingEnabled && canAccess.reports && (
           <NavItem to="/reports" label="Reports" icon={BarChart3} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
           )}
-          {getPref('accounting', 'enableAccounting') !== false && canAccess.reports && fixedAssetsEnabled && (
-          <NavItem to="/reports?tab=fixed-assets" label="Fixed Assets Report" icon={Building2} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
+          {accountingEnabled && canAccess.reports && fixedAssetsEnabled && (
+          <NavItem to="/reports/balance-sheet" label="Fixed Assets Report" icon={Building2} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
           )}
+
+          {/* GST Filing */}
+          <NavItem to="/gst-filing" label="GST Filing" icon={FileBadge} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
 
           {/* Settings */}
           {canAccess.settings && (

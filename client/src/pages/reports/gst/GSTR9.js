@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Download, Printer } from 'lucide-react';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel } from '../../../utils/exportUtils';
 
 const fmt = (v) => v == null || isNaN(v) ? '₹0' : '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtNum = (v) => v ?? 0;
@@ -144,6 +145,27 @@ const GSTR9 = () => {
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 dark:text-[#64748B] pointer-events-none" />
           </div>
+          <button onClick={() => {
+            const flatData = [];
+            if (data?.part2) {
+              const addRateRows = (items, prefix) => {
+                if (!items || items.length === 0) return;
+                items.forEach(r => flatData.push({ category: `${prefix} ${r.rate}%`, rate: r.rate, taxableValue: r.taxableValue, igst: r.igst, cgst: r.cgst, sgst: r.sgst, cess: r.cess }));
+              };
+              addRateRows(data.part2.rateWiseB2B, 'B2B');
+              addRateRows(data.part2.rateWiseB2C, 'B2C');
+            }
+            const gstr9Cols = [
+              { key: 'category', label: 'Category' },
+              { key: 'rate', label: 'Rate' },
+              { key: 'taxableValue', label: 'Taxable Value' },
+              { key: 'igst', label: 'IGST' },
+              { key: 'cgst', label: 'CGST' },
+              { key: 'sgst', label: 'SGST' },
+              { key: 'cess', label: 'Cess' },
+            ];
+            exportToExcel(flatData, gstr9Cols, 'GSTR9_Report');
+          }} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
           <button onClick={handlePrint} className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-gray-100 dark:hover:bg-[#1E293B]/70"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
         </div>
       </div>

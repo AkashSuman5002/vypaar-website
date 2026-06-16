@@ -2,7 +2,8 @@ const express = require('express');
 const {
   getSales, getSaleById, createSale, updateSale, deleteSale,
   getNextInvoiceNumber, duplicateSale, convertToReturn, convertToChallan, convertToEstimate,
-  getSalesByCustomer, convertToInvoice, receivePayment,
+  getSalesByCustomer, convertToInvoice, receivePayment, generateEWayBill, updateDelivery,
+  generateEInvoice,
 } = require('../controllers/saleController');
 const { generateInvoicePDF } = require('../controllers/pdfController');
 const { authorize } = require('../middleware/authorize');
@@ -21,6 +22,9 @@ router.post('/:id/convert-to-challan', authorize('sales:manage'), convertToChall
 router.post('/:id/convert-to-estimate', authorize('sales:manage'), convertToEstimate);
 router.post('/:id/convert-to-invoice', authorize('sales:manage'), convertToInvoice);
 router.post('/:id/receive-payment', authorize('sales:manage'), receivePayment);
+router.post('/:id/generate-eway-bill', authorize('sales:manage'), generateEWayBill);
+router.post('/:id/generate-einvoice', authorize('sales:manage'), generateEInvoice);
+router.put('/:id/deliver', authorize('sales:manage'), updateDelivery);
 
 router.get('/:id/pdf', authorize('sales:view'), generateInvoicePDF);
 

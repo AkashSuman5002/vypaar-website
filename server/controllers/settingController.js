@@ -3,6 +3,7 @@ const Business = require('../models/Business');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
+const { startAutoBackup, stopAutoBackup } = require('../services/backupService');
 
 const stripPasscodeHash = (doc) => {
   if (!doc) return doc;
@@ -95,6 +96,14 @@ const updateSettings = async (req, res) => {
 
     const updated = await settings.save();
 
+    if (updated.preferences?.general?.autoBackup !== undefined) {
+      if (updated.preferences.general.autoBackup) {
+        startAutoBackup();
+      } else {
+        stopAutoBackup();
+      }
+    }
+
     const existingBiz = await Business.findOne({ owner: req.user._id }).sort({ createdAt: -1 });
     if (existingBiz && updated.businessName) {
       existingBiz.name = updated.businessName || existingBiz.name;
@@ -178,4 +187,9 @@ const updateTheme = async (req, res) => {
 };
 
 
-module.exports = { getSettings, updateSettings, getTheme, updateTheme, verifyPasscode, clearPasscode };
+const getSettingValue = async (userId, category, key) => {
+  const setting = await Setting.findOne({ user: userId });
+  return setting?.preferences?.[category]?.[key];
+};
+
+module.exports = { getSettings, updateSettings, getTheme, updateTheme, verifyPasscode, clearPasscode, getSettingValue };

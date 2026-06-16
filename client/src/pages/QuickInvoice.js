@@ -11,6 +11,8 @@ import {
 import { saleAPI, customerAPI, productAPI, settingAPI } from '../services/api';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
 import useSettings from '../hooks/useSettings';
+import { validateMobile, validateEmail, formatMobile } from '../utils/validation';
+import { shareToWhatsApp, shareViaEmail, copyToClipboard, generateShareContent } from '../utils/shareUtils';
 import CustomerSearch from '../components/Invoice/CustomerSearch';
 import ProductRow from '../components/Invoice/ProductRow';
 import InvoicePreview from '../components/Invoice/InvoicePreview';
@@ -62,6 +64,7 @@ const QuickInvoice = () => {
   });
 
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '', address: '' });
+  const [newCustomerErrors, setNewCustomerErrors] = useState({});
 
   useEffect(() => {
     const load = async () => {
@@ -73,8 +76,8 @@ const QuickInvoice = () => {
           settingAPI.get().catch(() => null),
         ]);
         setForm(f => ({ ...f, invoiceNumber: invRes.data.invoiceNumber }));
-        setCustomers(custRes.data);
-        setProducts(prodRes.data);
+        setCustomers(custRes.data?.data || []);
+        setProducts(prodRes.data?.data || []);
         setSettings(setRes?.data || null);
       } catch (err) {
         toast.error('Failed to load data');
@@ -151,6 +154,20 @@ const QuickInvoice = () => {
 
   const handleCreateCustomer = async () => {
     if (!newCustomer.name) return toast.error('Customer name is required');
+
+    const errors = {};
+    const phoneResult = validateMobile(newCustomer.phone);
+    if (!phoneResult.valid) errors.phone = phoneResult.error;
+
+    const emailResult = validateEmail(newCustomer.email);
+    if (!emailResult.valid) errors.email = emailResult.error;
+
+    if (Object.keys(errors).length > 0) {
+      setNewCustomerErrors(errors);
+      return;
+    }
+
+    setNewCustomerErrors({});
     try {
       const { data } = await customerAPI.create(newCustomer);
       setCustomers(prev => [...prev, data]);
@@ -412,21 +429,38 @@ const QuickInvoice = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input
                           value={newCustomer.name}
-                          onChange={(e) => setNewCustomer(p => ({ ...p, name: e.target.value }))}
+                          onChange={(e) => {
+                            setNewCustomer(p => ({ ...p, name: e.target.value }));
+                            setNewCustomerErrors(p => ({ ...p, name: '' }));
+                          }}
                           placeholder="Customer Name *"
                           className="px-3 py-2 border border-slate-200/80 dark:border-gray-700/80 rounded-lg bg-white dark:bg-gray-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                         />
                         <input
                           value={newCustomer.phone}
-                          onChange={(e) => setNewCustomer(p => ({ ...p, phone: e.target.value }))}
+                          onChange={(e) => {
+                            setNewCustomer(p => ({ ...p, phone: formatMobile(e.target.value) }));
+                            setNewCustomerErrors(p => ({ ...p, phone: '' }));
+                          }}
                           placeholder="Phone Number"
-                          className="px-3 py-2 border border-slate-200/80 dark:border-gray-700/80 rounded-lg bg-white dark:bg-gray-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          className={`px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+                            newCustomerErrors.phone
+                              ? 'border-red-400 dark:border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                              : 'border-slate-200/80 dark:border-gray-700/80'
+                          }`}
                         />
                         <input
                           value={newCustomer.email}
-                          onChange={(e) => setNewCustomer(p => ({ ...p, email: e.target.value }))}
+                          onChange={(e) => {
+                            setNewCustomer(p => ({ ...p, email: e.target.value }));
+                            setNewCustomerErrors(p => ({ ...p, email: '' }));
+                          }}
                           placeholder="Email Address"
-                          className="px-3 py-2 border border-slate-200/80 dark:border-gray-700/80 rounded-lg bg-white dark:bg-gray-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          className={`px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+                            newCustomerErrors.email
+                              ? 'border-red-400 dark:border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                              : 'border-slate-200/80 dark:border-gray-700/80'
+                          }`}
                         />
                         <input
                           value={newCustomer.address}
@@ -754,13 +788,28 @@ const QuickInvoice = () => {
                 )}
                 {submitting ? 'Generating...' : 'Generate Invoice'}
               </button>
-              <button className="flex items-center justify-center gap-2 px-5 py-3 border border-slate-200/80 dark:border-gray-700/80 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+              <button onClick={async () => {
+                try {
+                  const res = await saleAPI.getPDF(form.invoiceNumber);
+                  const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+                  const a = document.createElement('a'); a.href = url; a.download = `Invoice-${form.invoiceNumber}.pdf`; a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success('PDF downloaded');
+                } catch { toast.error('Failed to download PDF'); }
+              }} className="flex items-center justify-center gap-2 px-5 py-3 border border-slate-200/80 dark:border-gray-700/80 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
                 <Download className="w-4 h-4" /> PDF
               </button>
-              <button className="flex items-center justify-center gap-2 px-5 py-3 border border-slate-200/80 dark:border-gray-700/80 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+              <button onClick={async () => {
+                const { message, subject } = generateShareContent('invoice', form);
+                const shared = await copyToClipboard(message);
+                toast.success(shared ? 'Invoice details copied to clipboard' : 'Failed to copy');
+              }} className="flex items-center justify-center gap-2 px-5 py-3 border border-slate-200/80 dark:border-gray-700/80 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
                 <Share2 className="w-4 h-4" /> Share
               </button>
-              <button className="flex items-center justify-center gap-2 px-5 py-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-medium rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors border border-emerald-200 dark:border-emerald-800/30">
+              <button onClick={() => {
+                const { message } = generateShareContent('invoice', form);
+                shareToWhatsApp(message, form.customerPhone);
+              }} className="flex items-center justify-center gap-2 px-5 py-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-medium rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors border border-emerald-200 dark:border-emerald-800/30">
                 <MessageSquare className="w-4 h-4" /> WhatsApp
               </button>
             </div>

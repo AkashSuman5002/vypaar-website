@@ -16,6 +16,8 @@ const purchaseItemSchema = new mongoose.Schema({
 const purchaseSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', index: true },
+  currency: { type: String, default: 'INR', trim: true },
+  exchangeRate: { type: Number, default: 1 },
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
   supplierName: { type: String, required: true, trim: true },
   billNumber: { type: String, trim: true },
@@ -26,6 +28,8 @@ const purchaseSchema = new mongoose.Schema({
   cgstTotal: { type: Number, default: 0, min: 0 },
   sgstTotal: { type: Number, default: 0, min: 0 },
   igstTotal: { type: Number, default: 0, min: 0 },
+  tcsAmount: { type: Number, default: 0, min: 0 },
+  tdsAmount: { type: Number, default: 0, min: 0 },
   totalAmount: { type: Number, required: true, min: 0 },
   paidAmount: { type: Number, default: 0, min: 0 },
   remainingBalance: { type: Number, default: 0, min: 0 },
@@ -33,11 +37,15 @@ const purchaseSchema = new mongoose.Schema({
   paymentMethod: { type: String, enum: ['cash', 'bank', 'upi', 'cheque'], default: 'cash' },
   paymentDate: { type: Date },
   notes: { type: String, trim: true },
+  returnReason: { type: String, trim: true },
   isInterState: { type: Boolean, default: false },
 }, { timestamps: true });
 
 purchaseSchema.index({ user: 1, date: -1 });
+purchaseSchema.index({ business: 1, date: -1 });
 purchaseSchema.index({ user: 1, supplier: 1 });
+purchaseSchema.index({ business: 1, supplier: 1 });
 purchaseSchema.index({ user: 1, paymentStatus: 1 });
+purchaseSchema.index({ business: 1, paymentStatus: 1 });
 
 module.exports = mongoose.model('Purchase', purchaseSchema);

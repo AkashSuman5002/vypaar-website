@@ -21,6 +21,8 @@ const saleItemSchema = new mongoose.Schema({
   discountValue: { type: Number, default: 0, min: 0 },
   discountAmount: { type: Number, default: 0, min: 0 },
   costPrice: { type: Number, default: 0, min: 0 },
+  profit: { type: Number, default: 0 },
+  profitMargin: { type: Number, default: 0 },
   batchNo: { type: String, trim: true },
   expiryDate: { type: Date },
   serialNo: { type: String, trim: true },
@@ -41,6 +43,8 @@ const saleSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },
   branch: { type: String, trim: true },
+  currency: { type: String, default: 'INR', trim: true },
+  exchangeRate: { type: Number, default: 1 },
   warehouse: { type: String, trim: true },
 
   invoiceNumber: { type: String, required: true, trim: true },
@@ -91,22 +95,47 @@ const saleSchema = new mongoose.Schema({
 
   totalAmount: { type: Number, required: true, min: 0 },
 
+  tcsAmount: { type: Number, default: 0, min: 0 },
+  tdsAmount: { type: Number, default: 0, min: 0 },
+
   payments: [salePaymentSchema],
   paidAmount: { type: Number, default: 0, min: 0 },
   remainingBalance: { type: Number, default: 0, min: 0 },
   paymentStatus: { type: String, enum: ['paid', 'partial', 'unpaid'], default: 'unpaid', index: true },
 
   eWayBill: { type: String, trim: true },
+  eWayBillData: { type: mongoose.Schema.Types.Mixed, default: null },
+  irn: { type: String, trim: true },
+  eInvoiceData: { type: mongoose.Schema.Types.Mixed },
+  eInvoiceAckNo: { type: String, trim: true },
+  eInvoiceAckDate: { type: Date },
   transportMode: { type: String, trim: true },
   vehicleNo: { type: String, trim: true },
   poNumber: { type: String, trim: true },
+  validityDays: { type: Number, default: 0, min: 0 },
+  expiryDate: { type: Date },
+  isExpired: { type: Boolean, default: false },
+  isConverted: { type: Boolean, default: false },
+  convertedTo: { type: String },
 
   notes: { type: String, trim: true },
   internalNotes: { type: String, trim: true },
   termsConditions: { type: String, trim: true },
+  returnReason: { type: String, trim: true },
   attachments: [{ name: String, url: String }],
 
-  deliveryStatus: { type: String, enum: ['pending', 'delivered', 'cancelled'], default: 'pending' },
+  deliveryStatus: { type: String, enum: ['pending', 'partial', 'delivered', 'cancelled'], default: 'pending' },
+  trackingNumber: { type: String, trim: true },
+  deliveredQuantity: { type: Number, default: 0, min: 0 },
+  deliveryNotes: { type: String, trim: true },
+  deliveryDate: { type: Date },
+  partialDeliveries: [{
+    date: { type: Date, default: Date.now },
+    quantity: { type: Number, min: 0 },
+    trackingNumber: { type: String, trim: true },
+    notes: { type: String, trim: true },
+    deliveredBy: { type: String, trim: true },
+  }],
   parentSale: { type: mongoose.Schema.Types.ObjectId, ref: 'Sale' },
 
   // Recurring invoice support
@@ -118,16 +147,25 @@ const saleSchema = new mongoose.Schema({
   recurringMaxCount: { type: Number, default: 0 },
   isRecurringTemplate: { type: Boolean, default: false },
 
+  additionalField1: { type: String, trim: true },
+  additionalField2: { type: String, trim: true },
+
   createdBy: { type: String, trim: true },
   updatedBy: { type: String, trim: true },
 }, { timestamps: true });
 
 saleSchema.index({ user: 1, business: 1, invoiceNumber: 1 }, { unique: true, sparse: true });
 saleSchema.index({ user: 1, date: -1 });
+saleSchema.index({ business: 1, date: -1 });
 saleSchema.index({ user: 1, customer: 1 });
+saleSchema.index({ business: 1, customer: 1 });
 saleSchema.index({ user: 1, paymentStatus: 1 });
+saleSchema.index({ business: 1, paymentStatus: 1 });
 saleSchema.index({ user: 1, type: 1, date: -1 });
+saleSchema.index({ business: 1, type: 1, date: -1 });
 saleSchema.index({ user: 1, status: 1 });
+saleSchema.index({ business: 1, status: 1 });
 saleSchema.index({ user: 1, 'items.product': 1 });
+saleSchema.index({ business: 1, 'items.product': 1 });
 
 module.exports = mongoose.model('Sale', saleSchema);

@@ -48,7 +48,7 @@ const TransactionMessageTab = () => {
         setTemplateText(savedTemplates[selectedTemplate] || defaultTemplates[selectedTemplate]);
       }
     });
-    whatsappAPI.getStatus().then(({ data }) => setWhatsappStatus(data)).catch(() => {});
+    whatsappAPI.getStatus().then(({ data }) => setWhatsappStatus(data)).catch(() => null);
   }, []);
 
   useEffect(() => {
@@ -119,6 +119,11 @@ const TransactionMessageTab = () => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 h-full flex flex-col overflow-hidden">
+      <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+        <p className="text-emerald-800 text-sm font-medium">
+          Transaction messages are active. Auto-send messages when transactions are created based on your settings below.
+        </p>
+      </div>
       <div className="flex gap-6 flex-1 overflow-hidden">
         <div className="w-[420px] min-w-[420px] overflow-y-auto space-y-6 pr-2">
           <SettingsSection title="WhatsApp Connection">

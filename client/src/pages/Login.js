@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import usePermissions from '../hooks/usePermissions';
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import { Mail, Lock, LogIn } from 'lucide-react';
+import { validateEmail } from '../utils/validation';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -15,6 +15,11 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      toast.error(emailValidation.error);
+      return;
+    }
     setLoading(true);
     try {
       const data = await login(email, password);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, CheckCircle, XCircle } from 'lucide-react';
+import { FileText, CheckCircle, XCircle, Download, Printer } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 import ReportHeader from '../../../components/reports/common/ReportHeader';
@@ -92,6 +93,24 @@ const GSTR2AReconciliation = () => {
   return (
     <div className="bg-white dark:bg-[#0F172A] min-h-full flex flex-col">
       <ReportHeader title="GSTR-2A Reconciliation" search={search} onSearchChange={setSearch} onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} />
+      <div className="flex items-center justify-end gap-2 px-4 pb-2">
+        <button onClick={() => {
+          const table = document.querySelector('table');
+          if (!table) return toast.info('No data to export');
+          const rows = Array.from(table.querySelectorAll('tr'));
+          const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n');
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = 'gstr2a-reconciliation.csv'; a.click();
+          URL.revokeObjectURL(url);
+          toast.success('Exported');
+        }}
+        className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+        ><Download className="w-4 h-4" /> Download</button>
+        <button onClick={() => window.print()}
+        className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+        ><Printer className="w-4 h-4" /> Print</button>
+      </div>
       <div className="flex-1 px-4 pb-4">
         {filteredMatched.length > 0 && renderTable('Matched Invoices', filteredMatched, <CheckCircle className="w-4 h-4 text-green-500" />, false)}
         {filteredMismatched.length > 0 && renderTable('Mismatched Invoices', filteredMismatched, <XCircle className="w-4 h-4 text-red-500" />, true)}

@@ -119,9 +119,9 @@ const generateInvoicePDF = async (req, res) => {
     const showEmail = isThermal ? printPrefs.showEmail !== false : true;
     const showPhone = isThermal ? printPrefs.showPhone !== false : true;
     const showGSTIN = isThermal ? printPrefs.showGSTIN !== false : true;
-    const showItemSNo = isThermal ? printPrefs.showItemSNo !== false : true;
-    const showItemHSN = isThermal ? printPrefs.showItemHSN !== false : true;
-    const showItemUOM = isThermal ? printPrefs.showItemUOM !== false : true;
+    const showItemSNo = isThermal ? printPrefs.showItemSNo !== false : printPrefs.showItemSNo !== false;
+    const showItemHSN = isThermal ? printPrefs.showItemHSN !== false : printPrefs.showItemHSN !== false;
+    const showItemUOM = isThermal ? printPrefs.showItemUOM !== false : printPrefs.showItemUOM !== false;
     const showItemMRP = isThermal ? printPrefs.showItemMRP !== false : true;
     const showItemDescription = isThermal ? printPrefs.showItemDescription !== false : printPrefs.printDescription !== false;
     const showBatchNo = isThermal ? printPrefs.showBatchNo !== false : false;
@@ -129,17 +129,24 @@ const generateInvoicePDF = async (req, res) => {
     const showMfgDate = isThermal ? printPrefs.showMfgDate !== false : false;
     const showSize = isThermal ? printPrefs.showSize !== false : false;
     const showModelNo = isThermal ? printPrefs.showModelNo !== false : false;
-    const showSerialNo = isThermal ? printPrefs.showSerialNo !== false : false;
+    const showSerialNo = isThermal ? printPrefs.showSerialNo !== false : printPrefs.showSerialNo === true;
     const showTotalItemQty = isThermal ? printPrefs.showTotalItemQty !== false : true;
     const showAmountDecimal = isThermal ? printPrefs.showAmountDecimal !== false : true;
     const showReceivedAmount = isThermal ? printPrefs.receivedAmount !== false : true;
     const showBalanceAmount = printPrefs.balanceAmount !== false;
     const showCurrentBalance = printPrefs.currentBalance !== false;
+    const showBankDetails = printPrefs.showBankDetails !== false;
+    const showQRCode = printPrefs.showQRCode !== false;
+    const showPartyPhone = printPrefs.showPartyPhone !== false;
+    const showPartyGSTIN = printPrefs.showPartyGSTIN !== false;
+    const showPartyAddress = printPrefs.showPartyAddress !== false;
+    const showTransportDetails = printPrefs.showTransportDetails !== false;
 
     let headerY = topMargin;
 
     if (showCompanyLogo && settings?.logo) {
-      const logoPath = path.join(__dirname, '..', settings.logo);
+      const logoRel = settings.logo.startsWith('/') ? settings.logo.substring(1) : settings.logo;
+      const logoPath = path.join(__dirname, '..', logoRel);
       if (fs.existsSync(logoPath)) {
         doc.image(logoPath, marginLeft, headerY, { width: isThermal ? 40 : 60 });
         if (isThermal) {
@@ -162,7 +169,7 @@ const generateInvoicePDF = async (req, res) => {
 
     if (!isThermal && settings?.invoiceNote) { doc.text(`Note: ${settings.invoiceNote}`, companyNameX, headerY); headerY += 13; }
 
-    if (!isThermal && (settings?.bankName || settings?.bankAccountNumber || settings?.upiId)) {
+    if (!isThermal && showBankDetails && (settings?.bankName || settings?.bankAccountNumber || settings?.upiId)) {
       headerY += 4;
       if (settings?.bankName) { doc.text(`Bank: ${settings.bankName}`, companyNameX, headerY); headerY += 12; }
       if (settings?.bankAccountNumber) { doc.text(`A/C: ${settings.bankAccountNumber}`, companyNameX, headerY); headerY += 12; }
@@ -194,8 +201,30 @@ const generateInvoicePDF = async (req, res) => {
     doc.text(`Date: ${saleDateStr}`, marginLeft, headerY + (isThermal ? 10 : 14));
     doc.text(`Customer: ${sale.customerName || 'Walk-in'}`, marginLeft, headerY + (isThermal ? 20 : 28));
 
+    let partyInfoY = headerY + (isThermal ? 30 : 42);
+    if (!isThermal) {
+      if (showPartyPhone && sale.customerPhone) {
+        doc.text(`Phone: ${sale.customerPhone}`, marginLeft, partyInfoY);
+        partyInfoY += 13;
+      }
+      if (showPartyGSTIN && sale.customerGst) {
+        doc.text(`GSTIN: ${sale.customerGst}`, marginLeft, partyInfoY);
+        partyInfoY += 13;
+      }
+      if (showPartyAddress && sale.billingAddress) {
+        doc.text(`Address: ${sale.billingAddress}`, marginLeft, partyInfoY, { width: contentWidth });
+        partyInfoY += 13;
+      }
+    }
+
     if (!isThermal && settings?.preferences?.party?.printShippingAddress !== false && sale.shippingAddress) {
       doc.text(`Ship To: ${typeof sale.shippingAddress === 'string' ? sale.shippingAddress : sale.shippingAddress.address || sale.shippingAddress.fullAddress || ''}`, marginLeft, headerY + 42);
+    }
+
+    if (!isThermal && showTransportDetails && (sale.transportMode || sale.vehicleNo)) {
+      let transportY = headerY + (isThermal ? 24 : 56);
+      if (sale.transportMode) { doc.text(`Transport: ${sale.transportMode}`, marginLeft, transportY); transportY += 13; }
+      if (sale.vehicleNo) { doc.text(`Vehicle: ${sale.vehicleNo}`, marginLeft, transportY); transportY += 13; }
     }
 
     let tableTop = headerY + (isThermal ? 32 : 55);
@@ -239,7 +268,7 @@ const generateInvoicePDF = async (req, res) => {
         y = topMargin;
       }
       if (isThermal) {
-        const name = item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '');
+        const name = item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '') + ((showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '');
         doc.fillColor('#000000').text(name, marginLeft, y, { width: contentWidth - 80 });
         doc.text(String(item.quantity), marginLeft + contentWidth - 65, y, { width: 25, align: 'right' });
         if (showItemMRP) doc.text(formatAmount(item.rate, printPrefs, currency), marginLeft + contentWidth - 40, y, { width: 25, align: 'right' });
@@ -253,6 +282,10 @@ const generateInvoicePDF = async (req, res) => {
           doc.font('Helvetica').fillColor('#000000');
         }
         const metaParts = [];
+        if (showSerialNo && item.serialNo) metaParts.push(`S/N: ${item.serialNo}`);
+        if (item.discountType && item.discountType !== 'none' && item.discountAmount) {
+          metaParts.push(`Disc: ${formatAmount(item.discountAmount, printPrefs, currency)}`);
+        }
         if (showBatchNo && item.batchNumber) metaParts.push(`Batch: ${item.batchNumber}`);
         if (showModelNo && item.modelNumber) metaParts.push(`Model: ${item.modelNumber}`);
         if (showExpDate && item.expiryDate) metaParts.push(`Exp: ${new Date(item.expiryDate).toLocaleDateString('en-IN')}`);
@@ -266,10 +299,14 @@ const generateInvoicePDF = async (req, res) => {
         doc.fontSize(8);
       } else {
         const name = item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '');
-        doc.fillColor('#000000').text(name, marginLeft, y, { width: 120 });
+        const serialInfo = (showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '';
+        doc.fillColor('#000000').text(name + serialInfo, marginLeft, y, { width: 120 });
         doc.text(String(item.quantity), (hasTax ? marginLeft + 210 : marginLeft + 180), y, { width: 70, align: 'right' });
         if (showAmount) {
           doc.text(formatAmount(item.rate, printPrefs, currency), (hasTax ? marginLeft + 275 : marginLeft + 280), y, { width: 60, align: 'right' });
+          if (item.discountType && item.discountType !== 'none' && item.discountAmount) {
+            doc.text(`-${formatAmount(item.discountAmount, printPrefs, currency)}`, (hasTax ? marginLeft + 275 : marginLeft + 280), y + 10, { width: 60, align: 'right' });
+          }
           if (hasTax) {
             doc.text(formatAmount(item.taxableAmount || item.amount, printPrefs, currency), marginLeft + 340, y, { width: 50, align: 'right' });
             doc.text(formatAmount(item.cgst || 0, printPrefs, currency), marginLeft + 395, y, { width: 50, align: 'right' });
@@ -284,6 +321,21 @@ const generateInvoicePDF = async (req, res) => {
     y += 6;
     doc.moveTo(marginLeft, y).lineTo(pageWidth - marginRight, y).dash(3, { space: 3 }).stroke().undash();
     y += 6;
+
+    if (sale.additionalField1 || sale.additionalField2) {
+      y += 10;
+      doc.fontSize(9).fillColor('#374151');
+      const label1 = printPrefs.additionalField1Label || 'Additional Field 1';
+      const label2 = printPrefs.additionalField2Label || 'Additional Field 2';
+      if (sale.additionalField1) {
+        doc.text(`${label1}: ${sale.additionalField1}`, marginLeft, y);
+        y += 15;
+      }
+      if (sale.additionalField2) {
+        doc.text(`${label2}: ${sale.additionalField2}`, marginLeft, y);
+        y += 15;
+      }
+    }
 
     if (isThermal) {
       const totalQty = sale.items.reduce((s, i) => s + (i.quantity || 0), 0);
@@ -429,7 +481,7 @@ const generateInvoicePDF = async (req, res) => {
         y += 10;
       }
     } else {
-      if (printPrefs.footerSettings !== false) {
+      if (printPrefs.footerSettings && printPrefs.footerSettings !== '') {
         if (printPrefs.receivedBy !== false || printPrefs.deliveredBy !== false || printPrefs.signature !== false) {
           y += 10;
           const footerY = y;
@@ -442,7 +494,8 @@ const generateInvoicePDF = async (req, res) => {
           if (printPrefs.signature !== false) {
             const sigY = footerY - 5;
             if (settings?.signature) {
-              const sigPath = path.join(__dirname, '..', settings.signature);
+              const sigRel = settings.signature.startsWith('/') ? settings.signature.substring(1) : settings.signature;
+              const sigPath = path.join(__dirname, '..', sigRel);
               if (fs.existsSync(sigPath)) {
                 doc.image(sigPath, marginLeft + 420, sigY, { width: 80, height: 30 });
                 doc.text('Authorized Signature', marginLeft + 420, sigY + 35, { width: 120, align: 'right' });
@@ -458,20 +511,27 @@ const generateInvoicePDF = async (req, res) => {
         if (printPrefs.acknowledgement !== false) {
           doc.font('Helvetica-Oblique').fontSize(8).fillColor('#888888').text('Acknowledgement: This is a computer-generated invoice.', marginLeft, y, { width: contentWidth });
         }
+        if (printPrefs.footerSettings && typeof printPrefs.footerSettings === 'string' && printPrefs.footerSettings.length > 0) {
+          doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666666')
+            .text(printPrefs.footerSettings, marginLeft, y, { width: contentWidth, align: 'center' });
+          y += 12;
+        }
       }
     }
 
-    try {
-      const qrData = JSON.stringify({
-        gstin: bizGst,
-        invoiceNo: sale.invoiceNumber,
-        date: new Date(sale.date).toISOString().split('T')[0],
-        totalGST: (sale.cgstTotal || 0) + (sale.sgstTotal || 0) + (sale.igstTotal || 0),
-        totalAmount: sale.totalAmount || 0,
-      });
-      const qrBuffer = await QRCode.toBuffer(qrData, { width: 100, margin: 2 });
-      doc.image(qrBuffer, marginLeft, y + 10, { width: isThermal ? 50 : 70 });
-    } catch (qrErr) {}
+    if (showQRCode) {
+      try {
+        const qrData = JSON.stringify({
+          gstin: bizGst,
+          invoiceNo: sale.invoiceNumber,
+          date: new Date(sale.date).toISOString().split('T')[0],
+          totalGST: (sale.cgstTotal || 0) + (sale.sgstTotal || 0) + (sale.igstTotal || 0),
+          totalAmount: sale.totalAmount || 0,
+        });
+        const qrBuffer = await QRCode.toBuffer(qrData, { width: 100, margin: 2 });
+        doc.image(qrBuffer, marginLeft, y + 10, { width: isThermal ? 50 : 70 });
+      } catch (qrErr) {}
+    }
 
     doc.end();
   } catch (error) {
@@ -539,14 +599,18 @@ const generatePurchasePDF = async (req, res) => {
     const showEmail = isThermal ? printPrefs.showEmail !== false : true;
     const showPhone = isThermal ? printPrefs.showPhone !== false : true;
     const showGSTIN = isThermal ? printPrefs.showGSTIN !== false : true;
-    const showItemSNo = isThermal ? printPrefs.showItemSNo !== false : true;
+    const showItemSNo = isThermal ? printPrefs.showItemSNo !== false : printPrefs.showItemSNo !== false;
     const showItemDescription = isThermal ? printPrefs.showItemDescription !== false : printPrefs.printDescription !== false;
+    const showSerialNo = isThermal ? printPrefs.showSerialNo !== false : printPrefs.showSerialNo === true;
     const showTotalItemQty = isThermal ? printPrefs.showTotalItemQty !== false : true;
+    const showBankDetails = printPrefs.showBankDetails !== false;
+    const showQRCode = printPrefs.showQRCode !== false;
 
     let headerY = topMargin;
 
     if (showCompanyLogo && settings?.logo) {
-      const logoPath = path.join(__dirname, '..', settings.logo);
+      const logoRel = settings.logo.startsWith('/') ? settings.logo.substring(1) : settings.logo;
+      const logoPath = path.join(__dirname, '..', logoRel);
       if (fs.existsSync(logoPath)) {
         doc.image(logoPath, marginLeft, headerY, { width: isThermal ? 40 : 60 });
         if (isThermal) headerY += 45;
@@ -567,7 +631,7 @@ const generatePurchasePDF = async (req, res) => {
 
     if (!isThermal && settings?.invoiceNote) { doc.text(`Note: ${settings.invoiceNote}`, companyNameX, headerY); headerY += 13; }
 
-    if (!isThermal && (settings?.bankName || settings?.bankAccountNumber || settings?.upiId)) {
+    if (!isThermal && showBankDetails && (settings?.bankName || settings?.bankAccountNumber || settings?.upiId)) {
       headerY += 4;
       if (settings?.bankName) { doc.text(`Bank: ${settings.bankName}`, companyNameX, headerY); headerY += 12; }
       if (settings?.bankAccountNumber) { doc.text(`A/C: ${settings.bankAccountNumber}`, companyNameX, headerY); headerY += 12; }
@@ -628,7 +692,8 @@ const generatePurchasePDF = async (req, res) => {
     (purchase.items || []).forEach((item) => {
       if (y > pageHeight - 100) { doc.addPage(); y = topMargin; }
       if (isThermal) {
-        doc.fillColor('#000000').text(item.productName, marginLeft, y, { width: contentWidth - 50 });
+        const thermalName = item.productName + ((showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '');
+        doc.fillColor('#000000').text(thermalName, marginLeft, y, { width: contentWidth - 50 });
         doc.text(String(item.quantity), marginLeft + contentWidth - 50, y, { width: 20, align: 'right' });
         doc.text(formatAmount(item.amount, printPrefs, currency), marginLeft + contentWidth - 25, y, { width: 25, align: 'right' });
         y += 10;
@@ -639,7 +704,8 @@ const generatePurchasePDF = async (req, res) => {
         }
       } else {
         const name = item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '');
-        doc.fillColor('#000000').text(name, marginLeft, y, { width: 120 });
+        const serialInfo = (showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '';
+        doc.fillColor('#000000').text(name + serialInfo, marginLeft, y, { width: 120 });
         doc.text(String(item.quantity), (hasTax ? marginLeft + 210 : marginLeft + 180), y, { width: 70, align: 'right' });
         doc.text(formatAmount(item.rate, printPrefs, currency), (hasTax ? marginLeft + 275 : marginLeft + 280), y, { width: 60, align: 'right' });
         if (hasTax) {
@@ -730,7 +796,7 @@ const generatePurchasePDF = async (req, res) => {
         y += 10;
       }
     } else {
-      if (printPrefs.footerSettings !== false) {
+      if (printPrefs.footerSettings && printPrefs.footerSettings !== '') {
         if (printPrefs.receivedBy !== false || printPrefs.deliveredBy !== false || printPrefs.signature !== false) {
           y += 10;
           const footerY = y;
@@ -743,7 +809,8 @@ const generatePurchasePDF = async (req, res) => {
           if (printPrefs.signature !== false) {
             const sigY = footerY - 5;
             if (settings?.signature) {
-              const sigPath = path.join(__dirname, '..', settings.signature);
+              const sigRel = settings.signature.startsWith('/') ? settings.signature.substring(1) : settings.signature;
+              const sigPath = path.join(__dirname, '..', sigRel);
               if (fs.existsSync(sigPath)) {
                 doc.image(sigPath, marginLeft + 420, sigY, { width: 80, height: 30 });
                 doc.text('Authorized Signature', marginLeft + 420, sigY + 35, { width: 120, align: 'right' });
@@ -759,19 +826,26 @@ const generatePurchasePDF = async (req, res) => {
         if (printPrefs.acknowledgement !== false) {
           doc.font('Helvetica-Oblique').fontSize(8).fillColor('#888888').text('Acknowledgement: This is a computer-generated purchase bill.', marginLeft, y, { width: contentWidth });
         }
+        if (printPrefs.footerSettings && typeof printPrefs.footerSettings === 'string' && printPrefs.footerSettings.length > 0) {
+          doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666666')
+            .text(printPrefs.footerSettings, marginLeft, y, { width: contentWidth, align: 'center' });
+          y += 12;
+        }
       }
     }
 
-    try {
-      const qrData = JSON.stringify({
-        gstin: bizGst,
-        billNo: purchase.billNumber || purchase._id,
-        date: new Date(purchase.date).toISOString().split('T')[0],
-        totalAmount: purchase.totalAmount || 0,
-      });
-      const qrBuffer = await QRCode.toBuffer(qrData, { width: 100, margin: 2 });
-      doc.image(qrBuffer, marginLeft, y + 10, { width: isThermal ? 50 : 70 });
-    } catch (qrErr) {}
+    if (showQRCode) {
+      try {
+        const qrData = JSON.stringify({
+          gstin: bizGst,
+          billNo: purchase.billNumber || purchase._id,
+          date: new Date(purchase.date).toISOString().split('T')[0],
+          totalAmount: purchase.totalAmount || 0,
+        });
+        const qrBuffer = await QRCode.toBuffer(qrData, { width: 100, margin: 2 });
+        doc.image(qrBuffer, marginLeft, y + 10, { width: isThermal ? 50 : 70 });
+      } catch (qrErr) {}
+    }
 
     doc.end();
   } catch (error) {

@@ -10,17 +10,24 @@ const icons = {
   default: Package,
 };
 
-const EmptyState = ({ type = 'default', title, description, actionLabel, onAction }) => {
+const EmptyState = ({ type = 'default', title, description, subtitle, actionLabel, onAction, icon, children }) => {
   const Icon = icons[type] || icons.default;
+  const displayTitle = title || `No ${type} yet`;
+  const displayDescription = description || subtitle || `Get started by creating your first ${type}.`;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-12">
       <div className="flex flex-col items-center text-center max-w-sm mx-auto">
-        <div className="p-4 bg-slate-50 dark:bg-gray-700/50 rounded-2xl mb-5">
-          <Icon className="w-10 h-10 text-slate-300 dark:text-slate-600" />
-        </div>
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1.5">{title || `No ${type} yet`}</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">{description || `Get started by creating your first ${type}.`}</p>
+        {icon ? (
+          <div className="mb-5">{icon}</div>
+        ) : (
+          <div className="p-4 bg-slate-50 dark:bg-gray-700/50 rounded-2xl mb-5">
+            <Icon className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+          </div>
+        )}
+        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1.5">{displayTitle}</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">{displayDescription}</p>
+        {children}
         {actionLabel && onAction && (
           <button
             onClick={onAction}

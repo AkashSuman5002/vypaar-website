@@ -45,7 +45,7 @@ const GeneralTab = () => {
       if (data && data.length > 0) {
         setLastBackupDate(data[0].created);
       }
-    }).catch(() => {});
+    }).catch(() => null);
   }, []);
 
   const update = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));

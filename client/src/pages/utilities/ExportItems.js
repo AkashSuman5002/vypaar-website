@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Download, Users, Package, ShoppingCart, Receipt, Archive, FileSpreadsheet } from 'lucide-react';
-import { exportAPI } from '../../services/api';
+import { exportAPI, BASE_URL } from '../../services/api';
 
 const MODULES = [
   { key: 'Parties', label: 'Parties', icon: Users, default: true },
@@ -22,7 +22,7 @@ const ExportItems = () => {
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    exportAPI.getCounts().then(r => setCounts(r.data)).catch(() => {});
+    exportAPI.getCounts().then(r => setCounts(r.data)).catch(() => null);
     loadHistory();
   }, []);
 
@@ -91,7 +91,7 @@ const ExportItems = () => {
             {history.map((h, i) => (
               <div key={i} className="px-6 py-3 flex items-center justify-between hover:bg-slate-50/50">
                 <div><p className="text-sm font-medium text-slate-900">{h.fileName || h.filename || 'Export'}</p><p className="text-xs text-slate-400">{new Date(h.createdAt || h.date).toLocaleString('en-IN')}</p></div>
-                <a href={`http://localhost:5000/api/export/history/${h._id}/download`} className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Download</a>
+                <a href={`${BASE_URL}/api/export/history/${h._id}/download`} className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Download</a>
               </div>
             ))}
           </div>

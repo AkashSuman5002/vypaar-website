@@ -9,16 +9,51 @@ import { toast } from 'react-toastify';
 import { formatCurrency, formatDate } from '../utils/format';
 import { motion } from 'framer-motion';
 import {
-  Plus, Eye, Trash2, Printer, Share2, Download, Edit3, Copy, RotateCcw,
+  Plus, Eye, Trash2, Printer, Download, Edit3, Copy, RotateCcw,
   Truck, FileText, Search, Filter, X, ChevronDown, Calendar, ShoppingCart,
   TrendingUp, Clock, AlertCircle, CheckCircle,   Wallet, ArrowUpDown,
   FileSpreadsheet, MessageSquare, MoreHorizontal, RefreshCw, Split, DollarSign,
 } from 'lucide-react';
 
 const DATE_PRESETS = [
-  { label: 'Today', days: 0 }, { label: 'Yesterday', days: 1 }, { label: 'This Week', days: 7 },
-  { label: 'This Month', days: 30 }, { label: 'Last Month', days: 60 }, { label: 'Custom', days: -1 },
+  { label: 'Today', key: 'today' }, { label: 'Yesterday', key: 'yesterday' }, { label: 'This Week', key: 'thisWeek' },
+  { label: 'This Month', key: 'thisMonth' }, { label: 'Last Month', key: 'lastMonth' }, { label: 'Custom', key: 'custom' },
 ];
+
+const getDateRange = (preset) => {
+  const now = new Date();
+  const start = new Date();
+
+  switch (preset) {
+    case 'today':
+      start.setHours(0, 0, 0, 0);
+      return { from: start.toISOString(), to: now.toISOString() };
+    case 'yesterday': {
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      const yesterdayEnd = new Date(start);
+      yesterdayEnd.setHours(23, 59, 59, 999);
+      return { from: start.toISOString(), to: yesterdayEnd.toISOString() };
+    }
+    case 'thisWeek':
+      start.setDate(now.getDate() - now.getDay());
+      start.setHours(0, 0, 0, 0);
+      return { from: start.toISOString(), to: now.toISOString() };
+    case 'thisMonth':
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      return { from: start.toISOString(), to: now.toISOString() };
+    case 'lastMonth': {
+      start.setMonth(now.getMonth() - 1);
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { from: start.toISOString(), to: lastMonthEnd.toISOString() };
+    }
+    default:
+      return { from: null, to: null };
+  }
+};
 
 const PAYMENT_METHODS = [
   { value: '', label: 'All Methods' },
@@ -46,7 +81,7 @@ const Sales = () => {
   const [paymentForm, setPaymentForm] = useState({ amount: 0, mode: 'cash', date: new Date().toISOString().split('T')[0] });
 
   useEffect(() => {
-    customerAPI.getAll().then(({ data }) => setCustomers(data)).catch(() => {});
+    customerAPI.getAll().then(({ data }) => setCustomers(Array.isArray(data) ? data : data?.data || [])).catch(() => null);
   }, []);
 
   const loadSales = useCallback(async () => {
@@ -54,11 +89,10 @@ const Sales = () => {
     try {
       let dateFrom = filters.dateFrom;
       let dateTo = filters.dateTo;
-      if (filters.datePreset && filters.datePreset !== 'Custom') {
-        dateTo = new Date().toISOString().split('T')[0];
-        const d = new Date();
-        d.setDate(d.getDate() - parseInt(filters.datePreset));
-        dateFrom = d.toISOString().split('T')[0];
+      if (filters.datePreset && filters.datePreset !== 'custom') {
+        const range = getDateRange(filters.datePreset);
+        dateFrom = range.from;
+        dateTo = range.to;
       }
 
       const { data } = await saleAPI.getAll({
@@ -181,9 +215,9 @@ ${sale.customer ? `<div class="bill-to"><p class="section-title">Bill To</p><p c
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
   };
 
-  const setDatePreset = (days) => {
-    if (days === -1) { setShowFilters(true); return; }
-    setFilters(f => ({ ...f, datePreset: String(days), dateFrom: '', dateTo: '' }));
+  const setDatePreset = (key) => {
+    if (key === 'custom') { setShowFilters(true); return; }
+    setFilters(f => ({ ...f, datePreset: key, dateFrom: '', dateTo: '' }));
   };
 
   const resetFilters = () => {
@@ -191,7 +225,7 @@ ${sale.customer ? `<div class="bill-to"><p class="section-title">Bill To</p><p c
     setSearch(''); setPage(1);
   };
 
-  const activeFilterCount = [filters.paymentStatus, filters.customer, filters.paymentMethod, filters.datePreset].filter(Boolean).length;
+  const activeFilterCount = [filters.paymentStatus, filters.customer, filters.paymentMethod, filters.datePreset === 'custom' ? '' : filters.datePreset, filters.dateFrom, filters.dateTo].filter(Boolean).length;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
@@ -249,8 +283,8 @@ ${sale.customer ? `<div class="bill-to"><p class="section-title">Bill To</p><p c
       {/* Date Presets */}
       <div className="flex flex-wrap gap-1.5">
         {DATE_PRESETS.map(p => (
-          <button key={p.label} onClick={() => setDatePreset(p.days)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filters.datePreset === String(p.days) ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
+          <button key={p.label} onClick={() => setDatePreset(p.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filters.datePreset === p.key ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
           >{p.label}</button>
         ))}
       </div>

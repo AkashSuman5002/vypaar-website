@@ -60,10 +60,11 @@ const DayBookReport = () => {
           params.dateFrom = dates.start;
           params.dateTo = dates.end;
         }
+        params.limit = 5000;
         const res = await transactionAPI.getAll(params);
         let balance = 0;
-        const processed = res.data.map(item => {
-          const isIn = item.type?.includes('In') || item.amount > 0;
+        const processed = (res.data?.data || []).map(item => {
+          const isIn = item.type?.includes('_in');
           const moneyIn = isIn ? Math.abs(item.amount || 0) : 0;
           const moneyOut = isIn ? 0 : Math.abs(item.amount || 0);
           balance += isIn ? moneyIn : -moneyOut;

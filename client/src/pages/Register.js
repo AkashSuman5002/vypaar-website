@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import { UserPlus, User, Mail, Lock } from 'lucide-react';
+import { validateEmail, validateName, validatePassword } from '../utils/validation';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -15,6 +16,21 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const nameValidation = validateName(name, 'Name', true);
+    if (!nameValidation.valid) {
+      toast.error(nameValidation.error);
+      return;
+    }
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      toast.error(emailValidation.error);
+      return;
+    }
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      toast.error(passwordValidation.error);
+      return;
+    }
     setLoading(true);
     try {
       await register(name, email, password);

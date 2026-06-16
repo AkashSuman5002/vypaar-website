@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, IndianRupee, CheckCircle, Clock } from 'lucide-react';
 import ReportHeader from '../../components/reports/common/ReportHeader';
 import ReportTable from '../../components/reports/common/ReportTable';
@@ -37,6 +38,7 @@ const columns = [
 ];
 
 const SaleReport = () => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [dates, setDates] = useState({ start: '', end: '' });
   const [data, setData] = useState([]);
@@ -94,7 +96,7 @@ const SaleReport = () => {
             title="No Sale Reports Yet"
             description="Sales data will appear here once you create invoices."
             action={
-              <button className="px-4 py-2 bg-blue-600 dark:bg-[#3B82F6] hover:bg-blue-700 dark:hover:bg-[#2563EB] text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5">
+              <button onClick={() => navigate('/sales/new')} className="px-4 py-2 bg-blue-600 dark:bg-[#3B82F6] hover:bg-blue-700 dark:hover:bg-[#2563EB] text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5">
                 <Plus className="w-3.5 h-3.5" /> Add Sale
               </button>
             }

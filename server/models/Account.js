@@ -33,5 +33,6 @@ const accountSchema = new mongoose.Schema({
 
 accountSchema.index({ user: 1, business: 1, code: 1 }, { unique: true, sparse: true });
 accountSchema.index({ user: 1, type: 1, category: 1 });
+accountSchema.index({ business: 1, type: 1, category: 1 });
 
 module.exports = mongoose.model('Account', accountSchema);

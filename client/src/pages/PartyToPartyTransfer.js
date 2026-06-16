@@ -2,18 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate } from '../utils/format';
-import API, { customerAPI, supplierAPI } from '../services/api';
+import { customerAPI, supplierAPI, partyTransferAPI } from '../services/api';
 import {
   Plus, Search, Trash2, X, ChevronLeft, ChevronRight, ArrowRightLeft,
   Save, Loader2, ArrowRight, Users, Building2, IndianRupee,
 } from 'lucide-react';
-
-const transferAPI = {
-  getAll: (params) => API.get('/party-transfers', { params }),
-  getById: (id) => API.get(`/party-transfers/${id}`),
-  create: (data) => API.post('/party-transfers', data),
-  delete: (id) => API.delete(`/party-transfers/${id}`),
-};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -46,7 +39,7 @@ const PartyToPartyTransfer = () => {
       const params = searchQuery
         ? { page: 1, limit: 10000 }
         : { page, limit: pageSize };
-      const { data } = await transferAPI.getAll(params);
+      const { data } = await partyTransferAPI.getAll(params);
       setTransfers(data.transfers);
       setTotalPages(data.pages);
     } catch (err) {
@@ -88,7 +81,7 @@ const PartyToPartyTransfer = () => {
     if (!form.amount || parseFloat(form.amount) <= 0) { toast.error('Enter a valid amount'); return; }
     if (form.fromParty === form.toParty) { toast.error('From and To parties cannot be the same'); return; }
     try {
-      await transferAPI.create({ ...form, amount: parseFloat(form.amount) });
+      await partyTransferAPI.create({ ...form, amount: parseFloat(form.amount) });
       toast.success('Transfer completed');
       setShowModal(false);
       resetForm();
@@ -101,7 +94,7 @@ const PartyToPartyTransfer = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this transfer?')) return;
     try {
-      await transferAPI.delete(id);
+      await partyTransferAPI.delete(id);
       toast.success('Transfer deleted');
       fetchTransfers(currentPage);
     } catch (err) {

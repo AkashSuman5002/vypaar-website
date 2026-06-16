@@ -20,13 +20,28 @@ const productSchema = new mongoose.Schema({
   mrp: { type: Number, default: 0, min: 0 },
   description: { type: String, trim: true },
   type: { type: String, enum: ['product', 'service'], default: 'product' },
+  batches: [{
+    batchNo: { type: String, trim: true },
+    expiryDate: { type: Date },
+    stock: { type: Number, default: 0, min: 0 },
+  }],
+  serialNumbers: [{ type: String, trim: true }],
+  batchTracking: { type: Boolean, default: false },
+  serialNumberTracking: { type: Boolean, default: false },
+  warehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Godown', index: true },
+  storageLocation: { type: String, trim: true, default: '' },
 }, { timestamps: true });
 
 productSchema.index({ user: 1, name: 1 });
+productSchema.index({ business: 1, name: 1 });
 productSchema.index({ user: 1, barcode: 1 });
+productSchema.index({ business: 1, barcode: 1 });
 productSchema.index({ barcode: 1 });
 productSchema.index({ user: 1, category: 1 });
+productSchema.index({ business: 1, category: 1 });
 productSchema.index({ user: 1, stock: 1 });
+productSchema.index({ business: 1, stock: 1 });
 productSchema.index({ user: 1, createdAt: -1 });
+productSchema.index({ business: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Product', productSchema);

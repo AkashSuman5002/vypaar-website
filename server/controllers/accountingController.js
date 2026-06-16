@@ -4,6 +4,7 @@ const Receipt = require('../models/Receipt');
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const Transaction = require('../models/Transaction');
+const Setting = require('../models/Setting');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 
 // Seed default chart of accounts for a new user+business (runs once per user+business)
@@ -82,6 +83,10 @@ const seedAccounts = async (userId, businessId) => {
 
 const getAccounts = async (req, res) => {
   try {
+    const setting = await Setting.findOne({ user: req.user._id });
+    if (setting?.preferences?.accounting?.enableAccounting === false) {
+      return res.json([]);
+    }
     const baseFilter = getBaseFilter(req);
     const userId = req.user._id;
     const businessId = req.businessId || null;
@@ -127,6 +132,11 @@ const getAccounts = async (req, res) => {
 };
 
 const postJournalEntry = async (userId, entry, businessId) => {
+  const setting = await Setting.findOne({ user: userId });
+  if (setting?.preferences?.accounting?.allowJournalEntries === false) {
+    throw new Error('Journal entries are disabled in settings');
+  }
+
   const totalDebit = entry.lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = entry.lines.reduce((s, l) => s + l.credit, 0);
   if (Math.abs(totalDebit - totalCredit) > 0.01) {
@@ -203,6 +213,10 @@ const getJournalEntries = async (req, res) => {
 
 const getTrialBalance = async (req, res) => {
   try {
+    const setting = await Setting.findOne({ user: req.user._id });
+    if (setting?.preferences?.accounting?.enableAccounting === false) {
+      return res.json({ accounts: [], totalDebit: 0, totalCredit: 0 });
+    }
     const baseFilter = getBaseFilter(req);
     let { startDate, endDate } = req.query;
     const journalFilter = { user: req.user._id, isPosted: true };
@@ -286,6 +300,10 @@ const calcProfitLoss = async (baseFilter, query, userId) => {
 
 const getProfitLoss = async (req, res) => {
   try {
+    const setting = await Setting.findOne({ user: req.user._id });
+    if (setting?.preferences?.accounting?.enableAccounting === false) {
+      return res.json({ revenue: 0, expenses: 0, netProfit: 0, revenueItems: [], expenseItems: [] });
+    }
     const baseFilter = getBaseFilter(req);
     const result = await calcProfitLoss(baseFilter, req.query);
     res.json(result);
@@ -296,6 +314,10 @@ const getProfitLoss = async (req, res) => {
 
 const getBalanceSheet = async (req, res) => {
   try {
+    const setting = await Setting.findOne({ user: req.user._id });
+    if (setting?.preferences?.accounting?.enableAccounting === false) {
+      return res.json({ assets: [], liabilities: [], equity: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0 });
+    }
     const baseFilter = getBaseFilter(req);
     const accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
     const entries = await JournalEntry.find({ user: req.user._id, isPosted: true });
@@ -337,6 +359,10 @@ const getBalanceSheet = async (req, res) => {
 
 const createJournalEntry = async (req, res) => {
   try {
+    const setting = await Setting.findOne({ user: req.user._id });
+    if (setting?.preferences?.accounting?.enableAccounting === false) {
+      return res.status(400).json({ message: 'Accounting is disabled in settings' });
+    }
     const userId = req.user._id;
     const { entryNumber, entryDate, narration, referenceType, lines } = req.body;
     const je = await postJournalEntry(userId, {
@@ -688,17 +714,14 @@ const createCheque = async (req, res) => {
 const updateCheque = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const allowed = ['date', 'chequeNo', 'bankName', 'customerName', 'amount', 'status', 'partyName'];
-    const updates = {};
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) updates[key] = req.body[key];
-    }
-    const receipt = await Receipt.findOneAndUpdate(
-      { ...baseFilter, _id: req.params.id, mode: 'cheque' },
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
+    const receipt = await Receipt.findOne({ ...baseFilter, _id: req.params.id, mode: 'cheque' });
     if (!receipt) return res.status(404).json({ message: 'Cheque not found' });
+
+    const allowed = ['date', 'chequeNo', 'bankName', 'customerName', 'amount', 'status', 'partyName'];
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) receipt[key] = req.body[key];
+    }
+    await receipt.save();
     res.json(receipt);
   } catch (err) {
     res.status(500).json({ message: err.message });

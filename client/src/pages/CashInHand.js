@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import EmptyState from '../components/CashBank/EmptyState';
-import ModalDialog from '../components/CashBank/ModalDialog';
+import EmptyState from '../components/UI/EmptyState';
+import Modal from '../components/UI/Modal';
 import FormField from '../components/CashBank/FormField';
 import { transactionAPI } from '../services/api';
 import { toast } from 'react-toastify';
@@ -145,7 +145,7 @@ const CashInHand = () => {
         </>
       )}
 
-      <ModalDialog open={modalOpen} onClose={() => setModalOpen(false)} title="Adjust Cash" width="max-w-sm">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Adjust Cash" size="sm">
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -219,7 +219,7 @@ const CashInHand = () => {
             </button>
           </div>
         </div>
-      </ModalDialog>
+      </Modal>
     </motion.div>
   );
 };

@@ -1,4 +1,4 @@
-const Support = require('../models/support');
+const Support = require('../models/Support');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 
 const createTicket = async (req, res) => {

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { BadgePercent, Phone, Mail, MapPin, Building } from 'lucide-react';
 import { formatCurrency, formatDate, numberToWords } from '../../utils/format';
+import { BASE_URL } from '../../services/api';
 
 const InvoicePreview = ({ form, settings }) => {
   const { items, customer, customerName, date, dueDate, invoiceNumber, paidAmount, paymentMethod } = form;
@@ -22,7 +23,7 @@ const InvoicePreview = ({ form, settings }) => {
 
   const paymentStatus = paidAmount >= grandTotal && grandTotal > 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid';
 
-  const bizLogo = settings?.logo ? `http://localhost:5000/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
 
   return (
     <motion.div
@@ -182,6 +183,13 @@ const InvoicePreview = ({ form, settings }) => {
             <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 text-right capitalize">via {paymentMethod}</p>
           )}
         </div>
+
+        {/* Footer */}
+        {settings?.preferences?.print?.footerSettings && typeof settings.preferences.print.footerSettings === 'string' && settings.preferences.print.footerSettings.trim() && (
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700">
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center italic">{settings.preferences.print.footerSettings}</p>
+          </div>
+        )}
       </div>
     </motion.div>
   );

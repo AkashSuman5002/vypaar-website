@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { MessageCircle, CheckCircle, XCircle, RefreshCw, Send, Loader2, Wifi, WifiOff, Phone, History, Trash2 } from 'lucide-react';
 import { whatsappAPI } from '../services/api';
+import { validateMobile, formatMobile } from '../utils/validation';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -20,6 +21,7 @@ const WhatsAppConnect = () => {
   const [qrImage, setQrImage] = useState('');
   const [sendPhone, setSendPhone] = useState('');
   const [sendMsg, setSendMsg] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState([]);
   const [msgStats, setMsgStats] = useState({ total: 0, sent: 0, failed: 0, pending: 0 });
@@ -161,6 +163,11 @@ const WhatsAppConnect = () => {
 
   const handleSend = async () => {
     if (!sendPhone || !sendMsg) return toast.error('Phone and message required');
+    const phoneValidation = validateMobile(sendPhone);
+    if (!phoneValidation.valid) {
+      setPhoneError(phoneValidation.error);
+      return;
+    }
     setSending(true);
     try {
       await whatsappAPI.send({ phone: sendPhone, message: sendMsg });
@@ -324,11 +331,25 @@ const WhatsAppConnect = () => {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Recipient Phone</label>
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-slate-400" />
-                  <input type="tel" value={sendPhone} onChange={e => setSendPhone(e.target.value)}
+                  <input type="tel" value={sendPhone}
+                    onChange={e => {
+                      const val = formatMobile(e.target.value);
+                      setSendPhone(val);
+                      if (val) {
+                        const res = validateMobile(val);
+                        setPhoneError(res.valid ? '' : res.error);
+                      } else {
+                        setPhoneError('');
+                      }
+                    }}
                     placeholder="9876543210"
-                    className="flex-1 px-3 py-2 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                    className={`flex-1 px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${phoneError ? 'border-red-500' : 'border-slate-200 dark:border-gray-700'}`} />
                 </div>
-                <p className="text-xs text-slate-400 mt-1">Enter 10-digit mobile number with country code (e.g., 919876543210)</p>
+                {phoneError ? (
+                  <p className="text-xs text-red-500 mt-1">{phoneError}</p>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-1">Enter 10-digit mobile number with country code (e.g., 919876543210)</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Message</label>

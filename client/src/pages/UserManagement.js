@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { userAPI } from '../services/api';
+import { validateMobile, validateEmail, formatMobile, validateName } from '../utils/validation';
 
 const ROLES = [
   { name: 'Admin', color: 'bg-red-100 text-red-700', permissions: ['*'] },
@@ -54,6 +55,7 @@ const UserManagement = () => {
     name: '', email: '', phone: '', role: 'Staff', password: '',
     isActive: true, permissions: []
   });
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     fetchUsers();
@@ -80,6 +82,7 @@ const UserManagement = () => {
   const openCreate = () => {
     setEditingUser(null);
     setForm({ name: '', email: '', phone: '', role: 'Staff', password: '', isActive: true, permissions: [] });
+    setErrors({});
     setShowModal(true);
   };
 
@@ -113,15 +116,29 @@ const UserManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.email) {
-      toast.error('Name and email are required');
+    const newErrors = {};
+
+    const nameResult = validateName(form.name, 'Name', true);
+    if (!nameResult.valid) newErrors.name = nameResult.error;
+
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+    if (!form.email || !form.email.trim()) newErrors.email = 'Email is required';
+
+    const phoneResult = validateMobile(form.phone);
+    if (!phoneResult.valid) newErrors.phone = phoneResult.error;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
+
     if (!editingUser && !form.password) {
       toast.error('Password is required for new users');
       return;
     }
     try {
+      setErrors({});
       const payload = { ...form };
       if (!payload.password) delete payload.password;
       if (editingUser) {
@@ -366,10 +383,13 @@ const UserManagement = () => {
                         type="text"
                         value={form.name}
                         onChange={e => setForm({ ...form, name: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                        className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm ${
+                          errors.name ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'
+                        }`}
                         placeholder="John Doe"
                       />
                     </div>
+                    {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
@@ -380,11 +400,14 @@ const UserManagement = () => {
                       <input
                         type="text"
                         value={form.phone}
-                        onChange={e => setForm({ ...form, phone: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                        onChange={e => setForm({ ...form, phone: formatMobile(e.target.value) })}
+                        className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm ${
+                          errors.phone ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'
+                        }`}
                         placeholder="+91 98765 43210"
                       />
                     </div>
+                    {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                   </div>
                 </div>
 
@@ -398,10 +421,13 @@ const UserManagement = () => {
                       type="email"
                       value={form.email}
                       onChange={e => setForm({ ...form, email: e.target.value })}
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                      className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm ${
+                        errors.email ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'
+                      }`}
                       placeholder="john@company.com"
                     />
                   </div>
+                  {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
 
                 <div>

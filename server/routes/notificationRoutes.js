@@ -5,8 +5,8 @@ const router = express.Router();
 
 router.route('/').get(authorize('notifications:view'), getNotifications);
 router.get('/unread-count', authorize('notifications:view'), getUnreadCount);
-router.put('/:id/read', authorize('notifications:manage'), markAsRead);
 router.put('/read-all', authorize('notifications:manage'), markAllAsRead);
+router.put('/:id/read', authorize('notifications:manage'), markAsRead);
 router.delete('/:id', authorize('notifications:manage'), deleteNotification);
 
 module.exports = router;

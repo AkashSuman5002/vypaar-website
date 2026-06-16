@@ -435,7 +435,7 @@ const SupplierLedger = () => {
           <div className="space-y-3">
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="e.g. Supplier offered bulk discount." className="w-full px-3.5 py-2.5 border border-slate-200/80 dark:border-gray-700/80 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
             <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowNoteInput(false); ledgerNoteAPI.get('supplier', id).then(r => setNote(r.data.note || '')).catch(() => {}); }} className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+              <button onClick={() => { setShowNoteInput(false); ledgerNoteAPI.get('supplier', id).then(r => setNote(r.data.note || '')).catch(() => null); }} className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
               <button onClick={saveNote} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Note</button>
             </div>
           </div>

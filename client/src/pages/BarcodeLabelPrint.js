@@ -16,7 +16,7 @@ const BarcodeLabelPrint = () => {
     const load = async () => {
       try {
         const { data } = await productAPI.getAll();
-        setProducts(data);
+        setProducts(Array.isArray(data) ? data : data?.data || []);
       } catch {
         toast.error('Failed to load products');
       } finally {

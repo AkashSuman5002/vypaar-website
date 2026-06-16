@@ -30,7 +30,7 @@ const getWeightedAverageCost = async (req, productId) => {
 
 const recordStockMovement = async ({
   userId, businessId, productId, productName, type, quantity, rate, totalAmount,
-  referenceType, referenceId, referenceNumber, description,
+  referenceType, referenceId, referenceNumber, description, batchNo, serialNo,
 }) => {
   const product = await Product.findOne({ _id: productId, user: userId });
   if (!product) throw new Error('Product not found');
@@ -53,6 +53,8 @@ const recordStockMovement = async ({
     referenceType,
     referenceId,
     referenceNumber,
+    batchNo,
+    serialNo,
     description,
     date: new Date(),
   });

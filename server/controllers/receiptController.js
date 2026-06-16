@@ -16,10 +16,11 @@ const getReceipts = async (req, res) => {
       if (dateTo) filter.date.$lte = new Date(dateTo + 'T23:59:59.999Z');
     }
     if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-        { receiptNumber: { $regex: search, $options: 'i' } },
-        { customerName: { $regex: search, $options: 'i' } },
-        { invoiceNumber: { $regex: search, $options: 'i' } },
+        { receiptNumber: { $regex: escaped, $options: 'i' } },
+        { customerName: { $regex: escaped, $options: 'i' } },
+        { invoiceNumber: { $regex: escaped, $options: 'i' } },
       ];
     }
 
@@ -87,6 +88,9 @@ const generateReceiptPDF = async (req, res) => {
 
     doc.fontSize(11).font('Helvetica-Bold').text('Amount:', 40, 210);
     doc.fontSize(14).font('Helvetica-Bold').text(`₹${(receipt.amount || 0).toLocaleString()}`, 40, 225);
+    if (receipt.discount && receipt.discount > 0) {
+      doc.fontSize(10).font('Helvetica').text(`Discount: ₹${receipt.discount.toLocaleString()}`, 40, 243);
+    }
 
     doc.fontSize(11).font('Helvetica-Bold').text('Payment Mode:', 40, 255);
     doc.fontSize(10).font('Helvetica').text((receipt.mode || '').toUpperCase(), 40, 270);

@@ -21,11 +21,15 @@ const customerSchema = new mongoose.Schema({
   dueDays: { type: Number, default: 30 },
   notes: { type: String, trim: true, default: '' },
   customFields: { type: mongoose.Schema.Types.Mixed, default: {} },
+  group: { type: mongoose.Schema.Types.ObjectId, ref: 'PartyGroup', default: null },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
 customerSchema.index({ user: 1, name: 1 });
+customerSchema.index({ business: 1, name: 1 });
 customerSchema.index({ user: 1, phone: 1 });
+customerSchema.index({ business: 1, phone: 1 });
 customerSchema.index({ user: 1, createdAt: -1 });
+customerSchema.index({ business: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Customer', customerSchema);

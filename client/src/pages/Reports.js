@@ -85,6 +85,7 @@ const sections = [
       { name: 'Expense Report', route: 'expense', icon: Wallet },
       { name: 'Expense Category Report', route: 'expense-category-report', icon: FolderOpen },
       { name: 'Expense Item Report', route: 'expense-item-report', icon: Package },
+      { name: 'Budget Report', route: 'budget-report', icon: BarChart3 },
     ]
   },
   {

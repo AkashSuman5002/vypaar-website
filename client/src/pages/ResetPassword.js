@@ -5,6 +5,7 @@ import { KeyRound, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
+import { validatePassword } from '../utils/validation';
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();
@@ -24,6 +25,11 @@ const ResetPassword = () => {
     }
     if (password !== confirmPassword) {
       toast.error('Passwords do not match');
+      return;
+    }
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      toast.error(passwordValidation.error);
       return;
     }
 

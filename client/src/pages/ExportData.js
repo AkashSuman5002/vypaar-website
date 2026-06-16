@@ -50,7 +50,7 @@ const ExportData = () => {
   const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
-    exportAPI.getCounts().then(r => setCounts(r.data)).catch(() => {});
+    exportAPI.getCounts().then(r => setCounts(r.data)).catch(() => null);
     loadHistory();
   }, []);
 

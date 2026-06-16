@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
+
+const currentYear = new Date().getFullYear();
+const fyStart = new Date().getMonth() >= 3 ? `${currentYear}-04-01` : `${currentYear - 1}-04-01`;
+const today = new Date().toISOString().split('T')[0];
 
 const columns = [
   { key: 'index', label: '#', width: 'w-[50px]' },
@@ -18,13 +23,17 @@ const AllParties = () => {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
+  const [dates, setDates] = useState({ start: fyStart, end: today });
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
+        const params = {};
+        if (dates.start) params.dateFrom = dates.start;
+        if (dates.end) params.dateTo = dates.end;
         const [custRes, suppRes] = await Promise.all([
-          reportAPI.getParties({ partyType: 'customer' }),
-          reportAPI.getParties({ partyType: 'supplier' }),
+          reportAPI.getParties({ ...params, partyType: 'customer' }),
+          reportAPI.getParties({ ...params, partyType: 'supplier' }),
         ]);
         setCustomers(custRes.data.parties || []);
         setSuppliers(suppRes.data.parties || []);
@@ -35,7 +44,7 @@ const AllParties = () => {
       }
     };
     fetchAll();
-  }, []);
+  }, [dates]);
 
   const allParties = [
     ...customers.map(c => ({ ...c, type: 'Customer', totalSalesOrPurchases: c.totalSales, totalPaid: c.totalPaid, outstanding: c.outstanding })),
@@ -49,11 +58,21 @@ const AllParties = () => {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-gray-900 dark:text-[#F8FAFC]">All Parties</h2>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-[#94A3B8]">
+            <span>Between</span>
+            <input type="date" value={dates.start} onChange={e => setDates({ ...dates, start: e.target.value })}
+              className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-2 py-1.5 w-[110px] text-xs" />
+            <span>To</span>
+            <input type="date" value={dates.end} onChange={e => setDates({ ...dates, end: e.target.value })}
+              className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-2 py-1.5 w-[110px] text-xs" />
+          </div>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 dark:text-[#64748B]" />
             <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
               placeholder="Search..." className="pl-7 pr-3 py-1.5 border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] rounded text-xs w-[180px] placeholder-gray-500 dark:placeholder-[#64748B]" />
           </div>
+          <button onClick={() => exportToExcel(allParties.map((p, i) => ({ ...p, index: i + 1 })), columns, 'All_Parties')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+          <button onClick={() => printReport()} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
         </div>
       </div>
 

@@ -1,7 +1,10 @@
 const PurchaseReturn = require('../models/PurchaseReturn');
 const Product = require('../models/Product');
+const Supplier = require('../models/Supplier');
 const StockMovement = require('../models/StockMovement');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { sendAutoMessage } = require('../services/messageService');
+const { withTransaction } = require('../utils/withTransaction');
 
 const getPurchaseReturns = async (req, res) => {
   try {
@@ -9,10 +12,11 @@ const getPurchaseReturns = async (req, res) => {
     const { page = 1, limit = 50, search } = req.query;
     const filter = { ...baseFilter };
     if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-        { returnNumber: { $regex: search, $options: 'i' } },
-        { supplierName: { $regex: search, $options: 'i' } },
-        { purchaseBillNumber: { $regex: search, $options: 'i' } },
+        { returnNumber: { $regex: escaped, $options: 'i' } },
+        { supplierName: { $regex: escaped, $options: 'i' } },
+        { purchaseBillNumber: { $regex: escaped, $options: 'i' } },
       ];
     }
     const total = await PurchaseReturn.countDocuments(filter);
@@ -77,32 +81,67 @@ const createPurchaseReturn = async (req, res) => {
     const computedTotal = taxableAmount + cgstTotalCalc + sgstTotalCalc + igstTotalCalc;
     const roundOffVal = roundOff ? Math.round(computedTotal) - computedTotal : (parseFloat(roundOffValue) || 0);
 
-    const ret = await PurchaseReturn.create({
-      user: req.user._id, business: req.businessId, returnNumber, purchase, purchaseBillNumber, supplier, supplierName, returnDate: returnDate || new Date(),
-      phone, invoiceDate: invoiceDate || undefined, stateOfSupply, paymentType: paymentType || 'Cash',
-      roundOff, roundOffValue: roundOffVal, image,
-      items: processedItems, taxableAmount, cgstTotal: cgstTotalCalc, sgstTotal: sgstTotalCalc, igstTotal: igstTotalCalc,
-      totalAmount: computedTotal + roundOffVal,
-      reason, notes, isInterState: isInterState || false,
+    const ret = await withTransaction(async (session) => {
+      const [created] = await PurchaseReturn.create([{
+        user: req.user._id, business: req.businessId, returnNumber, purchase, purchaseBillNumber, supplier, supplierName, returnDate: returnDate || new Date(),
+        phone, invoiceDate: invoiceDate || undefined, stateOfSupply, paymentType: paymentType || 'Cash',
+        roundOff, roundOffValue: roundOffVal, image,
+        items: processedItems, taxableAmount, cgstTotal: cgstTotalCalc, sgstTotal: sgstTotalCalc, igstTotal: igstTotalCalc,
+        totalAmount: computedTotal + roundOffVal,
+        reason, notes, isInterState: isInterState || false,
+      }], { session });
+
+      const productIds = processedItems.filter(item => item.product).map(item => item.product);
+      if (productIds.length > 0) {
+        const products = await Product.find({ _id: { $in: productIds }, user: req.user._id });
+        const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
+        const stockOps = [];
+        const movements = [];
+        for (const item of processedItems) {
+          if (item.product) {
+            const prod = productMap.get(item.product.toString());
+            const balBefore = prod ? prod.stock : 0;
+            stockOps.push({
+              updateOne: {
+                filter: { _id: item.product, user: req.user._id },
+                update: { $inc: { stock: -item.quantity } }
+              }
+            });
+            movements.push({
+              user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
+              type: 'purchase_return', quantity: -item.quantity,
+              balanceBefore: balBefore, balanceAfter: balBefore - item.quantity,
+              rate: item.rate, totalAmount: item.amount,
+              referenceType: 'PurchaseReturn', referenceId: created._id,
+              referenceNumber: returnNumber || created._id,
+              description: `Purchase return ${returnNumber || ''} - ${supplierName || ''}`,
+              date: returnDate || new Date(),
+            });
+          }
+        }
+        if (stockOps.length > 0) await Product.bulkWrite(stockOps, { session });
+        if (movements.length > 0) await StockMovement.insertMany(movements, { session });
+      }
+
+      // A purchase return (debit note) reduces what we owe the supplier
+      if (created.supplier && created.totalAmount > 0) {
+        await Supplier.findByIdAndUpdate(created.supplier, { $inc: { openingBalance: -created.totalAmount } }, { session });
+      }
+      // NOTE: if created.supplier is not set we cannot safely identify the supplier
+      // (supplierName is free text and not a reliable key), so the balance is left untouched.
+
+      return created;
     });
 
-    for (const item of processedItems) {
-      if (item.product) {
-        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
-        const balBefore = prod ? prod.stock : 0;
-        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: -item.quantity } });
-        await StockMovement.create({
-          user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
-          type: 'purchase_return', quantity: -item.quantity,
-          balanceBefore: balBefore, balanceAfter: balBefore - item.quantity,
-          rate: item.rate, totalAmount: item.amount,
-          referenceType: 'PurchaseReturn', referenceId: ret._id,
-          referenceNumber: returnNumber || ret._id,
-          description: `Purchase return ${returnNumber || ''} - ${supplierName || ''}`,
-          date: returnDate || new Date(),
-        });
-      }
-    }
+    sendAutoMessage(req.user._id, req.businessId, 'purchase_return', {
+      supplierName,
+      invoiceNumber: returnNumber || String(ret._id),
+      invoiceId: ret._id,
+      date: returnDate || new Date(),
+      totalAmount: ret.totalAmount,
+      remainingBalance: 0,
+    }).catch(() => {});
 
     res.status(201).json(ret);
   } catch (error) {
@@ -134,7 +173,63 @@ const updatePurchaseReturn = async (req, res) => {
       if (updateData[field] !== undefined) filtered[field] = updateData[field];
     }
 
-    const updated = await PurchaseReturn.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, filtered, { new: true });
+    const itemsChanged = filtered.items && JSON.stringify(filtered.items) !== JSON.stringify(ret.items);
+
+    const updated = await withTransaction(async (session) => {
+      if (itemsChanged) {
+        const restoreOps = ret.items.filter(item => item.product).map(item => ({
+          updateOne: {
+            filter: { _id: item.product, user: req.user._id },
+            update: { $inc: { stock: item.quantity } }
+          }
+        }));
+        if (restoreOps.length > 0) await Product.bulkWrite(restoreOps, { session });
+
+        await StockMovement.deleteMany({
+          user: req.user._id,
+          business: req.businessId,
+          referenceType: 'PurchaseReturn',
+          referenceId: ret._id,
+          type: 'purchase_return',
+        }, { session });
+
+        const newItems = filtered.items;
+        const newProductIds = newItems.filter(item => item.product).map(item => item.product);
+        const allProductIds = [...new Set([...ret.items.filter(i => i.product).map(i => i.product), ...newProductIds])];
+        const allProducts = await Product.find({ _id: { $in: allProductIds }, user: req.user._id });
+        const productMap = new Map(allProducts.map(p => [p._id.toString(), p]));
+
+        const adjustOps = [];
+        const adjustMovements = [];
+        for (const item of newItems) {
+          if (item.product) {
+            const prod = productMap.get(item.product.toString());
+            const balBefore = prod ? prod.stock : 0;
+            adjustOps.push({
+              updateOne: {
+                filter: { _id: item.product, user: req.user._id },
+                update: { $inc: { stock: -item.quantity } }
+              }
+            });
+            adjustMovements.push({
+              user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
+              type: 'purchase_return', quantity: -item.quantity,
+              balanceBefore: balBefore, balanceAfter: balBefore - item.quantity,
+              rate: item.rate, totalAmount: item.amount,
+              referenceType: 'PurchaseReturn', referenceId: ret._id,
+              referenceNumber: filtered.returnNumber || ret.returnNumber || ret._id,
+              description: `Purchase return updated - ${filtered.supplierName || ret.supplierName || ''}`,
+              date: filtered.returnDate || ret.returnDate || new Date(),
+            });
+          }
+        }
+        if (adjustOps.length > 0) await Product.bulkWrite(adjustOps, { session });
+        if (adjustMovements.length > 0) await StockMovement.insertMany(adjustMovements, { session });
+      }
+
+      return await PurchaseReturn.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, filtered, { new: true, session });
+    });
+
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -147,26 +242,36 @@ const deletePurchaseReturn = async (req, res) => {
     const ret = await PurchaseReturn.findOne({ _id: req.params.id, ...baseFilter });
     if (!ret) return res.status(404).json({ message: 'Purchase return not found' });
 
-    // Restore stock that was decremented during creation
-    for (const item of ret.items) {
-      if (item.product) {
-        const prod = await Product.findOne({ _id: item.product, user: req.user._id });
-        const balBefore = prod ? prod.stock : 0;
-        await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } });
-        await StockMovement.create({
-          user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
-          type: 'return', quantity: item.quantity,
-          balanceBefore: balBefore, balanceAfter: balBefore + item.quantity,
-          rate: item.rate, totalAmount: item.amount,
-          referenceType: 'PurchaseReturn', referenceId: ret._id,
-          referenceNumber: ret.returnNumber || ret._id,
-          description: `Purchase return deleted - stock restored`,
-          date: new Date(),
-        });
+    await withTransaction(async (session) => {
+      // Restore stock that was decremented during creation
+      for (const item of ret.items) {
+        if (item.product) {
+          const prod = await Product.findOne({ _id: item.product, user: req.user._id });
+          const balBefore = prod ? prod.stock : 0;
+          await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } }, { session });
+          const movement = new StockMovement({
+            user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
+            type: 'return', quantity: item.quantity,
+            balanceBefore: balBefore, balanceAfter: balBefore + item.quantity,
+            rate: item.rate, totalAmount: item.amount,
+            referenceType: 'PurchaseReturn', referenceId: ret._id,
+            referenceNumber: ret.returnNumber || ret._id,
+            description: `Purchase return deleted - stock restored`,
+            date: new Date(),
+          });
+          await movement.save({ session });
+        }
       }
-    }
 
-    await PurchaseReturn.findOneAndDelete({ _id: req.params.id, ...baseFilter });
+      // Reverse the supplier payable reduction applied at creation
+      if (ret.supplier && ret.totalAmount > 0) {
+        await Supplier.findByIdAndUpdate(ret.supplier, { $inc: { openingBalance: ret.totalAmount } }, { session });
+      }
+      // NOTE: if ret.supplier is not set, nothing was decremented at creation, so nothing to reverse.
+
+      await PurchaseReturn.findOneAndDelete({ _id: req.params.id, ...baseFilter }, { session });
+    });
+
     res.json({ message: 'Purchase return removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

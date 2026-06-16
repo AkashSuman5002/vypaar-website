@@ -18,6 +18,30 @@ const { startAutoBackup } = require('./services/backupService');
 const { startPaymentReminder } = require('./services/paymentReminderService');
 const { startServiceReminderCheck } = require('./services/serviceReminderScheduler');
 
+// Fail fast on missing critical config; warn loudly if not running in production mode
+// (so production safety doesn't silently depend on remembering to set NODE_ENV).
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET is not set. Refusing to start.');
+  process.exit(1);
+}
+if (process.env.NODE_ENV !== 'production') {
+  console.warn('WARNING: NODE_ENV is not "production". Cookies are not Secure and error details are verbose. Set NODE_ENV=production in your deploy environment.');
+}
+if (!process.env.CLIENT_URL) {
+  console.warn('WARNING: CLIENT_URL is not set — CORS and customer-facing links will default to http://localhost:3000.');
+}
+
+// Log unhandled rejections (don't crash on a single swallowed promise), but on a true
+// uncaught exception the process state is undefined — log and exit so a process manager
+// (pm2/systemd/Docker) can restart it cleanly instead of running in a corrupt state.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception — exiting:', err);
+  process.exit(1);
+});
+
 connectDB();
 
 // One-time migration: drop old unique index on {user, code} (now {user, business, code})
@@ -41,42 +65,9 @@ setTimeout(async () => {
   }
 }, 5000);
 
-// Migration: backfill business field on all existing data
-setTimeout(async () => {
-  try {
-    const db = mongoose.connection.db;
-    if (!db) { console.log('Migration skipped: no DB connection'); return; }
-    const Business = require('./models/Business');
-    const collections = ['sales', 'purchases', 'expenses', 'products', 'customers', 'suppliers', 'transactions', 'accounts', 'stockmovements', 'staff', 'godowns', 'partyrates', 'loyaltytransactions', 'parttransfers', 'receipts', 'settings'];
-    const users = await db.collection('users').find({}).toArray();
-    console.log(`Migration: found ${users.length} users`);
-    for (const u of users) {
-      const biz = await Business.findOne({ owner: u._id }).sort({ createdAt: -1 });
-      if (!biz) { console.log(`Migration: no business for user ${u.name || u.email}`); continue; }
-      console.log(`Migration: backfilling business "${biz.name}" (${biz._id}) for user ${u.name || u.email}`);
-      let totalBackfilled = 0;
-      for (const col of collections) {
-        try {
-          const result = await db.collection(col).updateMany(
-            { user: u._id, $or: [{ business: { $exists: false } }, { business: null }] },
-            { $set: { business: biz._id } }
-          );
-          if (result.modifiedCount > 0) {
-            console.log(`  Backfilled ${result.modifiedCount} ${col} docs`);
-            totalBackfilled += result.modifiedCount;
-          }
-        } catch (e) { /* collection may not exist */ }
-      }
-      console.log(`Migration: total ${totalBackfilled} docs backfilled for ${u.name || u.email}`);
-    }
-    console.log('Business backfill migration complete');
-  } catch (err) {
-    console.error('Business backfill error:', err.message);
-  }
-}, 8000);
-
 const app = express();
 
+// NOTE: In production, set CLIENT_URL env var to your deployed frontend URL (e.g. https://app.vyapar.com)
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000', credentials: true }));
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: '10mb' }));
@@ -127,6 +118,7 @@ app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/sales', require('./routes/saleRoutes'));
 app.use('/api/purchases', require('./routes/purchaseRoutes'));
 app.use('/api/suppliers', require('./routes/supplierRoutes'));
+app.use('/api/party-groups', require('./routes/partyGroupRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
@@ -139,6 +131,7 @@ app.use('/api/import', require('./routes/importRoutes'));
 app.use('/api/imports/barcode', require('./routes/barcodeRoutes'));
 app.use('/api/barcode-labels', require('./routes/barcodeLabelRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));
+app.use('/api/budgets', require('./routes/budgetRoutes'));
 app.use('/api/purchase-orders', require('./routes/purchaseOrderRoutes'));
 const purchaseReturnRoutes = require('./routes/purchaseReturnRoutes');
 app.use('/api/purchase-returns', (req, res, next) => {
@@ -155,6 +148,7 @@ app.use('/api/party-transfers', require('./routes/partyTransferRoutes'));
 app.use('/api/export', require('./routes/exportRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/ledger-notes', require('./routes/ledgerNoteRoutes'));
+app.use('/api/branches', require('./routes/branchRoutes'));
 app.use('/api/godowns', require('./routes/godownRoutes'));
 app.use('/api/audit', require('./routes/auditRoutes'));
 app.use('/api/party-rates', require('./routes/partyRateRoutes'));
@@ -166,6 +160,11 @@ app.use('/api/support', require('./routes/supportRoutes'));
 app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes'));
 app.use('/api/service-reminders', require('./routes/serviceReminderRoutes'));
+app.use('/api/manufacturing', require('./routes/manufacturingRoutes'));
+app.use('/api/godown-transfers', require('./routes/godownTransferRoutes'));
+app.use('/api/stock-reconciliations', require('./routes/stockReconciliationRoutes'));
+app.use('/api/gst-filing', require('./routes/gstFilingRoutes'));
+app.use('/api/currencies', require('./routes/currencyRoutes'));
 
 // Business setup with multer for logo upload
 const businessRoutes = require('./routes/businessRoutes');
@@ -193,8 +192,12 @@ app.use('/api/settings', (req, res, next) => {
 
 app.use(errorHandler);
 
-// Auto-migrate: run once in background (non-blocking)
+// Auto-migrate: runs once, deferred to not block login
 const migrateExistingUsers = async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const flagFile = path.join(__dirname, '.migration-done');
+  if (fs.existsSync(flagFile)) return;
   try {
     const fs = require('fs');
     const path = require('path');
@@ -259,15 +262,10 @@ startPaymentReminder();
 startServiceReminderCheck();
 
 const PORT = process.env.PORT || 5000;
-sqliteService.waitForInit().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    migrateExistingUsers();
-  });
-}).catch((err) => {
-  console.error('Failed to initialize sql.js, some features may not work:', err.message);
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT} (sql.js unavailable)`);
-    migrateExistingUsers();
-  });
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  // Initialize sqlite in background (non-blocking)
+  sqliteService.waitForInit().catch(() => {});
+  // Defer migration by 30s so login requests aren't blocked
+  setTimeout(() => migrateExistingUsers(), 30000);
 });

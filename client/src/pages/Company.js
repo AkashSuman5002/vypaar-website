@@ -4,18 +4,8 @@ import { Building2, Plus, CheckCircle, Edit3, Trash2, ArrowLeft, Phone, Mail, Ma
 import { businessAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
-
-const INDIAN_STATES = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-  'Andaman and Nicobar Islands', 'Chandigarh',
-  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
-  'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
-];
+import { validateMobile, validateEmail, validateGST, validatePAN, validatePincode, formatMobile, formatGST, formatPAN, formatPincode } from '../utils/validation';
+import StateDropdown from '../components/UI/StateDropdown';
 
 const BUSINESS_TYPES = [
   { value: 'retail', label: 'Retail' },
@@ -35,6 +25,7 @@ const Company = () => {
   const [editItem, setEditItem] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState({});
 
   const loadBusinesses = async () => {
     try {
@@ -79,7 +70,20 @@ const Company = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.companyName.trim()) { toast.error('Company name is required'); return; }
+    const newErrors = {};
+    if (!form.companyName.trim()) newErrors.companyName = 'Company name is required';
+    const phoneResult = validateMobile(form.phone);
+    if (!phoneResult.valid) newErrors.phone = phoneResult.error;
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+    const gstResult = validateGST(form.gstNumber);
+    if (!gstResult.valid) newErrors.gstNumber = gstResult.error;
+    const panResult = validatePAN(form.panNumber);
+    if (!panResult.valid) newErrors.panNumber = panResult.error;
+    const pinResult = validatePincode(form.pincode);
+    if (!pinResult.valid) newErrors.pincode = pinResult.error;
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
     setSubmitting(true);
     try {
       const payload = { ...form, name: form.companyName };
@@ -91,6 +95,7 @@ const Company = () => {
         toast.success('Company created');
       }
       setShowForm(false);
+      setErrors({});
       loadBusinesses();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed');
@@ -261,25 +266,29 @@ const Company = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Phone</label>
-                    <input type="tel" name="phone" value={form.phone} onChange={handleChange} placeholder="+91-XXXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                    <input type="tel" name="phone" value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: formatMobile(e.target.value) }))} placeholder="10-digit mobile number"
+                      className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${errors.phone ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+                    {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Email</label>
                     <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="company@email.com"
-                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                      className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${errors.email ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+                    {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">GSTIN</label>
-                    <input type="text" name="gstNumber" value={form.gstNumber} onChange={handleChange} placeholder="GSTIN Number"
-                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                    <input type="text" name="gstNumber" value={form.gstNumber} onChange={(e) => setForm(prev => ({ ...prev, gstNumber: formatGST(e.target.value) }))} placeholder="22AAAAA0000A1Z5" maxLength={15}
+                      className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${errors.gstNumber ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+                    {errors.gstNumber && <p className="mt-1 text-xs text-red-500">{errors.gstNumber}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PAN</label>
-                    <input type="text" name="panNumber" value={form.panNumber} onChange={handleChange} placeholder="PAN Number"
-                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                    <input type="text" name="panNumber" value={form.panNumber} onChange={(e) => setForm(prev => ({ ...prev, panNumber: formatPAN(e.target.value) }))} placeholder="ABCDE1234F" maxLength={10}
+                      className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${errors.panNumber ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+                    {errors.panNumber && <p className="mt-1 text-xs text-red-500">{errors.panNumber}</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -292,17 +301,14 @@ const Company = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Pincode</label>
-                    <input type="text" name="pincode" value={form.pincode} onChange={handleChange} placeholder="Pincode"
-                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                    <input type="text" name="pincode" value={form.pincode} onChange={(e) => setForm(prev => ({ ...prev, pincode: formatPincode(e.target.value) }))} placeholder="6-digit pincode" maxLength={6}
+                      className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${errors.pincode ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+                    {errors.pincode && <p className="mt-1 text-xs text-red-500">{errors.pincode}</p>}
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">State</label>
-                  <select name="state" value={form.state} onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
-                    <option value="">Select State</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <StateDropdown value={form.state} onChange={(val) => setForm(prev => ({ ...prev, state: val }))} placeholder="Select State" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Address</label>

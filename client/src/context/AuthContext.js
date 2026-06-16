@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
         const { data } = await authAPI.refresh();
         localStorage.setItem('user', JSON.stringify(data));
         setUser(data);
-        await fetchCsrfToken().catch(() => {});
+        await fetchCsrfToken().catch(() => null);
         await loadActiveBusiness();
       } catch {
         localStorage.removeItem('user');
@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    fetchCsrfToken().catch(() => {});
+    fetchCsrfToken().catch(() => null);
   }, []);
 
   const loadActiveBusiness = async () => {
@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(data));
     setUser(data);
     clearCache();
-    fetchCsrfToken().catch(() => {});
+    fetchCsrfToken().catch(() => null);
     setTimeout(() => loadActiveBusiness(), 500);
     return data;
   };
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }) => {
     const { data } = await authAPI.register({ name, email, password });
     localStorage.setItem('user', JSON.stringify(data));
     setUser(data);
-    fetchCsrfToken().catch(() => {});
+    fetchCsrfToken().catch(() => null);
     setTimeout(() => loadActiveBusiness(), 500);
     return data;
   };

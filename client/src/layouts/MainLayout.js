@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Header from '../components/Sidebar/Header';
+import Breadcrumbs from '../components/UI/Breadcrumbs';
 
 const MainLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -14,6 +15,7 @@ const MainLayout = () => {
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 lg:p-6 xl:p-8 max-w-7xl mx-auto">
+            <Breadcrumbs />
             <Outlet />
           </div>
         </main>

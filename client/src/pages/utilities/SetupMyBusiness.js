@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Building2, ArrowRight, FileText, Save } from 'lucide-react';
-import { businessAPI, settingAPI } from '../../services/api';
+import { businessAPI, settingAPI, BASE_URL } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { validateMobile, validateEmail, validateGST, formatMobile, formatGST } from '../../utils/validation';
+import StateDropdown from '../../components/UI/StateDropdown';
 
 const BUSINESS_CATEGORIES = [
   'Mobile & Accessories', 'Electronics & Appliances', 'Groceries & FMCG',
@@ -23,6 +25,7 @@ const SetupMyBusiness = () => {
     businessName: '', phone: '', category: 'Mobile & Accessories',
     gstNumber: '', address: '', state: '', email: '', ownerName: '',
   });
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     const load = async () => {
@@ -40,7 +43,7 @@ const SetupMyBusiness = () => {
           state: biz.state || '',
           category: biz.category || 'Mobile & Accessories',
         }));
-        if (biz.logo) setLogoPreview(biz.logo.startsWith('http') ? biz.logo : `http://localhost:5000${biz.logo}`);
+        if (biz.logo) setLogoPreview(biz.logo.startsWith('http') ? biz.logo : `${BASE_URL}${biz.logo}`);
       } catch {
         if (user) {
           setForm(prev => ({ ...prev, ownerName: user.name || '', email: user.email || '', phone: user.phone || '' }));
@@ -61,7 +64,13 @@ const SetupMyBusiness = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.businessName || !form.phone) { toast.error('Please fill in required fields'); return; }
+    const newErrors = {};
+    if (!form.businessName.trim()) newErrors.businessName = 'Business name is required';
+    if (!validateMobile(form.phone)) newErrors.phone = 'Enter a valid 10-digit mobile number';
+    if (form.email && !validateEmail(form.email)) newErrors.email = 'Enter a valid email address';
+    if (form.gstNumber && !validateGST(form.gstNumber)) newErrors.gstNumber = 'Enter a valid 15-character GST number';
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    setErrors({});
     setSubmitting(true);
     try {
       const fd = new FormData();
@@ -112,7 +121,8 @@ const SetupMyBusiness = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number *</label>
-                <input type="tel" value={form.phone} onChange={handleChange('phone')} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Phone Number" required />
+                <input type="tel" value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: formatMobile(e.target.value) }))} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.phone ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}`} placeholder="Phone Number" required />
+                {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -122,7 +132,8 @@ const SetupMyBusiness = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input type="email" value={form.email} onChange={handleChange('email')} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Email" />
+                <input type="email" value={form.email} onChange={handleChange('email')} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.email ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}`} placeholder="Email" />
+                {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
               </div>
             </div>
             <div>
@@ -133,7 +144,8 @@ const SetupMyBusiness = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">GST Number</label>
-              <input type="text" value={form.gstNumber} onChange={handleChange('gstNumber')} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="GST Number" />
+              <input type="text" value={form.gstNumber} onChange={(e) => setForm(prev => ({ ...prev, gstNumber: formatGST(e.target.value) }))} maxLength={15} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.gstNumber ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}`} placeholder="GST Number" />
+              {errors.gstNumber && <p className="text-red-500 text-xs mt-1">{errors.gstNumber}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
@@ -141,7 +153,7 @@ const SetupMyBusiness = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">State</label>
-              <input type="text" value={form.state} onChange={handleChange('state')} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="State" />
+              <StateDropdown value={form.state} onChange={handleChange('state')} />
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <button type="submit" disabled={submitting} className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 inline-flex items-center gap-2">

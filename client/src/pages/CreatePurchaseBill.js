@@ -7,13 +7,14 @@ import {
   StickyNote, ListChecks, Camera, GripVertical, MessageSquare, Mail, Link2,
   Calculator, Delete, Settings as SettingsIcon,
 } from 'lucide-react';
-import { purchaseAPI, supplierAPI, productAPI, fetchCsrfToken } from '../services/api';
+import { purchaseAPI, supplierAPI, productAPI, fetchCsrfToken, branchAPI } from '../services/api';
 import { formatCurrency } from '../utils/format';
+import { formatMobile, INDIAN_STATE_NAMES } from '../utils/validation';
 import useSettings from '../hooks/useSettings';
+import { shareToWhatsApp, shareViaEmail, copyToClipboard, generateShareContent, shareToSMS } from '../utils/shareUtils';
 
 const UNITS = ['NONE', 'Pcs', 'Kg', 'G', 'L', 'Ml', 'M', 'Box', 'Pack', 'Dozen', 'Pair', 'Set', 'Bag'];
 const DEFAULT_GST_RATES = [0, 3, 5, 12, 18, 28];
-const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu and Kashmir','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Ladakh','Lakshadweep','Puducherry'];
 const PAYMENT_MODES = ['Cash', 'Bank', 'UPI', 'Cheque', 'Card', 'Credit'];
 const PAYMENT_TYPES_EXTRA = ['NEFT', 'RTGS', 'IMPS', 'Wallet'];
 
@@ -53,7 +54,6 @@ const CreatePurchaseBill = () => {
   const [submitting, setSubmitting] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
-  const [openTabs, setOpenTabs] = useState([]);
   const [shareOpen, setShareOpen] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showDesc, setShowDesc] = useState(false);
@@ -61,31 +61,71 @@ const CreatePurchaseBill = () => {
   const [showCalculator, setShowCalculator] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [billFile, setBillFile] = useState(null);
+  const [branches, setBranches] = useState([]);
 
-  const [form, setForm] = useState({
-    party: '',
-    partyName: '',
-    phone: '',
-    billNumber: '',
-    billDate: new Date().toISOString().split('T')[0],
-    stateOfSupply: '',
-    items: [newItem()],
-    paymentType: 'Cash',
-    roundOffEnabled: false,
-    roundOff: 0,
-    terms: '',
-    description: '',
-    notes: '',
-    taxableAmount: 0,
-    discountTotal: 0,
-    taxTotal: 0,
-    totalAmount: 0,
-    paidAmount: 0,
-    paymentStatus: 'unpaid',
+  const emptyForm = () => ({
+    party: '', partyName: '', phone: '', billNumber: '',
+    billDate: new Date().toISOString().split('T')[0], stateOfSupply: '',
+    items: [newItem()], paymentType: 'Cash',
+    roundOffEnabled: false, roundOff: 0,
+    terms: '', description: '', notes: '',
+    taxableAmount: 0, discountTotal: 0, taxTotal: 0, totalAmount: 0,
+    paidAmount: 0, paymentStatus: 'unpaid', branch: '',
   });
 
+  const [tabs, setTabs] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('vyapar_purchase_tabs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('vyapar_purchase_active_tab');
+      if (saved && tabs.length > 0 && tabs.some(t => t.id === saved)) return saved;
+    } catch {}
+    return null;
+  });
+
+  const [form, setForm] = useState(emptyForm);
   const [payments, setPayments] = useState([]);
   const [activePaymentIdx, setActivePaymentIdx] = useState(0);
+
+  const persistTabs = useCallback((ts, activeId) => {
+    try {
+      sessionStorage.setItem('vyapar_purchase_tabs', JSON.stringify(ts));
+      if (activeId) sessionStorage.setItem('vyapar_purchase_active_tab', activeId);
+    } catch {}
+  }, []);
+
+  const saveCurrentTabToTabs = useCallback(() => {
+    setTabs(prev => {
+      const updated = prev.map(t =>
+        t.id === activeTabId ? { ...t, formData: JSON.parse(JSON.stringify(form)), payments: JSON.parse(JSON.stringify(payments)) } : t
+      );
+      persistTabs(updated, activeTabId);
+      return updated;
+    });
+  }, [activeTabId, form, payments, persistTabs]);
+
+  const loadTab = useCallback((tabId) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    setForm(JSON.parse(JSON.stringify(tab.formData || emptyForm())));
+    setPayments(JSON.parse(JSON.stringify(tab.payments || [])));
+    setActiveTabId(tabId);
+    persistTabs(tabs, tabId);
+  }, [tabs, persistTabs]);
+
+  const switchTab = useCallback((tabId) => {
+    if (tabId === activeTabId) return;
+    saveCurrentTabToTabs();
+    loadTab(tabId);
+  }, [activeTabId, saveCurrentTabToTabs, loadTab]);
 
   const currency = getPref('general', 'businessCurrency') || 'INR';
   const decimalPlaces = parseInt(getPref('general', 'amountDecimalPlaces') || '2');
@@ -97,18 +137,20 @@ const CreatePurchaseBill = () => {
     const init = async () => {
       try {
         await fetchCsrfToken();
-        const [supRes, prodRes] = await Promise.all([
+        const [supRes, prodRes, branchRes] = await Promise.all([
           supplierAPI.getAll().catch(() => ({ data: [] })),
           productAPI.getAll().catch(() => ({ data: [] })),
+          branchAPI.getAll().catch(() => ({ data: [] })),
         ]);
+        setBranches(Array.isArray(branchRes.data) ? branchRes.data : branchRes.data?.branches || []);
         const supData = Array.isArray(supRes.data) ? supRes.data : supRes.data?.suppliers || [];
-        const prodData = Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.products || [];
+        const prodData = Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.data || [];
         setSuppliers(supData);
         setProducts(prodData);
 
         if (isEdit) {
           const { data } = await purchaseAPI.getById(id);
-          setForm({
+          const editFormData = {
             party: data.supplier?._id || data.supplier || '',
             partyName: data.supplierName || '',
             phone: data.phone || '',
@@ -136,19 +178,18 @@ const CreatePurchaseBill = () => {
               lastPurchasePrice: 0,
             })) : [newItem()],
             paymentType: data.paymentMethod ? (data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1)) : 'Cash',
-            roundOffEnabled: false,
-            roundOff: 0,
-            terms: data.notes || '',
-            description: data.description || '',
-            notes: '',
-            taxableAmount: data.taxableAmount || 0,
-            discountTotal: 0,
+            roundOffEnabled: false, roundOff: 0,
+            terms: data.notes || '', description: data.description || '', notes: '',
+            taxableAmount: data.taxableAmount || 0, discountTotal: 0,
             taxTotal: (data.cgstTotal || 0) + (data.sgstTotal || 0) + (data.igstTotal || 0),
-            totalAmount: data.totalAmount || 0,
-            paidAmount: data.paidAmount || 0,
-            paymentStatus: data.paymentStatus || 'unpaid',
-          });
-          setOpenTabs([{ id: 'edit', label: `Edit Purchase${data.billNumber ? ' #' + data.billNumber : ''}` }]);
+            totalAmount: data.totalAmount || 0, paidAmount: data.paidAmount || 0,
+            paymentStatus: data.paymentStatus || 'unpaid', branch: '',
+          };
+          setForm(editFormData);
+          const editTab = { id: 'edit', label: `Edit Purchase${data.billNumber ? ' #' + data.billNumber : ''}`, formData: editFormData, payments: [] };
+          setTabs([editTab]);
+          setActiveTabId('edit');
+          persistTabs([editTab], 'edit');
           if (lastPurchasePriceEnabled && data.items?.length) {
             data.items.forEach((item, idx) => {
               const pid = item.product?._id || item.product;
@@ -162,14 +203,24 @@ const CreatePurchaseBill = () => {
                     }
                     return prev;
                   });
-                }).catch(() => {});
+                }).catch(() => null);
               }
             });
           }
         } else {
           const nextNum = `${purchaseOrderPrefix}${Date.now().toString(36).toUpperCase().slice(-6)}`;
-          setForm(f => ({ ...f, billNumber: nextNum }));
-          setOpenTabs([{ id: '1', label: 'Purchase #1' }]);
+          if (tabs.length === 0) {
+            const initialTab = { id: '1', label: 'Purchase #1', formData: { ...emptyForm(), billNumber: nextNum }, payments: [] };
+            setTabs([initialTab]);
+            setActiveTabId('1');
+            setForm(initialTab.formData);
+            persistTabs([initialTab], '1');
+          } else if (!activeTabId || !tabs.some(t => t.id === activeTabId)) {
+            setActiveTabId(tabs[0].id);
+            loadTab(tabs[0].id);
+          } else {
+            loadTab(activeTabId);
+          }
         }
       } catch (err) {
         toast.error('Failed to load data');
@@ -237,7 +288,7 @@ const CreatePurchaseBill = () => {
           }
           return prev;
         });
-      }).catch(() => {});
+      }).catch(() => null);
     }
   }, [products, calculateItem, lastPurchasePriceEnabled]);
 
@@ -268,31 +319,44 @@ const CreatePurchaseBill = () => {
   }, [totals.taxableAmount, totals.discountTotal, totals.taxTotal, totals.total]);
 
   const closeTab = (tabId) => {
-    if (tabId === '1' && !isEdit) return;
-    if (openTabs.length === 1) {
+    if (tabId === '1' && !isEdit && tabs.length === 1) {
       navigate('/purchases/bills');
       return;
     }
-    setOpenTabs(prev => prev.filter(t => t.id !== tabId));
+    if (tabs.length <= 1) {
+      navigate('/purchases/bills');
+      return;
+    }
+    const tab = tabs.find(t => t.id === tabId);
+    const isDirty = tab && JSON.stringify(tab.formData) !== JSON.stringify(emptyForm());
+    if (isDirty && !window.confirm(`Close "${tab.label}"? Unsaved changes will be lost.`)) return;
+    const remaining = tabs.filter(t => t.id !== tabId);
+    setTabs(remaining);
+    persistTabs(remaining, null);
+    if (activeTabId === tabId) {
+      const nextTab = remaining[0];
+      setForm(JSON.parse(JSON.stringify(nextTab.formData)));
+      setPayments(JSON.parse(JSON.stringify(nextTab.payments || [])));
+      setActiveTabId(nextTab.id);
+      persistTabs(remaining, nextTab.id);
+    }
     if (isEdit) navigate('/purchases/bills');
   };
 
   const addNewTab = () => {
-    const newNum = openTabs.length + 1;
-    setOpenTabs(prev => [...prev, { id: String(newNum), label: `Purchase #${newNum}` }]);
-    setForm({
-      party: '', partyName: '', phone: '',
-      billNumber: `${purchaseOrderPrefix}${Math.floor(1000 + Math.random() * 9000)}`,
-      billDate: new Date().toISOString().split('T')[0],
-      stateOfSupply: '',
-      items: [newItem()],
-      paymentType: 'Cash',
-      roundOffEnabled: false, roundOff: 0,
-      terms: '', description: '', notes: '',
-      taxableAmount: 0, discountTotal: 0, taxTotal: 0, totalAmount: 0,
-      paidAmount: 0, paymentStatus: 'unpaid',
-    });
-    navigate('/purchases/bills/new');
+    saveCurrentTabToTabs();
+    const newId = String(Date.now());
+    const newTab = {
+      id: newId,
+      label: `Purchase #${tabs.length + 1}`,
+      formData: { ...emptyForm(), billNumber: `${purchaseOrderPrefix}${Math.floor(1000 + Math.random() * 9000)}` },
+      payments: [],
+    };
+    setTabs(prev => [...prev, newTab]);
+    setForm(newTab.formData);
+    setPayments([]);
+    setActiveTabId(newId);
+    persistTabs([...tabs, newTab], newId);
   };
 
   const handleSave = async (action = 'save') => {
@@ -352,8 +416,12 @@ const CreatePurchaseBill = () => {
         res = await purchaseAPI.create(payload);
         toast.success('Purchase bill saved');
       }
+      saveCurrentTabToTabs();
       if (action === 'save_new') {
         addNewTab();
+      } else if (tabs.length > 1) {
+        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, formData: JSON.parse(JSON.stringify(form)), payments: JSON.parse(JSON.stringify(payments)) } : t));
+        toast.success('Purchase saved');
       } else {
         navigate('/purchases/bills');
       }
@@ -392,12 +460,16 @@ const CreatePurchaseBill = () => {
     <div className="bg-slate-50 dark:bg-slate-900 min-h-full">
       {/* Top Tabs Bar */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-3 pt-2 flex items-end gap-1 overflow-x-auto">
-        {openTabs.map(tab => (
-          <div key={tab.id}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 border-b-0 text-sm font-medium text-slate-700 dark:text-slate-200 rounded-t-lg whitespace-nowrap group min-w-[180px]"
+        {tabs.map(tab => (
+          <div key={tab.id} onClick={() => switchTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 border border-b-0 text-sm font-medium rounded-t-lg whitespace-nowrap group min-w-[180px] cursor-pointer transition-colors ${
+              activeTabId === tab.id
+                ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-blue-700 dark:text-blue-400 shadow-sm'
+                : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
           >
-            <span className="truncate">{tab.label}</span>
-            <button onClick={() => closeTab(tab.id)} className="ml-1 text-slate-400 hover:text-red-500 transition-colors">
+            <span className="truncate flex-1">{tab.label}</span>
+            <button onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }} className="ml-1 text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -446,7 +518,7 @@ const CreatePurchaseBill = () => {
           </div>
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Phone No.</label>
-            <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+            <input value={form.phone} onChange={e => setForm({ ...form, phone: formatMobile(e.target.value) })}
               placeholder="Phone No."
               className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />
@@ -472,7 +544,16 @@ const CreatePurchaseBill = () => {
               className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             >
               <option value="">Select</option>
-              {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              {INDIAN_STATE_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 text-right">Branch</label>
+            <select value={form.branch || ''} onChange={e => setForm({ ...form, branch: e.target.value })}
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            >
+              <option value="">No Branch</option>
+              {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
             </select>
           </div>
         </div>
@@ -779,12 +860,29 @@ const CreatePurchaseBill = () => {
                     className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-20 p-1"
                   >
                     {[
-                      { label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600' },
-                      { label: 'Email', icon: Mail, color: 'text-blue-600' },
-                      { label: 'Copy Link', icon: Link2, color: 'text-slate-600' },
-                      { label: 'SMS', icon: MessageSquare, color: 'text-violet-600' },
+                      { label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600', action: () => {
+                        const { message } = generateShareContent('purchase', form);
+                        shareToWhatsApp(message, form.phone);
+                        setShareOpen(false);
+                      }},
+                      { label: 'Email', icon: Mail, color: 'text-blue-600', action: () => {
+                        const { subject, message } = generateShareContent('purchase', form);
+                        shareViaEmail(subject, message);
+                        setShareOpen(false);
+                      }},
+                      { label: 'Copy Link', icon: Link2, color: 'text-slate-600', action: async () => {
+                        const { message } = generateShareContent('purchase', form);
+                        const copied = await copyToClipboard(message);
+                        toast.success(copied ? 'Copied to clipboard' : 'Failed to copy');
+                        setShareOpen(false);
+                      }},
+                      { label: 'SMS', icon: MessageSquare, color: 'text-violet-600', action: () => {
+                        const { message } = generateShareContent('purchase', form);
+                        shareToSMS(message);
+                        setShareOpen(false);
+                      }},
                     ].map(opt => (
-                      <button key={opt.label} onClick={() => { toast.info(`${opt.label} share coming soon`); setShareOpen(false); }}
+                      <button key={opt.label} onClick={opt.action}
                         className="w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 rounded flex items-center gap-2 transition-colors"
                       >
                         <opt.icon className={`w-3.5 h-3.5 ${opt.color}`} />
@@ -797,13 +895,23 @@ const CreatePurchaseBill = () => {
             </AnimatePresence>
           </div>
 
-          <button onClick={() => handleSave('save')}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-sm transition-colors"
-          >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {submitting ? 'Saving...' : 'Save'}
-          </button>
+          <div className="relative">
+            <button onClick={() => handleSave('save')}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-sm transition-colors"
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {submitting ? 'Saving...' : 'Save'}
+            </button>
+            {!submitting && (
+              <button onClick={() => handleSave('save_new')}
+                className="ml-1 px-2 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                title="Save & New Tab"
+              >
+                +
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

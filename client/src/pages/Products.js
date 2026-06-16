@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { productAPI } from '../services/api';
 import { godownAPI } from '../services/api';
 import { formatCurrency } from '../utils/format';
-import useSettings from '../hooks/useSettings';
+import useSettings, { saveCategory } from '../hooks/useSettings';
 import {
   Package, Plus, Download, Upload, Search, SlidersHorizontal,
   Pencil, Trash2, Eye, Copy, X, ChevronDown, ChevronLeft, ChevronRight,
@@ -110,14 +110,17 @@ const Products = () => {
   const defaultUnit = getPref('item', 'itemUnits');
   const defaultUnitAbbr = getPref('item', 'unit');
   const effectiveDefaultUnit = defaultUnit || defaultUnitAbbr || 'pcs';
+  const partyWiseRateEnabled = getPref('item', 'partyWiseRate');
+  const updateSalePriceAutoEnabled = getPref('item', 'updateSalePriceAuto');
+  const calculateTaxOnMRPEnabled = getPref('item', 'calculateTaxOnMRP');
 
   const [form, setForm] = useState({
     name: '', itemType: 'Product', sku: '', category: '', brand: '', unit: effectiveDefaultUnit, hsn: '', description: '',
     sellingPrice: '', discountType: 'none', discountValue: '', purchasePrice: '', supplier: '',
-    wholesalePrices: [],
+    wholesalePrices: [], partyPrices: [],
     trackInventory: true, openingStock: '', currentStock: '', minStock: 5, warehouse: '', storageLocation: '',
     gstRate: 0, taxIncluded: false, cgst: 0, sgst: 0, igst: 0,
-    modelNo: '', size: '', serialNo: '', batchNo: '', expiryDate: '', mfgDate: '', mrp: 0,
+    modelNo: '', size: '', serialNo: '', batchNo: '', expiryDate: '', mfgDate: '', mrp: 0, barcode: '',
   });
   const [activeTab, setActiveTab] = useState('pricing');
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -131,21 +134,30 @@ const Products = () => {
         productAPI.getAll(),
         godownEnabled ? godownAPI.getAll() : Promise.resolve({ data: [] }),
       ]);
-      setProducts(productsRes.data);
-      setGodowns(godownsRes.data);
+      setProducts(Array.isArray(productsRes.data) ? productsRes.data : productsRes.data?.data || []);
+      setGodowns(Array.isArray(godownsRes.data) ? godownsRes.data : godownsRes.data?.data || []);
     } catch { toast.error('Failed to load products'); }
     finally { setLoading(false); }
   };
+
+  const handleSettingToggle = useCallback(async (category, key, currentValue) => {
+    const newValue = !currentValue;
+    try {
+      await saveCategory(category, { [key]: newValue });
+    } catch {
+      toast.error('Failed to update setting');
+    }
+  }, []);
 
   const resetForm = () => {
     const defaultType = productServicePref === 'Service' ? 'Service' : 'Product';
     setForm({
       name: '', itemType: defaultType, sku: '', category: '', brand: '', unit: effectiveDefaultUnit, hsn: '', description: '',
       sellingPrice: '', discountType: 'none', discountValue: '', purchasePrice: '', supplier: '',
-      wholesalePrices: [],
+      wholesalePrices: [], partyPrices: [],
       trackInventory: true, openingStock: '', currentStock: '', minStock: 5, warehouse: '', storageLocation: '',
       gstRate: 0, taxIncluded: false, cgst: 0, sgst: 0, igst: 0,
-      modelNo: '', size: '', serialNo: '', batchNo: '', expiryDate: '', mfgDate: '', mrp: 0,
+      modelNo: '', size: '', serialNo: '', batchNo: '', expiryDate: '', mfgDate: '', mrp: 0, barcode: '',
     });
     setImages(prev => { prev.forEach(u => { if (u.startsWith('blob:')) URL.revokeObjectURL(u); }); return []; });
     setEditingItem(null);
@@ -160,20 +172,21 @@ const Products = () => {
   const openEditModal = (product) => {
     setEditingItem(product);
     setForm({
-      name: product.name || '', itemType: product.itemType || 'Product', sku: product.sku || '',
+      name: product.name || '', itemType: product.type === 'service' ? 'Service' : 'Product', sku: product.sku || '',
       category: product.category || '', brand: product.brand || '', unit: product.unit || 'pcs',
       hsn: product.hsn || '', description: product.description || '',
-      sellingPrice: product.price || '', discountType: 'none', discountValue: '',
+      sellingPrice: product.price || '', discountType: product.discountType || 'none', discountValue: product.discountValue || '',
       purchasePrice: product.costPrice || '', supplier: product.supplier || '',
-      wholesalePrices: product.wholesalePrices || [],
-      trackInventory: true, openingStock: '', currentStock: product.stock || '',
+      wholesalePrices: product.wholesalePrices || [], partyPrices: product.partyPrices || [],
+      trackInventory: true, openingStock: product.openingStock || '', currentStock: product.stock || '',
       minStock: product.minStock || 5, warehouse: product.warehouse || '',
       storageLocation: product.storageLocation || '',
-      gstRate: product.gstRate || 0, taxIncluded: false, cgst: product.cgst || 0,
+      gstRate: product.gstRate || 0, taxIncluded: product.taxIncluded || false, cgst: product.cgst || 0,
       sgst: product.sgst || 0, igst: product.igst || 0,
       modelNo: product.modelNo || '', size: product.size || '',
       serialNo: product.serialNo || '', batchNo: product.batchNo || '',
       expiryDate: product.expiryDate || '', mfgDate: product.mfgDate || '', mrp: product.mrp || 0,
+      barcode: product.barcode || '',
     });
     if (product.image) setImages([product.image]);
     setShowModal(true);
@@ -202,6 +215,9 @@ const Products = () => {
       modelNo: form.modelNo, size: form.size, serialNo: form.serialNo,
       batchNo: form.batchNo, expiryDate: form.expiryDate, mfgDate: form.mfgDate,
       mrp: parseFloat(form.mrp) || 0,
+      discountType: form.discountType, discountValue: parseFloat(form.discountValue) || 0,
+      openingStock: parseInt(form.openingStock) || 0, barcode: form.barcode,
+      taxIncluded: form.taxIncluded,
     };
     try {
       if (editingItem) {
@@ -219,7 +235,7 @@ const Products = () => {
         resetForm();
         loadProducts();
       }
-    } catch { toast.error('Operation failed'); }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Operation failed'); }
   };
 
   const handleDelete = async (id) => {
@@ -258,20 +274,20 @@ const Products = () => {
   // Computed values
   const inventoryValue = products.reduce((s, p) => s + (p.stock || 0) * (p.costPrice || 0), 0);
   const lowStockCount = products.filter(p => p.stock !== undefined && p.stock !== null && p.stock > 0 && p.stock <= (p.minStock || 5)).length;
-  const serviceCount = products.filter(p => p.itemType === 'Service').length;
-  const productCount = products.filter(p => p.itemType !== 'Service').length;
+  const serviceCount = products.filter(p => p.type === 'service').length;
+  const productCount = products.filter(p => p.type !== 'service').length;
 
   const filtered = useMemo(() => {
     return products.filter(p => {
       const q = searchQuery.toLowerCase();
       const matchSearch = !q || p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.category?.toLowerCase().includes(q) || p.hsn?.includes(q);
       const matchCategory = categoryFilter === 'All' || p.category === categoryFilter;
-      const matchType = typeFilter === 'All Items' || (typeFilter === 'Products' && p.itemType !== 'Service') || (typeFilter === 'Services' && p.itemType === 'Service');
+      const matchType = typeFilter === 'All Items' || (typeFilter === 'Products' && p.type !== 'service') || (typeFilter === 'Services' && p.type === 'service');
       const matchStock = stockFilter === 'All' || (stockFilter === 'In Stock' && p.stock > (p.minStock || 5)) || (stockFilter === 'Low Stock' && p.stock > 0 && p.stock <= (p.minStock || 5)) || (stockFilter === 'Out of Stock' && (!p.stock || p.stock === 0));
       let matchProductService = true;
       if (productServicePref && productServicePref !== 'Both') {
         const typeFilter2 = productServicePref === 'Product' ? 'product' : 'service';
-        matchProductService = (p.itemType || 'product').toLowerCase() === typeFilter2;
+        matchProductService = (p.type || 'product') === typeFilter2;
       }
       return matchSearch && matchCategory && matchType && matchStock && matchProductService;
     });
@@ -293,7 +309,7 @@ const Products = () => {
   const TableHeader = () => (
     <thead>
       <tr className="border-b border-slate-100 dark:border-gray-700">
-        {['Item', 'Category', 'HSN/SAC', 'Unit', 'Selling Price', 'Purchase Price', ...(wholesalePriceEnabled ? ['Wholesale Price'] : []), ...(stockEnabled ? ['Stock'] : []), 'GST', ...(serialTrackingEnabled ? ['Serial No'] : []), ...(batchTrackingEnabled ? ['Batch No'] : []), ...(expiryDateEnabled ? ['Expiry'] : []), ...(modelNoEnabled ? ['Model No'] : []), ...(sizeEnabled ? ['Size'] : []), ...(manufacturingEnabled ? ['Mfg Date'] : []), ...(godownEnabled ? ['Godown'] : []), 'Status', ''].map(h => (
+        {['Item', 'Category', ...(hsnSacEnabled ? ['HSN/SAC'] : []), 'Unit', 'Selling Price', 'Purchase Price', ...(wholesalePriceEnabled ? ['Wholesale Price'] : []), ...(stockEnabled ? ['Stock'] : []), 'GST', ...(serialTrackingEnabled ? ['Serial No'] : []), ...(batchTrackingEnabled ? ['Batch No'] : []), ...(expiryDateEnabled ? ['Expiry'] : []), ...(modelNoEnabled ? ['Model No'] : []), ...(sizeEnabled ? ['Size'] : []), ...(manufacturingEnabled ? ['Mfg Date'] : []), ...(godownEnabled ? ['Godown'] : []), 'Status', ''].map(h => (
           <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">{h}</th>
         ))}
       </tr>
@@ -303,7 +319,7 @@ const Products = () => {
   const TableRow = ({ product, idx }) => {
     const stockStatus = getStockStatus(product);
     const isSelected = selectedProducts.includes(product._id);
-    const Icon = product.itemType === 'Service' ? ClipboardList : Package;
+    const Icon = product.type === 'service' ? ClipboardList : Package;
     return (
       <motion.tr key={product._id} variants={itemVariants} layout
         className={`group border-b border-slate-50 dark:border-gray-700/50 hover:bg-slate-50/50 dark:hover:bg-gray-700/20 transition-colors ${
@@ -334,9 +350,11 @@ const Products = () => {
         <td className="px-4 py-3">
           <span className="text-sm text-slate-600 dark:text-slate-400">{product.category || '—'}</span>
         </td>
+        {hsnSacEnabled && (
         <td className="px-4 py-3">
           <span className="text-sm text-slate-600 dark:text-slate-400 font-mono">{product.hsn || '—'}</span>
         </td>
+        )}
         <td className="px-4 py-3">
           <span className="text-sm text-slate-600 dark:text-slate-400">{product.unit || 'pcs'}</span>
         </td>
@@ -571,7 +589,7 @@ const Products = () => {
           <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {paginated.map(product => {
               const stockStatus = getStockStatus(product);
-              const Icon = product.itemType === 'Service' ? ClipboardList : Package;
+    const Icon = product.type === 'service' ? ClipboardList : Package;
               return (
                 <motion.div key={product._id} layout
                   className="group bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-4 hover:shadow-card-hover transition-all hover:-translate-y-0.5"
@@ -677,22 +695,33 @@ const Products = () => {
                         <span className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1.5">Item Custom Fields <HelpCircle className="w-3 h-3 text-slate-400" /></span>
                         <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                       </button>
-                      <div className="flex items-center justify-between px-3 py-2.5">
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Wholesale Price</span>
-                        <input type="checkbox" checked={!!wholesalePriceEnabled} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600" />
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2.5">
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Barcode Scan</span>
-                        <input type="checkbox" checked={!!barcodeEnabled} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600" />
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2.5">
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Item Category</span>
-                        <input type="checkbox" checked={!!itemCategoryEnabled} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600" />
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2.5">
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Description</span>
-                        <input type="checkbox" checked={!!descriptionEnabled} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600" />
-                      </div>
+                      {[
+                        { label: 'Wholesale Price', key: 'wholesalePrice', category: 'item', value: wholesalePriceEnabled },
+                        { label: 'Barcode Scan', key: 'barcodeScan', category: 'item', value: barcodeEnabled },
+                        { label: 'Item Category', key: 'itemCategory', category: 'item', value: itemCategoryEnabled },
+                        { label: 'Description', key: 'description', category: 'item', value: descriptionEnabled },
+                        { label: 'HSN/SAC Code', key: 'hsnSac', category: 'taxes', value: hsnSacEnabled },
+                        { label: 'MRP', key: 'mrp', category: 'item', value: mrpEnabled },
+                        { label: 'Stock Maintenance', key: 'stockMaintenance', category: 'item', value: stockEnabled },
+                        { label: 'Item Wise Tax', key: 'itemWiseTax', category: 'item', value: itemWiseTaxEnabled },
+                        { label: 'Item Wise Discount', key: 'itemWiseDiscount', category: 'item', value: itemWiseDiscountEnabled },
+                        { label: 'Size', key: 'size', category: 'item', value: sizeEnabled },
+                        { label: 'Model Number', key: 'modelNumber', category: 'item', value: modelNoEnabled },
+                        { label: 'Serial Number Tracking', key: 'serialNumberTracking', category: 'item', value: serialTrackingEnabled },
+                        { label: 'Batch Tracking', key: 'batchTracking', category: 'item', value: batchTrackingEnabled },
+                        { label: 'Expiry Date', key: 'expiryDate', category: 'item', value: expiryDateEnabled },
+                        { label: 'Manufacturing Date', key: 'manufacturingDate', category: 'item', value: mfgDateEnabled },
+                      ].map(({ label, key, category, value }) => (
+                        <div key={key} className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-gray-800 rounded">
+                          <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
+                          <button
+                            onClick={() => handleSettingToggle(category, key, !!value)}
+                            className={`relative w-9 h-5 rounded-full transition-colors ${value ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm ${value ? 'translate-x-4' : ''}`} />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                     <div className="border-t border-slate-200 dark:border-gray-700 p-3">
                       <button onClick={() => navigate('/settings')} className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-blue-600 hover:bg-blue-50 rounded font-medium">
@@ -710,14 +739,13 @@ const Products = () => {
                   <div className="flex items-center gap-4">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{editingItem ? 'Edit Item' : 'Add Item'}</h3>
                     {(!productServicePref || productServicePref === 'Both') && (
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium ${form.itemType === 'Product' ? 'text-blue-600' : 'text-slate-500'}`}>Product</span>
-                      <button onClick={() => handleInputChange('itemType', form.itemType === 'Product' ? 'Service' : 'Product')}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${form.itemType === 'Service' ? 'bg-blue-600' : 'bg-slate-300'}`}
-                      >
-                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.itemType === 'Service' ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                      </button>
-                      <span className={`text-sm font-medium ${form.itemType === 'Service' ? 'text-blue-600' : 'text-slate-500'}`}>Service</span>
+                    <div className="flex items-center bg-slate-100 dark:bg-gray-700 rounded-lg p-0.5">
+                      <button onClick={() => handleInputChange('itemType', 'Product')}
+                        className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${form.itemType === 'Product' ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >Product</button>
+                      <button onClick={() => handleInputChange('itemType', 'Service')}
+                        className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${form.itemType === 'Service' ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >Service</button>
                     </div>
                     )}
                   </div>
@@ -800,6 +828,21 @@ const Products = () => {
                     </div>
                   </div>
 
+                  {barcodeEnabled && (
+                    <div className="grid grid-cols-12 gap-3">
+                      <div className="col-span-12 sm:col-span-6">
+                        <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                          <Barcode className="w-3 h-3 inline mr-1" />
+                          Barcode
+                        </label>
+                        <input type="text" value={form.barcode || ''} onChange={e => handleInputChange('barcode', e.target.value)}
+                          placeholder="Scan or enter barcode"
+                          className="w-full px-3 py-2.5 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Optional description/brand fields if enabled */}
                       {(descriptionEnabled || form.brand || form.size || modelNoEnabled) && (
                     <div className="grid grid-cols-12 gap-3">
@@ -868,9 +911,11 @@ const Products = () => {
                               placeholder="Sale Price"
                               className="flex-1 min-w-0 px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-l bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
-                            <select className="px-2 py-2 text-xs border border-l-0 border-slate-300 dark:border-gray-600 rounded-r bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-300 focus:outline-none">
-                              <option>Without Tax</option>
-                              <option>With Tax</option>
+                            <select value={form.taxIncluded ? 'with' : 'without'}
+                              onChange={e => handleInputChange('taxIncluded', e.target.value === 'with')}
+                              className="px-2 py-2 text-xs border border-l-0 border-slate-300 dark:border-gray-600 rounded-r bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-300 focus:outline-none">
+                              <option value="without">Without Tax</option>
+                              <option value="with">With Tax</option>
                             </select>
                           </div>
                           {itemWiseDiscountEnabled && (
@@ -928,6 +973,9 @@ const Products = () => {
                               placeholder="Purchase Price"
                               className="flex-1 min-w-0 px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-l bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
+                            {/* NOTE: left uncontrolled — there is no purchase-price tax-inclusive flag in form state
+                                (only `taxIncluded`, which is wired to the sale-price select above). Wire up once a
+                                dedicated purchaseTaxIncluded field exists in the form/model. */}
                             <select className="px-2 py-2 text-xs border border-l-0 border-slate-300 dark:border-gray-600 rounded-r bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-300 focus:outline-none">
                               <option>Without Tax</option>
                               <option>With Tax</option>
@@ -1041,7 +1089,7 @@ const Products = () => {
                         </div>
                       )}
 
-                      {(serialTrackingEnabled || batchTrackingEnabled || expiryDateEnabled) && form.trackInventory && (
+                      {(serialTrackingEnabled || batchTrackingEnabled || expiryDateEnabled || mfgDateEnabled) && form.trackInventory && (
                         <div className="grid grid-cols-12 gap-3">
                           {serialTrackingEnabled && (
                             <div className="col-span-12 sm:col-span-6">
@@ -1063,6 +1111,14 @@ const Products = () => {
                             <div className="col-span-12 sm:col-span-6">
                               <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">Expiry Date</label>
                               <input type="date" value={form.expiryDate} onChange={e => handleInputChange('expiryDate', e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              />
+                            </div>
+                          )}
+                          {mfgDateEnabled && (
+                            <div className="col-span-12 sm:col-span-6">
+                              <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">Manufacturing Date</label>
+                              <input type="date" value={form.mfgDate} onChange={e => handleInputChange('mfgDate', e.target.value)}
                                 className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                               />
                             </div>
@@ -1123,7 +1179,7 @@ const ProductDetailModal = ({ productId, onClose }) => {
   if (!product) return null;
 
   const isLowStock = product.stock <= (product.minStock || 5);
-  const Icon = product.itemType === 'Service' ? ClipboardList : Package;
+  const Icon = product.type === 'service' ? ClipboardList : Package;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}

@@ -21,7 +21,7 @@ const UpdateItemsInBulk = () => {
     setLoading(true);
     try {
       const res = await productAPI.getAll();
-      setProducts(res.data.products || res.data || []);
+      setProducts(res.data?.data || []);
     } catch { toast.error('Failed to load items'); }
     finally { setLoading(false); }
   }, []);

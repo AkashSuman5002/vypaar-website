@@ -37,12 +37,13 @@ const AllTransactionsReport = () => {
     const fetchData = async () => {
       try {
         setError(null);
-        const res = await transactionAPI.getAll();
-        if (!Array.isArray(res.data)) {
+        const res = await transactionAPI.getAll({ limit: 5000 });
+        const list = res.data?.data;
+        if (!Array.isArray(list)) {
           setError('Unexpected response format');
           return;
         }
-        const mapped = res.data.map(item => ({
+        const mapped = list.map(item => ({
           ...item,
           type: typeMap[item.type] || item.type,
           voucher: item.reference,

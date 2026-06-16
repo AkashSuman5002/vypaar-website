@@ -4,6 +4,8 @@ const Purchase = require('../models/Purchase');
 const Notification = require('../models/Notification');
 const Setting = require('../models/Setting');
 const ServiceReminder = require('../models/ServiceReminder');
+const { sendEmailNotification } = require('./emailService');
+const { sendPaymentReminderSMS } = require('./smsService');
 
 const checkPaymentReminders = async () => {
   try {
@@ -12,7 +14,7 @@ const checkPaymentReminders = async () => {
         { 'preferences.party.paymentReminder': true },
         { 'preferences.serviceReminders.enableReminders': true },
       ],
-    }).select('user preferences.party.reminderDays preferences.serviceReminders');
+    }).select('user email phone preferences.party.reminderDays preferences.serviceReminders preferences.notifications');
 
     for (const userSetting of users) {
       const userId = userSetting.user;
@@ -31,7 +33,7 @@ const checkPaymentReminders = async () => {
         user: userId,
         paymentStatus: { $in: ['unpaid', 'partial'] },
         dueDate: { $lte: dueDateThreshold, $gte: new Date() },
-      }).populate('customer', 'name phone');
+      }).populate('customer', 'name phone email');
 
       for (const sale of overdueSales) {
         const existing = await Notification.findOne({
@@ -43,15 +45,43 @@ const checkPaymentReminders = async () => {
         if (existing) continue;
 
         const balance = (sale.totalAmount || 0) - (sale.paidAmount || 0);
+        const customerName = sale.customer?.name || sale.customerName || 'Customer';
+        const invoiceNum = sale.invoiceNumber || '';
+        const dueDateStr = sale.dueDate ? new Date(sale.dueDate).toLocaleDateString() : 'N/A';
+
         await Notification.create({
           user: userId,
           type: 'payment_due',
           title: 'Payment Reminder',
-          message: `${sale.customer?.name || sale.customerName || 'Customer'} has pending payment of ₹${balance.toFixed(2)} for invoice ${sale.invoiceNumber || ''}. Due: ${sale.dueDate ? new Date(sale.dueDate).toLocaleDateString() : 'N/A'}`,
+          message: `${customerName} has pending payment of ₹${balance.toFixed(2)} for invoice ${invoiceNum}. Due: ${dueDateStr}`,
           referenceModel: 'payment-reminder',
           referenceId: sale._id,
           read: false,
         });
+
+        const notifPrefs = userSetting.preferences?.notifications;
+        const customerEmail = sale.customer?.email || sale.customerEmail;
+        if (customerEmail && notifPrefs?.email?.enabled) {
+          try {
+            await sendEmailNotification(userId, {
+              to: customerEmail,
+              subject: `Payment Reminder - Invoice ${invoiceNum}`,
+              html: `<h2>Payment Reminder</h2><p>Dear ${customerName},</p><p>This is a reminder that your payment of <strong>₹${balance.toFixed(2)}</strong> is pending.</p><p>Invoice Number: ${invoiceNum}</p><p>Amount Due: ₹${balance.toFixed(2)}</p><p>Due Date: ${dueDateStr}</p><p>Please make the payment at your earliest convenience.</p>`,
+            });
+          } catch (e) {}
+        }
+
+        const customerPhone = sale.customer?.phone || sale.customerPhone;
+        if (customerPhone && notifPrefs?.sms?.enabled) {
+          try {
+            await sendPaymentReminderSMS(userId, {
+              customerPhone,
+              invoiceNumber: invoiceNum,
+              amount: balance.toFixed(2),
+              dueDate: dueDateStr,
+            });
+          } catch (e) {}
+        }
       }
 
       // Check overdue purchases
@@ -59,7 +89,7 @@ const checkPaymentReminders = async () => {
         user: userId,
         paymentStatus: { $in: ['unpaid', 'partial'] },
         dueDate: { $lte: dueDateThreshold, $gte: new Date() },
-      }).populate('supplier', 'name phone');
+      }).populate('supplier', 'name phone email');
 
       for (const purchase of overduePurchases) {
         const existing = await Notification.findOne({
@@ -71,15 +101,43 @@ const checkPaymentReminders = async () => {
         if (existing) continue;
 
         const balance = (purchase.totalAmount || 0) - (purchase.paidAmount || 0);
+        const supplierName = purchase.supplier?.name || purchase.supplierName || 'Supplier';
+        const billNum = purchase.billNumber || '';
+        const dueDateStr = purchase.dueDate ? new Date(purchase.dueDate).toLocaleDateString() : 'N/A';
+
         await Notification.create({
           user: userId,
           type: 'payment_due',
           title: 'Payment Reminder',
-          message: `Pending payment of ₹${balance.toFixed(2)} to ${purchase.supplier?.name || purchase.supplierName || 'Supplier'} for bill ${purchase.billNumber || ''}. Due: ${purchase.dueDate ? new Date(purchase.dueDate).toLocaleDateString() : 'N/A'}`,
+          message: `Pending payment of ₹${balance.toFixed(2)} to ${supplierName} for bill ${billNum}. Due: ${dueDateStr}`,
           referenceModel: 'payment-reminder',
           referenceId: purchase._id,
           read: false,
         });
+
+        const notifPrefs = userSetting.preferences?.notifications;
+        const ownerEmail = userSetting.email;
+        if (ownerEmail && notifPrefs?.email?.enabled) {
+          try {
+            await sendEmailNotification(userId, {
+              to: ownerEmail,
+              subject: `Payment Due to Supplier - Bill ${billNum}`,
+              html: `<h2>Payment Due to Supplier</h2><p>You have a pending payment of <strong>₹${balance.toFixed(2)}</strong> to ${supplierName}.</p><p>Bill Number: ${billNum}</p><p>Amount Due: ₹${balance.toFixed(2)}</p><p>Due Date: ${dueDateStr}</p><p>Please process the payment at your earliest.</p>`,
+            });
+          } catch (e) {}
+        }
+
+        const ownerPhone = userSetting.phone;
+        if (ownerPhone && notifPrefs?.sms?.enabled) {
+          try {
+            await sendPaymentReminderSMS(userId, {
+              customerPhone: ownerPhone,
+              invoiceNumber: billNum,
+              amount: balance.toFixed(2),
+              dueDate: dueDateStr,
+            });
+          } catch (e) {}
+        }
       }
 
       // Auto follow-up via WhatsApp (if serviceReminders.autoFollowUp enabled)

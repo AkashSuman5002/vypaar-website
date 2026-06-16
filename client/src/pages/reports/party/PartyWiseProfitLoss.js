@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Download, Printer } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 
@@ -56,8 +57,8 @@ const PartyWiseProfitLoss = () => {
           </div>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search party..." className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-3 py-1.5 text-xs w-[150px]" />
-          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70"><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
-          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70" onClick={() => { const table = document.querySelector('table'); if (!table) return toast.info('No data to export'); const rows = Array.from(table.querySelectorAll('tr')); const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'report.csv'; a.click(); URL.revokeObjectURL(url); toast.success('Exported'); }}><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70" onClick={() => window.print()}><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
         </div>
       </div>
 

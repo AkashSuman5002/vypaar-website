@@ -4,22 +4,31 @@ import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 import { reportAPI } from '../../../services/api';
 import { exportToExcel, printReport } from '../../../utils/exportUtils';
 
+const currentYear = new Date().getFullYear();
+const fyStart = new Date().getMonth() >= 3 ? `${currentYear}-04-01` : `${currentYear - 1}-04-01`;
+const today = new Date().toISOString().split('T')[0];
+
 const GSTReport = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState(fyStart);
+  const [dateTo, setDateTo] = useState(today);
   const filteredData = data.filter(d => !search || Object.values(d).some(v => String(v).toLowerCase().includes(search.toLowerCase())));
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await reportAPI.getGST();
+        const params = {};
+        if (dateFrom) params.dateFrom = dateFrom;
+        if (dateTo) params.dateTo = dateTo;
+        const res = await reportAPI.getGST(params);
         setData(res.data.gstSummary || []);
       } catch (err) { console.error('Failed to load GST report', err); }
       finally { setLoading(false); }
     };
     fetchData();
-  }, []);
+  }, [dateFrom, dateTo]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -28,13 +37,21 @@ const GSTReport = () => {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-gray-900 dark:text-[#F8FAFC]">GST Report</h2>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-[#94A3B8]">
+            <span>Between</span>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-2 py-1.5 w-[110px] text-xs" />
+            <span>To</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-2 py-1.5 w-[110px] text-xs" />
+          </div>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 dark:text-[#64748B]" />
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search..." className="pl-7 pr-3 py-1.5 border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] rounded text-xs w-[180px] placeholder-gray-500 dark:placeholder-[#64748B]" />
           </div>
-          <button onClick={() => exportToExcel(filteredData, [{key:'rate',label:'GST Rate'},{key:'taxableAmount',label:'Taxable Value'},{key:'cgst',label:'CGST'},{key:'sgst',label:'SGST'},{key:'igst',label:'IGST'}], 'GST Report')} className="p-1.5 border border-gray-300 dark:border-[#334155] rounded hover:bg-gray-50 dark:hover:bg-[#1E293B]"><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
-          <button onClick={printReport} className="p-1.5 border border-gray-300 dark:border-[#334155] rounded hover:bg-gray-50 dark:hover:bg-[#1E293B]"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button onClick={() => exportToExcel(filteredData, [{key:'rate',label:'GST Rate'},{key:'taxableAmount',label:'Taxable Value'},{key:'cgst',label:'CGST'},{key:'sgst',label:'SGST'},{key:'igst',label:'IGST'}], 'GST Report')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+          <button onClick={printReport} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
         </div>
       </div>
       <div className="border border-gray-200 dark:border-[#334155] rounded-xl overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>

@@ -428,6 +428,78 @@ const Dashboard = () => {
           </div>
         </div>
       </motion.div>
+
+      {/* Year-over-Year Comparison */}
+      {data?.yoyComparison && (
+        <motion.div variants={item} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-5">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Year-over-Year Comparison</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-xs text-slate-500">This Year Sales</p>
+              <p className="text-lg font-bold text-slate-900">{formatCurrency(data.yoyComparison.thisYear.sales)}</p>
+              <p className="text-xs text-slate-400">{data.yoyComparison.thisYear.salesCount} invoices</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-slate-500">Last Year Sales</p>
+              <p className="text-lg font-bold text-slate-600">{formatCurrency(data.yoyComparison.lastYear.sales)}</p>
+              <p className="text-xs text-slate-400">{data.yoyComparison.lastYear.salesCount} invoices</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-slate-500">This Year Purchases</p>
+              <p className="text-lg font-bold text-slate-900">{formatCurrency(data.yoyComparison.thisYear.purchases)}</p>
+              <p className="text-xs text-slate-400">{data.yoyComparison.thisYear.purchasesCount} bills</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-slate-500">Last Year Purchases</p>
+              <p className="text-lg font-bold text-slate-600">{formatCurrency(data.yoyComparison.lastYear.purchases)}</p>
+              <p className="text-xs text-slate-400">{data.yoyComparison.lastYear.purchasesCount} bills</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Top Selling Items */}
+      {data?.topItems?.length > 0 && (
+        <motion.div variants={item} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-5">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Top Selling Items</h3>
+          <div className="space-y-2">
+            {data.topItems.slice(0, 5).map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between py-2 border-b border-slate-50 dark:border-gray-700/50 last:border-0">
+                <div className="flex items-center gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-xs font-bold text-blue-600">{idx + 1}</span>
+                  <span className="text-sm text-slate-900 dark:text-slate-100">{item.name}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-slate-900">{formatCurrency(item.revenue)}</p>
+                  <p className="text-xs text-slate-400">{item.quantity} units</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Receivable Aging */}
+      {data?.agingBuckets && (
+        <motion.div variants={item} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-5">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Receivable Aging</h3>
+          <div className="grid grid-cols-5 gap-2">
+            {[
+              { label: 'Current', value: data.agingBuckets.current, color: 'bg-green-500' },
+              { label: '1-30 Days', value: data.agingBuckets.days30, color: 'bg-yellow-500' },
+              { label: '31-60 Days', value: data.agingBuckets.days60, color: 'bg-orange-500' },
+              { label: '61-90 Days', value: data.agingBuckets.days90, color: 'bg-red-400' },
+              { label: '90+ Days', value: data.agingBuckets.over90, color: 'bg-red-600' },
+            ].map((bucket, idx) => (
+              <div key={idx} className="text-center">
+                <div className={`w-full h-2 rounded-full ${bucket.color} mb-2`} />
+                <p className="text-xs text-slate-500">{bucket.label}</p>
+                <p className="text-sm font-bold text-slate-900">{formatCurrency(bucket.value)}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 };

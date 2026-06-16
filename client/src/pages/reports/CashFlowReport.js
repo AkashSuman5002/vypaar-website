@@ -7,6 +7,7 @@ import ReportSummary from '../../components/reports/common/ReportSummary';
 import EmptyState from '../../components/reports/common/EmptyState';
 import { transactionAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
+import { toast } from 'react-toastify';
 
 const KPI = ({ icon: Icon, label, value, color, bg }) => (
   <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-4 flex items-center gap-3 flex-1 min-w-[160px]">
@@ -30,18 +31,32 @@ const CashFlowReport = () => {
   const [dates, setDates] = useState({ start: '', end: '' });
   const [cashBalance, setCashBalance] = useState(0);
 
+  const handleDownload = () => {
+    const table = document.querySelector('table');
+    if (!table) return toast.info('No data to export');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'cash-flow-report.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Exported');
+  };
+
+  const handlePrint = () => window.print();
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const params = {};
+        const params = { limit: 5000 };
         if (dates.start) params.dateFrom = dates.start;
         if (dates.end) params.dateTo = dates.end;
         const [txnRes, balRes] = await Promise.all([
           transactionAPI.getAll(params),
           transactionAPI.getBalance(),
         ]);
-        const mapped = (txnRes.data || []).map(item => ({
+        const mapped = (txnRes.data?.data || []).map(item => ({
           ...item,
           particular: item.description,
         }));
@@ -68,7 +83,7 @@ const CashFlowReport = () => {
   if (data.length === 0) {
     return (
       <div className="bg-white dark:bg-[#0F172A] min-h-full">
-        <ReportHeader title="Cash Flow" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} />
+        <ReportHeader title="Cash Flow" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} onDownload={handleDownload} onPrint={handlePrint} />
         <div className="p-6 space-y-5">
           <div className="flex gap-4 flex-wrap">
             <KPI icon={Wallet} label="Opening Cash" value="₹0" color="text-blue-600 dark:text-[#3B82F6]" bg="bg-blue-50 dark:bg-[#3B82F6]/10" />
@@ -86,7 +101,7 @@ const CashFlowReport = () => {
 
   return (
     <div className="bg-white dark:bg-[#0F172A] min-h-full">
-      <ReportHeader title="Cash Flow" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} search={search} onSearchChange={setSearch} />
+      <ReportHeader title="Cash Flow" onDateChange={(t, v) => setDates({...dates,[t]:v})} startDate={dates.start} endDate={dates.end} search={search} onSearchChange={setSearch} onDownload={handleDownload} onPrint={handlePrint} />
       <div className="p-6 space-y-5">
         <div className="flex gap-4 flex-wrap">
           <KPI icon={Wallet} label="Opening Cash" value={`₹${openingCash.toLocaleString()}`} color="text-blue-600 dark:text-[#3B82F6]" bg="bg-blue-50 dark:bg-[#3B82F6]/10" />

@@ -543,9 +543,10 @@ const getHistory = async (req, res) => {
     if (method) query.method = method;
     if (status) query.status = status;
     if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { fileName: { $regex: search, $options: 'i' } },
-        { method: { $regex: search, $options: 'i' } },
+        { fileName: { $regex: escaped, $options: 'i' } },
+        { method: { $regex: escaped, $options: 'i' } },
       ];
     }
     const total = await BarcodeImport.countDocuments(query);

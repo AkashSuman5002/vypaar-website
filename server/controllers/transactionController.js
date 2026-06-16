@@ -5,8 +5,31 @@ const { createNotification } = require('../controllers/notificationController');
 const getTransactions = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const transactions = await Transaction.find({ ...baseFilter }).sort({ createdAt: -1 });
-    res.json(transactions);
+    const { page = 1, limit = 50, dateFrom, dateTo } = req.query;
+
+    const filter = { ...baseFilter };
+    if (dateFrom || dateTo) {
+      filter.date = {};
+      if (dateFrom) filter.date.$gte = new Date(dateFrom);
+      if (dateTo) filter.date.$lte = new Date(dateTo + 'T23:59:59.999Z');
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const total = await Transaction.countDocuments(filter);
+    const transactions = await Transaction.find(filter)
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    res.json({
+      data: transactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -39,12 +62,13 @@ const createTransaction = async (req, res) => {
 const getCashBankBalance = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const transactions = await Transaction.find(baseFilter).select('type amount').lean();
+    const result = await Transaction.aggregate([
+      { $match: baseFilter },
+      { $group: { _id: '$type', total: { $sum: '$amount' } } }
+    ]);
+
     const balanceMap = {};
-    transactions.forEach(t => {
-      if (!balanceMap[t.type]) balanceMap[t.type] = 0;
-      balanceMap[t.type] += t.amount || 0;
-    });
+    result.forEach(r => { balanceMap[r._id] = r.total; });
 
     const cashBalance = (balanceMap.cash_in || 0) - (balanceMap.cash_out || 0);
     const bankBalance = (balanceMap.bank_in || 0) - (balanceMap.bank_out || 0);

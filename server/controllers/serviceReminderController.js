@@ -92,7 +92,7 @@ const getItemsForReminder = async (req, res) => {
     const { search, type } = req.query;
 
     const query = { ...filter, isActive: true };
-    if (search) query.name = { $regex: search, $options: 'i' };
+    if (search) query.name = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
     if (type && type !== 'all') {
       query.type = type === 'services' ? 'service' : 'product';
     }

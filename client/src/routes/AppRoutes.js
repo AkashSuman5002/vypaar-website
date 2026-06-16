@@ -1,9 +1,10 @@
 import React, { Suspense, lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import AuthLayout from '../layouts/AuthLayout';
 import ProtectedRoute from './ProtectedRoute';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
+import { useSettings } from '../hooks/useSettings';
 
 const LazyLoad = (Component) => (props) => (
   <Suspense fallback={<div className="min-h-screen bg-white dark:bg-[#0F172A] flex items-center justify-center"><LoadingSpinner /></div>}>
@@ -73,6 +74,7 @@ const DiscountReport = LazyLoad(lazy(() => import('../pages/reports/DiscountRepo
 const ExpenseReport = LazyLoad(lazy(() => import('../pages/reports/ExpenseReport')));
 const ExpenseCategoryReport = LazyLoad(lazy(() => import('../pages/reports/ExpenseCategoryReport')));
 const ExpenseItemReport = LazyLoad(lazy(() => import('../pages/reports/ExpenseItemReport')));
+const BudgetReport = LazyLoad(lazy(() => import('../pages/reports/BudgetReport')));
 const SaleOrders = LazyLoad(lazy(() => import('../pages/reports/SaleOrders')));
 const SaleOrderItem = LazyLoad(lazy(() => import('../pages/reports/SaleOrderItem')));
 const LoanStatement = LazyLoad(lazy(() => import('../pages/reports/LoanStatement')));
@@ -99,13 +101,18 @@ const CreateExpense = LazyLoad(lazy(() => import('../pages/CreateExpense')));
 const BarcodeLabelPrint = LazyLoad(lazy(() => import('../pages/BarcodeLabelPrint')));
 const PaymentOut = LazyLoad(lazy(() => import('../pages/PaymentOut')));
 const Expenses = LazyLoad(lazy(() => import('../pages/Expenses')));
+const Budgets = LazyLoad(lazy(() => import('../pages/Budgets')));
 const PurchaseOrder = LazyLoad(lazy(() => import('../pages/PurchaseOrder')));
 const CreateDebitNote = LazyLoad(lazy(() => import('../pages/CreateDebitNote')));
 const PurchaseReturn = LazyLoad(lazy(() => import('../pages/PurchaseReturn')));
 const ImportData = LazyLoad(lazy(() => import('../pages/ImportData')));
 const ExportData = LazyLoad(lazy(() => import('../pages/ExportData')));
 const ImportFromBarcode = LazyLoad(lazy(() => import('../pages/ImportFromBarcode')));
+const PartyGroups = LazyLoad(lazy(() => import('../pages/PartyGroups')));
 const PartyToPartyTransfer = LazyLoad(lazy(() => import('../pages/PartyToPartyTransfer')));
+const Godowns = LazyLoad(lazy(() => import('../pages/Godowns')));
+const GodownTransfer = LazyLoad(lazy(() => import('../pages/GodownTransfer')));
+const StockReconciliation = LazyLoad(lazy(() => import('../pages/StockReconciliation')));
 const JournalEntry = LazyLoad(lazy(() => import('../pages/JournalEntry')));
 const ChartOfAccounts = LazyLoad(lazy(() => import('../pages/ChartOfAccounts')));
 const AccountStatements = LazyLoad(lazy(() => import('../pages/AccountStatements')));
@@ -114,6 +121,8 @@ const Support = LazyLoad(lazy(() => import('../pages/Support')));
 const Company = LazyLoad(lazy(() => import('../pages/Company')));
 const CalendarPage = LazyLoad(lazy(() => import('../pages/CalendarPage')));
 const StaffPage = LazyLoad(lazy(() => import('../pages/StaffPage')));
+const Manufacturing = LazyLoad(lazy(() => import('../pages/Manufacturing')));
+const GstFiling = LazyLoad(lazy(() => import('../pages/GstFiling')));
 
 const ImportItems = LazyLoad(lazy(() => import('../pages/utilities/ImportItems')));
 const SetupMyBusiness = LazyLoad(lazy(() => import('../pages/utilities/SetupMyBusiness')));
@@ -127,6 +136,14 @@ const ExportToTally = LazyLoad(lazy(() => import('../pages/utilities/ExportToTal
 const ExportItemsPage = LazyLoad(lazy(() => import('../pages/utilities/ExportItems')));
 const VerifyMyData = LazyLoad(lazy(() => import('../pages/utilities/VerifyMyData')));
 const CloseFinancialYear = LazyLoad(lazy(() => import('../pages/utilities/CloseFinancialYear')));
+
+const AccountingGuard = ({ children }) => {
+  const { getPref } = useSettings();
+  if (getPref('accounting', 'allowJournalEntries') === false) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
 
 const AppRoutes = () => {
   return (
@@ -189,6 +206,7 @@ const AppRoutes = () => {
         <Route path="/purchases/expenses" element={<Expenses />} />
         <Route path="/purchases/expenses/new" element={<CreateExpense />} />
         <Route path="/purchases/expenses/:id/edit" element={<CreateExpense />} />
+        <Route path="/budgets" element={<Budgets />} />
         <Route path="/purchases/orders" element={<PurchaseOrder />} />
         <Route path="/purchases/returns" element={<PurchaseReturn />} />
         <Route path="/purchases/returns/new" element={<CreateDebitNote />} />
@@ -201,14 +219,20 @@ const AppRoutes = () => {
         <Route path="/cash-bank/cheques" element={<Cheques />} />
         <Route path="/cash-bank/loans" element={<LoanAccounts />} />
         <Route path="/party-transfer" element={<PartyToPartyTransfer />} />
-        <Route path="/journal-entry" element={<JournalEntry />} />
-        <Route path="/chart-of-accounts" element={<ChartOfAccounts />} />
-        <Route path="/account-statements" element={<AccountStatements />} />
+        <Route path="/godowns" element={<Godowns />} />
+        <Route path="/godown-transfer" element={<GodownTransfer />} />
+        <Route path="/stock-reconciliation" element={<StockReconciliation />} />
+        <Route path="/journal-entry" element={<AccountingGuard><JournalEntry /></AccountingGuard>} />
+        <Route path="/chart-of-accounts" element={<AccountingGuard><ChartOfAccounts /></AccountingGuard>} />
+        <Route path="/account-statements" element={<AccountingGuard><AccountStatements /></AccountingGuard>} />
         <Route path="/user-management" element={<UserManagement />} />
         <Route path="/support" element={<Support />} />
         <Route path="/company" element={<Company />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/staff" element={<StaffPage />} />
+        <Route path="/manufacturing" element={<Manufacturing />} />
+        <Route path="/gst-filing" element={<GstFiling />} />
+
         <Route path="/utilities/import-items" element={<ImportItems />} />
         <Route path="/utilities/setup-business" element={<SetupMyBusiness />} />
         <Route path="/utilities/accountant-access" element={<AccountantAccess />} />
@@ -268,6 +292,7 @@ const AppRoutes = () => {
           <Route path="expense" element={<ExpenseReport />} />
           <Route path="expense-category-report" element={<ExpenseCategoryReport />} />
           <Route path="expense-item-report" element={<ExpenseItemReport />} />
+          <Route path="budget-report" element={<BudgetReport />} />
           <Route path="sale-orders" element={<SaleOrders />} />
           <Route path="sale-order-item" element={<SaleOrderItem />} />
           <Route path="pending-orders" element={<GenericReport reportName="Pending Orders" />} />
@@ -280,6 +305,7 @@ const AppRoutes = () => {
       <Route path="/business-setup" element={<ProtectedRoute><BusinessSetup /></ProtectedRoute>} />
       <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="*" element={<div className="flex flex-col items-center justify-center h-[60vh]"><h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">404</h1><p className="text-slate-500 dark:text-slate-400 mt-2">Page not found</p><button onClick={() => window.history.back()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">Go Back</button></div>} />
     </Routes>
   );
 };

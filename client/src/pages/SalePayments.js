@@ -52,8 +52,8 @@ const SalePayments = () => {
   });
 
   useEffect(() => {
-    customerAPI.getAll().then(({ data }) => setCustomers(data)).catch(() => {});
-    saleAPI.getAll({ limit: 200, paymentStatus: 'unpaid,partial' }).then(({ data }) => setInvoices(data.sales || [])).catch(() => {});
+    customerAPI.getAll().then(({ data }) => setCustomers(Array.isArray(data) ? data : data?.data || [])).catch(() => toast.error('Failed to load customers'));
+    saleAPI.getAll({ limit: 200, paymentStatus: 'unpaid,partial' }).then(({ data }) => setInvoices(data.sales || [])).catch(() => toast.error('Failed to load invoices'));
   }, []);
 
   const loadReceipts = useCallback(async () => {

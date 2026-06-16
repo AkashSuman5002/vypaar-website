@@ -14,7 +14,7 @@ const { csrfProtection } = require('../middleware/csrf');
 const router = express.Router();
 
 const generateToken = (user) => {
-  return jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
 };
 
 const normalizeEmail = (email = '') => email.trim().toLowerCase();
@@ -33,7 +33,7 @@ router.post('/register', authLimiter, async (req, res) => {
     if (existing) {
       return res.status(400).json({ message: 'Email already registered' });
     }
-    const user = await User.create({ name, email: normalizedEmail, password, role: 'admin', isOwner: true });
+    const user = await User.create({ name, email: normalizedEmail, password, role: 'admin', isOwner: false });
 
     const business = await Business.create({
       name: name + "'s Business",
@@ -62,6 +62,12 @@ router.post('/register', authLimiter, async (req, res) => {
     });
 
     const token = generateToken(user);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     res.status(201).json({ ...user.toJSON(), token });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -111,6 +117,12 @@ router.post('/login', authLimiter, async (req, res) => {
     }
 
     const token = generateToken(user);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     res.json({ ...user.toJSON(), token });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -123,6 +135,12 @@ router.get('/profile', authMiddleware, async (req, res) => {
 
 router.get('/refresh', authMiddleware, async (req, res) => {
   const token = generateToken(req.user);
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  });
   res.json({ ...req.user.toJSON(), token });
 });
 
@@ -175,6 +193,12 @@ router.post('/reset-password', authLimiter, async (req, res) => {
     await user.save();
 
     const authToken = generateToken(user);
+    res.cookie('token', authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     res.json({ ...user.toJSON(), token: authToken });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -182,6 +206,7 @@ router.post('/reset-password', authLimiter, async (req, res) => {
 });
 
 router.post('/logout', authMiddleware, csrfProtection, (req, res) => {
+  res.clearCookie('token');
   res.clearCookie('vyapar-csrf');
   res.json({ message: 'Logged out successfully' });
 });
@@ -191,6 +216,7 @@ router.get('/csrf-token', authMiddleware, (req, res) => {
   res.cookie('vyapar-csrf', token, {
     httpOnly: true,
     sameSite: 'lax',
+    // Standard pattern: secure flag only in production (HTTPS). Set NODE_ENV=production in deploy.
     secure: process.env.NODE_ENV === 'production',
   });
   res.json({ csrfToken: token });

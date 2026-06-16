@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI } from '../services/api';
+import { saleAPI, settingAPI, BASE_URL } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
@@ -33,12 +33,24 @@ const ViewReturn = () => {
   const handlePrint = () => {
     const printContent = document.getElementById('invoice-print-area');
     if (!printContent) return;
-    const original = document.body.innerHTML;
-    document.body.innerHTML = printContent.outerHTML;
-    document.title = `Credit Note ${sale.invoiceNumber}`;
-    window.print();
-    document.body.innerHTML = original;
-    window.location.reload();
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${sale.invoiceNumber || 'Invoice'}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>${printContent.innerHTML}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
 
   const handleDownloadPDF = async () => {
@@ -66,7 +78,7 @@ const ViewReturn = () => {
   const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 16;
   const invoiceHeadingSize = parseInt(printPrefs.invoiceTextSize) || 14;
   const fmt = (amt) => formatCurrency(amt, currencyPref, decimalPref);
-  const bizLogo = settings?.logo ? `http://localhost:5000/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[210mm] mx-auto">
@@ -147,6 +159,12 @@ const ViewReturn = () => {
                 {sale.customer?.phone && <p className="text-xs text-slate-500 dark:text-slate-400 print:text-gray-600 mt-1"><Phone className="w-3 h-3 inline mr-1" />{sale.customer.phone}</p>}
                 {sale.customer?.email && <p className="text-xs text-slate-500 dark:text-slate-400 print:text-gray-600 mt-0.5"><Mail className="w-3 h-3 inline mr-1" />{sale.customer.email}</p>}
                 {sale.customer?.address && <p className="text-xs text-slate-500 dark:text-slate-400 print:text-gray-600 mt-0.5"><MapPin className="w-3 h-3 inline mr-1" />{sale.customer.address}</p>}
+                {sale.returnReason && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-slate-400">Reason:</span>
+                    <span className="text-sm font-medium text-slate-900 bg-red-50 px-2 py-0.5 rounded">{sale.returnReason}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}

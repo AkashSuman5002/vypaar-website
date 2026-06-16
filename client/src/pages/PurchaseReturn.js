@@ -7,9 +7,10 @@ import {
   Plus, Search, Download, Printer, Eye, Pencil, Trash2,
   ChevronLeft, ChevronRight, IndianRupee, FileText, RotateCcw,
   Share2, Calendar, Hash, Users, Tag,
-  Loader2,
+  Loader2, MessageSquare,
 } from 'lucide-react';
 import { purchaseReturnAPI } from '../services/api';
+import { generateShareContent, shareToWhatsApp } from '../utils/shareUtils';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -20,13 +21,12 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 };
 
-const TRANSACTION_TYPES = [
-  'Sale', 'Purchase', 'Payment-In', 'Payment-Out', 'Credit Note', 'Debit Note',
-  'Sale Order', 'Purchase Order', 'Estimate', 'Proforma Invoice', 'Delivery Challan',
-  'Expense', 'Journal Entry',
-];
-
 const REASONS = ['Damaged Goods', 'Defective Product', 'Wrong Item', 'Excess Quantity', 'Quality Issue', 'Other'];
+const RETURN_REASONS = [
+  'Defective Product', 'Wrong Item Received', 'Quality Issue', 'Damaged in Transit',
+  'Not as Described', 'Excess Quantity', 'Duplicate Order', 'Customer Changed Mind',
+  'Price Dispute', 'Missing Parts', 'Other',
+];
 
 const PurchaseReturn = () => {
   const navigate = useNavigate();
@@ -34,7 +34,6 @@ const PurchaseReturn = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [transactionType, setTransactionType] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -53,6 +52,26 @@ const PurchaseReturn = () => {
   }, []);
 
   useEffect(() => { fetchDebits(); }, [fetchDebits]);
+
+  const handlePrint = () => {
+    const printArea = document.getElementById('print-area');
+    if (!printArea) {
+      window.print();
+      return;
+    }
+    const style = document.createElement('style');
+    style.id = 'print-style-pr';
+    style.textContent = `
+      @media print {
+        body > div:not(#print-area) { display: none !important; }
+        #print-area { display: block !important; background: white !important; padding: 20px !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    window.print();
+    const s = document.getElementById('print-style-pr');
+    if (s) s.remove();
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this debit note?')) return;
@@ -136,7 +155,7 @@ const PurchaseReturn = () => {
             }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all"
           ><Download className="w-4 h-4" /> Export</button>
-          <button onClick={() => window.print()}
+          <button onClick={handlePrint}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all"
           ><Printer className="w-4 h-4" /> Print</button>
           <button onClick={() => navigate('/purchases/returns/new')}
@@ -156,13 +175,18 @@ const PurchaseReturn = () => {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            <select value={transactionType} onChange={e => setTransactionType(e.target.value)}
-              className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none focus:ring-2"
-            >
-              <option value="all">All Transactions</option>
-              {TRANSACTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <button className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-100 transition-colors">
+            <button onClick={() => {
+              const now = new Date();
+              const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+              const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+              // Filter data client-side for this month
+              const thisMonth = debits.filter(d => {
+                const dDate = new Date(d.returnDate || d.date);
+                return dDate >= new Date(start) && dDate <= new Date(end);
+              });
+              setDebits(thisMonth);
+              toast.success(`Showing ${thisMonth.length} returns for this month`);
+            }} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-100 transition-colors">
               <Calendar className="w-4 h-4" /> This Month
             </button>
           </div>
@@ -192,6 +216,7 @@ const PurchaseReturn = () => {
       </motion.div>
 
       {/* Table */}
+      <div id="print-area">
       <motion.div variants={itemVariants}
         className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden"
       >
@@ -215,7 +240,7 @@ const PurchaseReturn = () => {
                     <span className="inline-flex items-center px-2.5 py-1 bg-red-50 text-red-700 text-xs font-semibold rounded-md">Debit Note</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-sm text-slate-600">{d.reason || '—'}</span>
+                    <span className="text-sm text-slate-600">{d.returnReason || d.reason || '—'}</span>
                   </td>
                   <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900">{formatCurrency(d.totalAmount)}</span></td>
                   <td className="px-4 py-3"><span className="text-sm text-emerald-600 font-semibold">{formatCurrency(0)}</span></td>
@@ -226,6 +251,11 @@ const PurchaseReturn = () => {
                         className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="View"><Eye className="w-3.5 h-3.5" /></button>
                       <button onClick={() => navigate(`/purchases/returns/${d._id}/edit`)}
                         className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => {
+                          const { message } = generateShareContent('purchase', d);
+                          shareToWhatsApp(message, d.phone);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-emerald-600 transition-colors" title="Share"><MessageSquare className="w-3.5 h-3.5" /></button>
                       <button onClick={() => handleDelete(d._id)}
                         className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
@@ -236,6 +266,7 @@ const PurchaseReturn = () => {
           </table>
         </div>
       </motion.div>
+      </div>
 
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">{filtered.length} debit notes</p>

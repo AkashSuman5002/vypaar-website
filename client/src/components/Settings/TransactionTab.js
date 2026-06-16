@@ -68,6 +68,7 @@ const TransactionTab = () => {
             <ToggleSwitch label="Link Payments to Invoice" checked={settings.linkPaymentsToInvoice} onChange={v => update('linkPaymentsToInvoice', v)} />
             <ToggleSwitch label="Due Dates and Payment Terms" checked={settings.dueDatesPaymentTerms} onChange={v => update('dueDatesPaymentTerms', v)} />
             <ToggleSwitch label="Show Profit While Creating Invoice" checked={settings.showProfitWhileCreatingInvoice} onChange={v => update('showProfitWhileCreatingInvoice', v)} />
+            <SettingsInputRow label="Estimate Validity (days)" value={settings.estimateValidityDays} onChange={v => update('estimateValidityDays', v)} placeholder="15" type="number" />
             <ToggleSwitch label="Terms & Conditions" checked={settings.termsAndConditions} onChange={v => update('termsAndConditions', v)} />
             <ToggleSwitch label="Additional Fields" checked={settings.additionalFields} onChange={v => update('additionalFields', v)} />
             <ToggleSwitch label="Transportation Details" checked={settings.transportationDetails} onChange={v => update('transportationDetails', v)} />

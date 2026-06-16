@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, ChevronUp, Check, Printer, Landmark, CreditCard, Pencil, Trash2 } from 'lucide-react';
-import EmptyState from '../components/CashBank/EmptyState';
+import EmptyState from '../components/UI/EmptyState';
 import FeatureCard from '../components/CashBank/FeatureCard';
 import FormField from '../components/CashBank/FormField';
 import { bankAccountAPI, transactionAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { formatCurrency } from '../utils/format';
+import { validateBankAccount, validateIFSC, formatBankAccount, formatIFSC } from '../utils/validation';
 
 const BankAccounts = () => {
   const [accounts, setAccounts] = useState([]);
@@ -28,6 +29,7 @@ const BankAccounts = () => {
     printDetails: false,
     acceptPayments: false,
   });
+  const [errors, setErrors] = useState({});
 
   const loadData = async () => {
     setLoading(true);
@@ -77,7 +79,14 @@ const BankAccounts = () => {
   };
 
   const handleSave = async () => {
-    if (!form.displayName && !form.bankName) return;
+    const newErrors = {};
+    if (!form.displayName && !form.bankName) newErrors.displayName = 'Account name is required';
+    const accResult = validateBankAccount(form.accountNumber);
+    if (!accResult.valid) newErrors.accountNumber = accResult.error;
+    const ifscResult = validateIFSC(form.ifscCode);
+    if (!ifscResult.valid) newErrors.ifscCode = ifscResult.error;
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
     try {
       const payload = {
         name: form.displayName || form.bankName,
@@ -103,6 +112,7 @@ const BankAccounts = () => {
       setShowForm(false);
       setExpanded(false);
       setEditing(null);
+      setErrors({});
       setForm({
         displayName: '', openingBalance: '', asOfDate: new Date().toISOString().split('T')[0],
         accountNumber: '', ifscCode: '', upiId: '', bankName: '', accountHolderName: '',
@@ -205,10 +215,11 @@ const BankAccounts = () => {
                 <input
                   type="text"
                   value={form.displayName}
-                  onChange={handleChange('displayName')}
+                  onChange={(e) => { setForm({ ...form, displayName: e.target.value }); setErrors(prev => ({ ...prev, displayName: '' })); }}
                   placeholder="Enter account display name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.displayName ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'}`}
                 />
+                {errors.displayName && <p className="mt-1 text-xs text-red-500">{errors.displayName}</p>}
               </FormField>
               <FormField label="Opening Balance">
                 <input
@@ -248,19 +259,21 @@ const BankAccounts = () => {
                     <input
                       type="text"
                       value={form.accountNumber}
-                      onChange={handleChange('accountNumber')}
+                      onChange={(e) => { setForm({ ...form, accountNumber: formatBankAccount(e.target.value) }); setErrors(prev => ({ ...prev, accountNumber: '' })); }}
                       placeholder="Enter account number"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.accountNumber ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'}`}
                     />
+                    {errors.accountNumber && <p className="mt-1 text-xs text-red-500">{errors.accountNumber}</p>}
                   </FormField>
                   <FormField label="IFSC Code">
                     <input
                       type="text"
                       value={form.ifscCode}
-                      onChange={handleChange('ifscCode')}
+                      onChange={(e) => { setForm({ ...form, ifscCode: formatIFSC(e.target.value) }); setErrors(prev => ({ ...prev, ifscCode: '' })); }}
                       placeholder="Enter IFSC code"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.ifscCode ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'}`}
                     />
+                    {errors.ifscCode && <p className="mt-1 text-xs text-red-500">{errors.ifscCode}</p>}
                   </FormField>
                   <FormField label="UPI ID for QR Code">
                     <input

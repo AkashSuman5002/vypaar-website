@@ -3,6 +3,11 @@ import { Filter } from 'lucide-react';
 import StockHeader from './StockHeader';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 import { reportAPI } from '../../../services/api';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
+
+const currentYear = new Date().getFullYear();
+const fyStart = new Date().getMonth() >= 3 ? `${currentYear}-04-01` : `${currentYear - 1}-04-01`;
+const today = new Date().toISOString().split('T')[0];
 
 const columns = [
   { key: 'date', label: 'Date', width: 'w-[110px]' },
@@ -20,6 +25,7 @@ const StockDetail = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [dates, setDates] = useState({ start: fyStart, end: today });
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -32,6 +38,8 @@ const StockDetail = () => {
       try {
         const params = {};
         if (debouncedSearch) params.search = debouncedSearch;
+        if (dates.start) params.dateFrom = dates.start;
+        if (dates.end) params.dateTo = dates.end;
         const res = await reportAPI.getStockDetail(params);
         setData(res.data.entries || []);
       } catch (err) {
@@ -42,7 +50,7 @@ const StockDetail = () => {
       }
     };
     fetchData();
-  }, [debouncedSearch]);
+  }, [debouncedSearch, dates]);
 
   if (loading) return <div className="bg-white dark:bg-[#0F172A] min-h-full"><LoadingSpinner /></div>;
 
@@ -51,6 +59,20 @@ const StockDetail = () => {
       <StockHeader title="Stock Detail" search={search} onSearchChange={setSearch} />
 
       <div className="flex-1 px-4 pb-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-[#94A3B8]">
+            <span>Between</span>
+            <input type="date" value={dates.start} onChange={e => setDates({ ...dates, start: e.target.value })}
+              className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-2 py-1.5 w-[110px] text-xs" />
+            <span>To</span>
+            <input type="date" value={dates.end} onChange={e => setDates({ ...dates, end: e.target.value })}
+              className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-2 py-1.5 w-[110px] text-xs" />
+          </div>
+          <div className="flex gap-2 ml-auto">
+            <button onClick={() => exportToExcel(data, columns, 'Stock_Detail')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+            <button onClick={() => printReport()} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
+          </div>
+        </div>
         <div className="border border-gray-200 dark:border-[#334155] rounded-xl overflow-hidden">
           <div className="overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#A0A0A0 transparent' }}>
             <table className="w-full text-xs whitespace-nowrap">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Search, Download, Printer } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 
@@ -18,18 +19,23 @@ const GSTRateReport = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const res = await reportAPI.getGST();
+        const params = {};
+        if (dateFrom) params.startDate = dateFrom;
+        if (dateTo) params.endDate = dateTo;
+        const res = await reportAPI.getGST(params);
         setData(res.data.gstSummary || []);
       } catch (err) { console.error('Failed to load GST report', err); }
       finally { setLoading(false); }
     };
     fetchData();
-  }, []);
+  }, [dateFrom, dateTo]);
 
   const mappedData = rateRows.map(rate => {
     const entry = data.find(d => d.gstRate === rate) || {};
@@ -71,9 +77,9 @@ const GSTRateReport = () => {
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 dark:text-[#64748B] pointer-events-none" />
           </div>
           <span className="text-xs text-gray-500 dark:text-[#64748B]">Between</span>
-          <input type="date" className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
           <span className="text-xs text-gray-500 dark:text-[#64748B]">To</span>
-          <input type="date" className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -83,8 +89,8 @@ const GSTRateReport = () => {
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 dark:text-[#64748B] pointer-events-none" />
           </div>
-          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-[#1E293B]/70"><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
-          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-[#1E293B]/70"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-[#1E293B]/70" onClick={() => { const table = document.querySelector('table'); if (!table) return toast.info('No data to export'); const rows = Array.from(table.querySelectorAll('tr')); const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'report.csv'; a.click(); URL.revokeObjectURL(url); toast.success('Exported'); }}><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-[#1E293B]/70" onClick={() => window.print()}><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
         </div>
       </div>
 

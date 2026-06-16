@@ -8,7 +8,7 @@ const notificationSchema = new mongoose.Schema({
       'new_sale', 'new_purchase', 'payment_received', 'payment_due',
       'low_stock', 'purchase_return', 'sale_return', 'expense_created',
       'service_reminder', 'party_added', 'bank_transaction',
-      'sale_cancelled', 'purchase_cancelled',
+      'sale_cancelled', 'purchase_cancelled', 'sale_updated',
     ],
     required: true,
   },

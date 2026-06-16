@@ -1,4 +1,5 @@
 const Notification = require('../models/Notification');
+const Setting = require('../models/Setting');
 
 const getNotifications = async (req, res) => {
   try {
@@ -55,6 +56,12 @@ const getUnreadCount = async (req, res) => {
 
 const createNotification = async (userId, type, title, message, referenceId, referenceModel) => {
   try {
+    const settings = await Setting.findOne({ user: userId });
+    const notifPrefs = settings?.preferences?.notifications;
+    if (notifPrefs) {
+      if (notifPrefs.enableNotifications === false) return;
+      if (notifPrefs[type] === false) return;
+    }
     await Notification.create({ user: userId, type, title, message, referenceId, referenceModel });
   } catch (err) {
     console.error('Failed to create notification:', err.message);

@@ -22,9 +22,18 @@ const ACTION_MAP = { POST: 'create', PUT: 'update', PATCH: 'update', DELETE: 'de
 const auditMiddleware = async (req, res, next) => {
   if (req.method === 'GET' || req.method === 'OPTIONS') return next();
 
-  // Audit trail is always active — users cannot disable it
   const action = ACTION_MAP[req.method];
   if (!action) return next();
+
+  // Check if audit trail is enabled for this user
+  try {
+    if (req.user?._id) {
+      const setting = await Setting.findOne({ user: req.user._id });
+      if (!setting?.preferences?.general?.auditTrail) return next();
+    }
+  } catch (err) {
+    console.error('Audit setting check error:', err.message);
+  }
 
   let entity = null;
   for (const [path, name] of Object.entries(ENTITY_MAP)) {
@@ -68,6 +77,8 @@ const auditMiddleware = async (req, res, next) => {
         entityName,
         changes,
         ipAddress: req.ip || req.connection?.remoteAddress || '',
+        userAgent: req.get('user-agent'),
+        statusCode: res.statusCode,
         description,
       });
     } catch (err) {

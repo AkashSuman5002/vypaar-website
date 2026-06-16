@@ -36,8 +36,11 @@ const purchaseReturnSchema = mongoose.Schema({
   igstTotal: { type: Number, default: 0 },
   totalAmount: { type: Number, default: 0 },
   reason: { type: String },
+  returnReason: { type: String, trim: true },
   notes: { type: String },
   isInterState: { type: Boolean, default: false },
 }, { timestamps: true });
+
+purchaseReturnSchema.index({ business: 1, createdAt: -1 });
 
 module.exports = mongoose.model('PurchaseReturn', purchaseReturnSchema);

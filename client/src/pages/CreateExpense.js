@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { expenseAPI, fetchCsrfToken } from '../services/api';
 import { formatCurrency } from '../utils/format';
+import { generateShareContent, shareToWhatsApp, shareViaEmail, copyToClipboard } from '../utils/shareUtils';
 import useSettings from '../hooks/useSettings';
 
 const EXPENSE_CATEGORIES = [
@@ -42,7 +43,6 @@ const CreateExpense = () => {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [openTabs, setOpenTabs] = useState([]);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showDesc, setShowDesc] = useState(false);
   const [showPaymentMenu, setShowPaymentMenu] = useState(false);
@@ -50,18 +50,57 @@ const CreateExpense = () => {
   const [imageFile, setImageFile] = useState(null);
   const [availableTypes, setAvailableTypes] = useState(DEFAULT_PAYMENT_TYPES);
 
-  const [form, setForm] = useState({
-    category: '',
-    expenseNo: '',
-    date: new Date().toISOString().split('T')[0],
-    items: [newItem()],
-    paymentType: 'Cash',
-    gstEnabled: false,
-    roundOffEnabled: true,
-    roundOff: 0,
-    description: '',
-    notes: '',
+  const emptyForm = () => ({
+    category: '', expenseNo: '', date: new Date().toISOString().split('T')[0],
+    items: [newItem()], paymentType: 'Cash', gstEnabled: false,
+    roundOffEnabled: true, roundOff: 0, description: '', notes: '', receiptImage: '',
   });
+
+  const [tabs, setTabs] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('vyapar_expense_tabs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('vyapar_expense_active_tab');
+      if (saved && tabs.length > 0 && tabs.some(t => t.id === saved)) return saved;
+    } catch {}
+    return null;
+  });
+  const [form, setForm] = useState(emptyForm);
+  const persistTabs = (ts, activeId) => {
+    try {
+      sessionStorage.setItem('vyapar_expense_tabs', JSON.stringify(ts));
+      if (activeId) sessionStorage.setItem('vyapar_expense_active_tab', activeId);
+    } catch {}
+  };
+  const saveCurrentTabToTabs = () => {
+    setTabs(prev => {
+      const updated = prev.map(t =>
+        t.id === activeTabId ? { ...t, formData: JSON.parse(JSON.stringify(form)) } : t
+      );
+      persistTabs(updated, activeTabId);
+      return updated;
+    });
+  };
+  const loadTab = (tabId) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    setForm(JSON.parse(JSON.stringify(tab.formData || emptyForm())));
+    setActiveTabId(tabId);
+    persistTabs(tabs, tabId);
+  };
+  const switchTab = (tabId) => {
+    if (tabId === activeTabId) return;
+    saveCurrentTabToTabs();
+    loadTab(tabId);
+  };
 
   const currency = getPref('general', 'businessCurrency') || 'INR';
   const decimalPlaces = parseInt(getPref('general', 'amountDecimalPlaces') || '2');
@@ -73,7 +112,7 @@ const CreateExpense = () => {
         await fetchCsrfToken();
         if (isEdit) {
           const { data } = await expenseAPI.getById(id);
-          setForm({
+          const editFormData = {
             category: data.category || '',
             expenseNo: data.expenseNumber || '',
             date: data.date ? data.date.split('T')[0] : new Date().toISOString().split('T')[0],
@@ -88,16 +127,26 @@ const CreateExpense = () => {
               gstAmount: i.gstAmount || 0,
             })) : [newItem()],
             paymentType: data.paymentMethod ? (data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1)) : 'Cash',
-            gstEnabled: false,
-            roundOffEnabled: true,
-            roundOff: 0,
-            description: data.description || data.notes || '',
-            notes: '',
-          });
-          setOpenTabs([{ id: 'edit', label: `Edit Expense${data.expenseNumber ? ' #' + data.expenseNumber : ''}` }]);
+            gstEnabled: false, roundOffEnabled: true, roundOff: 0,
+            description: data.description || data.notes || '', notes: '',
+            receiptImage: data.receiptImage || '',
+          };
+          setForm(editFormData);
+          const editTab = { id: 'edit', label: `Edit Expense${data.expenseNumber ? ' #' + data.expenseNumber : ''}`, formData: editFormData };
+          setTabs([editTab]);
+          setActiveTabId('edit');
+          persistTabs([editTab], 'edit');
+        } else if (tabs.length === 0) {
+          const initialTab = { id: '1', label: 'Expense #1', formData: { ...emptyForm(), expenseNo: '1' } };
+          setTabs([initialTab]);
+          setActiveTabId('1');
+          setForm(initialTab.formData);
+          persistTabs([initialTab], '1');
+        } else if (!activeTabId || !tabs.some(t => t.id === activeTabId)) {
+          setActiveTabId(tabs[0].id);
+          loadTab(tabs[0].id);
         } else {
-          setForm(f => ({ ...f, expenseNo: '1' }));
-          setOpenTabs([{ id: '1', label: 'Expense #1' }]);
+          loadTab(activeTabId);
         }
       } catch (err) {
         toast.error('Failed to load');
@@ -150,19 +199,29 @@ const CreateExpense = () => {
   }, [form.items, form.gstEnabled, form.roundOffEnabled]);
 
   const closeTab = (tabId) => {
-    if (tabId === '1' && !isEdit) return;
-    navigate('/purchases/expenses');
+    if (tabs.length <= 1) { navigate('/purchases/expenses'); return; }
+    if (isEdit && tabId === 'edit') { navigate('/purchases/expenses'); return; }
+    saveCurrentTabToTabs();
+    const remaining = tabs.filter(t => t.id !== tabId);
+    const nextActiveId = tabId === activeTabId ? remaining[remaining.length - 1].id : activeTabId;
+    setTabs(remaining);
+    setActiveTabId(nextActiveId);
+    persistTabs(remaining, nextActiveId);
+    loadTab(nextActiveId);
   };
 
   const addNewTab = () => {
-    const newNum = openTabs.length + 1;
-    setOpenTabs(prev => [...prev, { id: String(newNum), label: `Expense #${newNum}` }]);
-    setForm({
-      category: '', expenseNo: String(newNum), date: new Date().toISOString().split('T')[0],
-      items: [newItem()], paymentType: 'Cash', gstEnabled: false,
-      roundOffEnabled: true, roundOff: 0, description: '', notes: '',
+    saveCurrentTabToTabs();
+    const newNum = tabs.length > 0 ? Math.max(...tabs.map(t => parseInt(t.id) || 0)) + 1 : 1;
+    const newId = String(newNum);
+    const newTab = { id: newId, label: `Expense #${newNum}`, formData: { ...emptyForm(), expenseNo: String(newNum) } };
+    setTabs(prev => {
+      const updated = [...prev, newTab];
+      persistTabs(updated, newId);
+      return updated;
     });
-    navigate('/purchases/expenses/new');
+    setActiveTabId(newId);
+    setForm(newTab.formData);
   };
 
   const addPaymentType = (mode) => {
@@ -198,6 +257,7 @@ const CreateExpense = () => {
         totalAmount: totals.total,
         amount: totals.total,
         tax: totals.taxTotal,
+        receiptImage: form.receiptImage || '',
       };
       if (isEdit) {
         await expenseAPI.update(id, payload);
@@ -206,6 +266,7 @@ const CreateExpense = () => {
         await expenseAPI.create(payload);
         toast.success('Expense saved');
       }
+      saveCurrentTabToTabs();
       if (action === 'save_new') addNewTab();
       else navigate('/purchases/expenses');
     } catch (err) {
@@ -227,12 +288,17 @@ const CreateExpense = () => {
     <div className="bg-slate-50 dark:bg-slate-900 min-h-full">
       {/* Top Tabs Bar */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-3 pt-2 flex items-end gap-1 overflow-x-auto">
-        {openTabs.map(tab => (
+        {tabs.map(tab => (
           <div key={tab.id}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 border-b-0 text-sm font-medium text-slate-700 dark:text-slate-200 rounded-t-lg whitespace-nowrap group min-w-[160px]"
+            onClick={() => switchTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-700 border-b-0 text-sm font-medium whitespace-nowrap group min-w-[160px] rounded-t-lg cursor-pointer transition-colors ${
+              tab.id === activeTabId
+                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400'
+                : 'bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+            }`}
           >
             <span className="truncate">{tab.label}</span>
-            <button onClick={() => closeTab(tab.id)} className="ml-1 text-slate-400 hover:text-red-500 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }} className="ml-1 text-slate-400 hover:text-red-500 transition-colors">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -456,6 +522,19 @@ const CreateExpense = () => {
                 {imageFile ? `✓ ${imageFile.name.slice(0, 16)}...` : 'ADD IMAGE'}
               </button>
             </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Receipt Image (optional)</label>
+              <input type="file" accept="image/*" onChange={e => {
+                const file = e.target.files[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onloadend = () => setForm(f => ({ ...f, receiptImage: reader.result }));
+                  reader.readAsDataURL(file);
+                }
+              }} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              {form.receiptImage && <img src={form.receiptImage} alt="Receipt" className="mt-2 w-20 h-20 object-cover rounded-lg border" />}
+            </div>
           </div>
 
           {/* Right: Totals */}
@@ -507,11 +586,11 @@ const CreateExpense = () => {
                   className="absolute right-0 bottom-full mb-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-20 p-1"
                 >
                   {[
-                    { label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600' },
-                    { label: 'Email', icon: Mail, color: 'text-blue-600' },
-                    { label: 'Copy Link', icon: Link2, color: 'text-slate-600' },
+                    { label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600', action: () => { const { message } = generateShareContent('expense', form); shareToWhatsApp(message); } },
+                    { label: 'Email', icon: Mail, color: 'text-blue-600', action: () => { const { subject, message } = generateShareContent('expense', form); shareViaEmail(subject, message); } },
+                    { label: 'Copy Link', icon: Link2, color: 'text-slate-600', action: () => { const { message } = generateShareContent('expense', form); copyToClipboard(message); } },
                   ].map(opt => (
-                    <button key={opt.label} onClick={() => { toast.info(`${opt.label} share coming soon`); setShareOpen(false); }}
+                    <button key={opt.label} onClick={() => { opt.action(); setShareOpen(false); }}
                       className="w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 rounded flex items-center gap-2 transition-colors"
                     >
                       <opt.icon className={`w-3.5 h-3.5 ${opt.color}`} />
@@ -523,6 +602,14 @@ const CreateExpense = () => {
             )}
           </AnimatePresence>
         </div>
+        {!isEdit && (
+          <button onClick={() => handleSave('save_new')} disabled={submitting}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 rounded-lg transition-colors"
+          >
+            <Save className="w-4 h-4" />
+            Save & New
+          </button>
+        )}
         <button onClick={() => handleSave('save')} disabled={submitting}
           className="inline-flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-sm transition-colors"
         >

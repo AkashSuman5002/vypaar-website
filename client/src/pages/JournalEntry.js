@@ -6,7 +6,7 @@ import { journalAPI } from '../services/api';
 import {
   Plus, Search, X, ChevronLeft, ChevronRight, BookOpen,
   Save, PlusCircle, MinusCircle, FileText, Info, AlertTriangle,
-  Loader2,
+  Loader2, Eye,
 } from 'lucide-react';
 
 const containerVariants = {
@@ -53,7 +53,7 @@ const JournalEntry = () => {
   useEffect(() => { fetchEntries(currentPage); }, [currentPage, searchQuery]);
 
   useEffect(() => {
-    journalAPI.getAccounts().then(({ data }) => setAccounts(data)).catch(() => {});
+    journalAPI.getAccounts().then(({ data }) => setAccounts(data)).catch(() => null);
   }, []);
 
   const totalDebit = form.lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0);
@@ -229,8 +229,9 @@ const JournalEntry = () => {
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900">{formatCurrency(e.totalDebit)}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900">{formatCurrency(e.totalCredit)}</td>
                       <td className="px-4 py-3">
-                        <button className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600" title="View">
-                          <FileText className="w-3.5 h-3.5" />
+                        <button onClick={() => { const rows = (e.lines || []).map((l, i) => `<tr><td>${i+1}</td><td>${l.accountName || ''}</td><td>${l.particular || ''}</td><td>${l.debit || 0}</td><td>${l.credit || 0}</td></tr>`).join(''); const html = `<div style="padding:20px;font-family:sans-serif"><h2>Journal Entry: ${e.entryNumber}</h2><p>Date: ${e.entryDate ? new Date(e.entryDate).toLocaleDateString('en-IN') : ''}</p><p>Narration: ${e.narration || ''}</p><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr><th>#</th><th>Account</th><th>Particular</th><th>Debit</th><th>Credit</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:12px"><strong>Total Debit:</strong> ${e.totalDebit || 0} &nbsp; <strong>Total Credit:</strong> ${e.totalCredit || 0}</p></div>`; const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.print(); }}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600" title="View">
+                          <Eye className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>

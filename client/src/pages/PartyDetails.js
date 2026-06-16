@@ -10,6 +10,8 @@ import {
   Search, Phone, Mail, Hash, Globe, MapPinned, Calendar,
   BookOpen, Tag, UserCircle
 } from 'lucide-react';
+import { validateMobile, validateEmail, validateGST, validatePincode, formatMobile, formatGST, formatPincode } from '../utils/validation';
+import StateDropdown from '../components/UI/StateDropdown';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -54,12 +56,13 @@ const PartyDetails = () => {
     notes: '',
     customFields: {},
   });
+  const [errors, setErrors] = useState({});
 
   const loadParties = useCallback(async () => {
     try {
       const [cRes, sRes] = await Promise.all([customerAPI.getAll(), supplierAPI.getAll()]);
-      setCustomers(cRes.data);
-      setSuppliers(sRes.data);
+      setCustomers(Array.isArray(cRes.data) ? cRes.data : cRes.data?.data || []);
+      setSuppliers(Array.isArray(sRes.data) ? sRes.data : sRes.data?.data || []);
     } catch {
       toast.error('Failed to load parties');
     } finally {
@@ -95,6 +98,7 @@ const PartyDetails = () => {
       customFields: {},
     });
     setEditingParty(null);
+    setErrors({});
   };
 
   const openAddModal = () => {
@@ -131,10 +135,18 @@ const PartyDetails = () => {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) {
-      toast.error('Party name is required');
-      return;
-    }
+    const newErrors = {};
+    if (!form.name.trim()) newErrors.name = 'Party name is required';
+    const mobileResult = validateMobile(form.mobile);
+    if (!mobileResult.valid) newErrors.mobile = mobileResult.error;
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+    const gstResult = validateGST(form.gst);
+    if (!gstResult.valid) newErrors.gst = gstResult.error;
+    const pinResult = validatePincode(form.pincode);
+    if (!pinResult.valid) newErrors.pincode = pinResult.error;
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
     const payload = {
       name: form.name,
       phone: form.mobile,
@@ -508,10 +520,11 @@ const PartyDetails = () => {
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Mobile Number</label>
                       <div className="relative">
                         <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input type="text" value={form.mobile} onChange={e => handleInputChange('mobile', e.target.value)}
+                        <input type="text" value={form.mobile} onChange={e => handleInputChange('mobile', formatMobile(e.target.value))}
                           placeholder="Enter mobile number"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${errors.mobile ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-700 focus:ring-blue-500/20 focus:border-blue-500'}`}
                         />
+                        {errors.mobile && <p className="mt-1 text-xs text-red-500">{errors.mobile}</p>}
                       </div>
                     </div>
                     <div>
@@ -520,8 +533,9 @@ const PartyDetails = () => {
                         <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input type="email" value={form.email} onChange={e => handleInputChange('email', e.target.value)}
                           placeholder="Enter email address"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${errors.email ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-700 focus:ring-blue-500/20 focus:border-blue-500'}`}
                         />
+                        {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
                       </div>
                     </div>
                   </div>
@@ -529,10 +543,11 @@ const PartyDetails = () => {
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">GST Number</label>
                     <div className="relative">
                       <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input type="text" value={form.gst} onChange={e => handleInputChange('gst', e.target.value)}
-                        placeholder="Enter GST number (e.g., 22AAAAA0000A1Z5)"
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      <input type="text" value={form.gst} onChange={e => handleInputChange('gst', formatGST(e.target.value))} maxLength={15}
+                        placeholder="22AAAAA0000A1Z5"
+                        className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${errors.gst ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-700 focus:ring-blue-500/20 focus:border-blue-500'}`}
                       />
+                      {errors.gst && <p className="mt-1 text-xs text-red-500">{errors.gst}</p>}
                     </div>
                   </div>
                 </div>
@@ -563,22 +578,17 @@ const PartyDetails = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">State</label>
-                      <div className="relative">
-                        <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input type="text" value={form.state} onChange={e => handleInputChange('state', e.target.value)}
-                          placeholder="Enter state"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                        />
-                      </div>
+                      <StateDropdown value={form.state} onChange={(val) => handleInputChange('state', val)} placeholder="Select State" />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Pincode</label>
                       <div className="relative">
                         <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input type="text" value={form.pincode} onChange={e => handleInputChange('pincode', e.target.value)}
-                          placeholder="Enter pincode"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                        <input type="text" value={form.pincode} onChange={e => handleInputChange('pincode', formatPincode(e.target.value))} maxLength={6}
+                          placeholder="6-digit pincode"
+                          className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${errors.pincode ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-700 focus:ring-blue-500/20 focus:border-blue-500'}`}
                         />
+                        {errors.pincode && <p className="mt-1 text-xs text-red-500">{errors.pincode}</p>}
                       </div>
                     </div>
                   </div>
@@ -634,15 +644,15 @@ const PartyDetails = () => {
                   </div>
                   {customFieldDefs.length > 0 && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
                         <Tag className="w-3.5 h-3.5" /> Custom Fields
                       </label>
                       <div className="space-y-3">
                         {customFieldDefs.map(field => (
                           <div key={field.id}>
                             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{field.name}{field.showInPrint && <span className="ml-1 text-[10px] uppercase tracking-wider text-blue-500">(shown in print)</span>}</label>
-                            <input type="text" value={form.customFields?.[field.name] || ''}
-                              onChange={e => setForm(prev => ({ ...prev, customFields: { ...(prev.customFields || {}), [field.name]: e.target.value } }))}
+                            <input type="text" value={form.customFields?.[field.id] || ''}
+                              onChange={e => setForm(prev => ({ ...prev, customFields: { ...(prev.customFields || {}), [field.id]: e.target.value } }))}
                               placeholder={`Enter ${field.name.toLowerCase()}`}
                               className="w-full px-3 py-2 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
                           </div>

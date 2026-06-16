@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { purchaseAPI, supplierAPI, productAPI, fetchCsrfToken } from '../services/api';
 import { formatCurrency, formatDate } from '../utils/format';
+import { generateShareContent, shareToWhatsApp } from '../utils/shareUtils';
 import {
   Plus, Search, Download, Printer, Share2, Eye, Pencil, Trash2, Copy,
   X, ChevronDown, ChevronLeft, ChevronRight, Filter, Calendar, Building2,
@@ -151,6 +152,23 @@ const PurchaseBills = () => {
     } catch { toast.error('Delete failed'); }
   };
 
+  const handlePrint = () => {
+    const printArea = document.getElementById('print-area');
+    if (!printArea) return;
+    const style = document.createElement('style');
+    style.id = 'print-style';
+    style.textContent = `
+      @media print {
+        body > div:not(#print-area) { display: none !important; }
+        #print-area { display: block !important; background: white !important; padding: 20px !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    window.print();
+    const s = document.getElementById('print-style');
+    if (s) s.remove();
+  };
+
   const handleDuplicate = async (bill) => {
     try {
       await purchaseAPI.create({
@@ -181,14 +199,18 @@ const PurchaseBills = () => {
       const matchSearch = !q || p.supplierName?.toLowerCase().includes(q) || (p.billNumber || p.invoiceNo || '')?.toLowerCase().includes(q) || (p.items || []).some(i => (i.productName || i.product || '')?.toLowerCase().includes(q));
       const matchStatus = statusFilter === 'All' || p.status === statusFilter;
       const matchSupplier = supplierFilter === 'All' || String(p.supplier?._id || p.supplier) === supplierFilter;
-      return matchSearch && matchStatus && matchSupplier;
+      const matchGST = gstFilter === 'All' || (p.items || []).some(item => {
+        const rate = item.gstRate || item.taxRate || 0;
+        return rate.toString() === gstFilter.toString();
+      });
+      return matchSearch && matchStatus && matchSupplier && matchGST;
     });
-  }, [purchases, searchQuery, statusFilter, supplierFilter]);
+  }, [purchases, searchQuery, statusFilter, supplierFilter, gstFilter]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, supplierFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, supplierFilter, gstFilter]);
 
   if (loading) {
     return (
@@ -255,7 +277,7 @@ const PurchaseBills = () => {
             }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all"
           ><Download className="w-4 h-4" /> Export</button>
-          <button onClick={() => window.print()}
+          <button onClick={handlePrint}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all"
           ><Printer className="w-4 h-4" /> Print</button>
           <button onClick={() => navigate('/purchases/bills/new')}
@@ -264,6 +286,7 @@ const PurchaseBills = () => {
         </div>
       </motion.div>
 
+      <div id="print-area">
       {/* Summary Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-4 lg:p-5">
@@ -287,6 +310,7 @@ const PurchaseBills = () => {
           </div>
         </div>
       </motion.div>
+      </div>
 
       {/* Filters */}
       <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-4">
@@ -402,11 +426,11 @@ const PurchaseBills = () => {
                           className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handleDuplicate(bill)}
                           className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-purple-600 transition-colors" title="Duplicate"><Copy className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => window.print()}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-blue-600 transition-colors" title="Print"><Printer className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handlePrint()}
+                           className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-blue-600 transition-colors" title="Print"><Printer className="w-3.5 h-3.5" /></button>
                         <button onClick={() => {
-                            const text = `Purchase Bill: ${bill.billNumber || ''}\nSupplier: ${bill.supplierName || ''}\nAmount: ₹${bill.totalAmount || 0}\nStatus: ${bill.paymentStatus || 'unpaid'}`;
-                            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                            const { message } = generateShareContent('purchase', bill);
+                            shareToWhatsApp(message);
                           }}
                           className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-emerald-600 transition-colors" title="Share"><Share2 className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handleDelete(bill._id)}
@@ -619,8 +643,8 @@ const PurchaseBills = () => {
                   className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
                 >Cancel</button>
                 <button onClick={() => {
-                    const text = `Purchase Bill\nBill No: ${form.billNumber || ''}\nSupplier: ${form.supplierName || ''}\nTotal: ₹${form.totalAmount || 0}\nPaid: ₹${form.paidAmount || 0}\nStatus: ${form.paymentStatus || 'unpaid'}`;
-                    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                    const { message } = generateShareContent('purchase', form);
+                    shareToWhatsApp(message);
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-400 text-sm font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-gray-600 transition-all"
                 ><Send className="w-4 h-4" /> Share</button>

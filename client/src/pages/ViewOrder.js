@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI } from '../services/api';
+import { saleAPI, settingAPI, BASE_URL } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
@@ -14,6 +14,24 @@ const ViewOrder = () => {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showActions, setShowActions] = useState(false);
+  const [deliveryForm, setDeliveryForm] = useState({ quantity: '', trackingNumber: '', notes: '' });
+  const totalOrdered = sale?.items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0;
+  const remainingQty = totalOrdered - (sale?.deliveredQuantity || 0);
+
+  const handleDelivery = async () => {
+    if (!deliveryForm.quantity || deliveryForm.quantity <= 0) return toast.error('Enter valid quantity');
+    if (Number(deliveryForm.quantity) > remainingQty) return toast.error(`Only ${remainingQty} units remaining`);
+    try {
+      const { data } = await saleAPI.updateDelivery(sale._id, {
+        deliveredQuantity: Number(deliveryForm.quantity),
+        trackingNumber: deliveryForm.trackingNumber,
+        deliveryNotes: deliveryForm.notes,
+      });
+      setSale(data);
+      setDeliveryForm({ quantity: '', trackingNumber: '', notes: '' });
+      toast.success('Delivery recorded');
+    } catch { toast.error('Failed to record delivery'); }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -33,12 +51,24 @@ const ViewOrder = () => {
   const handlePrint = () => {
     const printContent = document.getElementById('invoice-print-area');
     if (!printContent) return;
-    const original = document.body.innerHTML;
-    document.body.innerHTML = printContent.outerHTML;
-    document.title = `Order ${sale.invoiceNumber}`;
-    window.print();
-    document.body.innerHTML = original;
-    window.location.reload();
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${sale.invoiceNumber || 'Invoice'}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>${printContent.innerHTML}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
 
   const handleDownloadPDF = async () => {
@@ -66,7 +96,7 @@ const ViewOrder = () => {
   const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 16;
   const invoiceHeadingSize = parseInt(printPrefs.invoiceTextSize) || 14;
   const fmt = (amt) => formatCurrency(amt, currencyPref, decimalPref);
-  const bizLogo = settings?.logo ? `http://localhost:5000/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[210mm] mx-auto">
@@ -273,6 +303,39 @@ const ViewOrder = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Delivery Tracking */}
+      <div className="no-print bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-5 mt-4">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Delivery Tracking</h3>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Tracking Number</label>
+            <input type="text" value={deliveryForm.trackingNumber} onChange={e => setDeliveryForm(f => ({ ...f, trackingNumber: e.target.value }))} placeholder="Enter tracking number" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Quantity to Deliver</label>
+            <input type="number" min="1" max={remainingQty} value={deliveryForm.quantity} onChange={e => setDeliveryForm(f => ({ ...f, quantity: e.target.value }))} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+          </div>
+        </div>
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-slate-500 mb-1">Delivery Notes</label>
+          <textarea value={deliveryForm.notes} onChange={e => setDeliveryForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+        </div>
+        <button onClick={handleDelivery} disabled={!deliveryForm.quantity || deliveryForm.quantity <= 0} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          Record Delivery
+        </button>
+        {sale.partialDeliveries?.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-medium text-slate-500">Delivery History</p>
+            {sale.partialDeliveries.map((d, idx) => (
+              <div key={idx} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0 text-xs">
+                <span className="text-slate-600">{new Date(d.date).toLocaleDateString('en-IN')} - {d.quantity} units</span>
+                <span className="text-slate-500">{d.trackingNumber || 'No tracking'}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <style>{`

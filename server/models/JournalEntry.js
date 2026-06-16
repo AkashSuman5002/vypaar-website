@@ -33,7 +33,9 @@ const journalEntrySchema = new mongoose.Schema({
 
 journalEntrySchema.index({ user: 1, entryNumber: 1 }, { unique: true });
 journalEntrySchema.index({ user: 1, referenceType: 1, referenceId: 1 });
+journalEntrySchema.index({ business: 1, referenceType: 1, referenceId: 1 });
 journalEntrySchema.index({ user: 1, entryDate: -1 });
+journalEntrySchema.index({ business: 1, entryDate: -1 });
 journalEntrySchema.index({ 'lines.account': 1 });
 
 module.exports = mongoose.model('JournalEntry', journalEntrySchema);

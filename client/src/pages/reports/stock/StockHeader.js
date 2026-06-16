@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronDown, Search, Download, Printer } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 const StockHeader = ({ title, search, onSearchChange }) => (
   <>
@@ -30,8 +31,8 @@ const StockHeader = ({ title, search, onSearchChange }) => (
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 dark:text-[#64748B] pointer-events-none" />
         </div>
-        <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70"><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
-        <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+        <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70" onClick={() => { const table = document.querySelector('table'); if (!table) return toast.info('No data to export'); const rows = Array.from(table.querySelectorAll('tr')); const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'report.csv'; a.click(); URL.revokeObjectURL(url); toast.success('Exported'); }}><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+        <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-white dark:bg-[#1E293B]/70" onClick={() => window.print()}><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
       </div>
     </div>
     <div className="px-4 py-3">

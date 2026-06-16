@@ -1,7 +1,10 @@
 const Expense = require('../models/Expense');
 const Transaction = require('../models/Transaction');
+const JournalEntry = require('../models/JournalEntry');
+const Account = require('../models/Account');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { createNotification } = require('../controllers/notificationController');
+const { sendEmailNotification } = require('../services/emailService');
 
 const getExpenses = async (req, res) => {
   try {
@@ -10,10 +13,11 @@ const getExpenses = async (req, res) => {
     const filter = { ...baseFilter };
     if (category) filter.category = category;
     if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-        { category: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { expenseNumber: { $regex: search, $options: 'i' } },
+        { category: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { expenseNumber: { $regex: escaped, $options: 'i' } },
       ];
     }
     if (dateFrom || dateTo) {
@@ -42,6 +46,7 @@ const getExpenseById = async (req, res) => {
 
 const createExpense = async (req, res) => {
   try {
+    const baseFilter = getBaseFilter(req);
     const { expenseNumber, category, description, amount: rawAmount, tax: rawTax, date, paymentMethod, reference, notes, isRecurring, recurringInterval } = req.body;
     const amount = rawAmount ?? (req.body.totalAmount ? req.body.totalAmount - (rawTax || 0) : 0);
     const tax = rawTax ?? 0;
@@ -61,10 +66,65 @@ const createExpense = async (req, res) => {
         partyName: description, partyType: 'expense' }),
     });
 
+    // Create journal entry for expense
+    try {
+      const escapedCat = (category || 'Other').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const expenseAccount = await Account.findOne({ ...baseFilter, type: 'expense', name: { $regex: escapedCat, $options: 'i' } });
+      const cashBankAccount = await Account.findOne({ ...baseFilter, type: 'asset', category: paymentMethod === 'cash' ? 'cash' : 'bank' });
+      if (expenseAccount && cashBankAccount) {
+        const jeLines = [
+          { account: expenseAccount._id, accountName: expenseAccount.name, accountType: expenseAccount.type, debit: totalAmount, credit: 0 },
+          { account: cashBankAccount._id, accountName: cashBankAccount.name, accountType: cashBankAccount.type, debit: 0, credit: totalAmount },
+        ];
+        await JournalEntry.create({
+          ...getCreateData(req, {
+            entryNumber: `JE-EXP-${expenseNumber || expense._id}`,
+            entryDate: date || new Date(),
+            referenceType: 'expense',
+            referenceId: expense._id,
+            lines: jeLines,
+            totalDebit: totalAmount,
+            totalCredit: totalAmount,
+            narration: `Expense: ${description || category || 'Other'}`,
+            isPosted: true,
+            postedAt: new Date(),
+          }),
+        });
+        await Account.findByIdAndUpdate(expenseAccount._id, { $inc: { balance: totalAmount } });
+        await Account.findByIdAndUpdate(cashBankAccount._id, { $inc: { balance: -totalAmount } });
+      }
+    } catch (jeErr) {
+      console.error('Failed to create journal entry for expense:', jeErr.message);
+    }
+
     createNotification(req.user._id, 'expense_created', 'Expense Recorded',
       `${category || 'Other'} expense of Rs.${totalAmount.toFixed(2)}${description ? ` - ${description}` : ''}`,
       expense._id, 'Expense'
     ).catch(() => {});
+
+    // Send expense email alert to business owner
+    const Setting = require('../models/Setting');
+    const userSetting = await Setting.findOne({ user: req.user._id });
+    const ownerEmail = userSetting?.email;
+    if (ownerEmail) {
+      sendEmailNotification(req.user._id, {
+        to: ownerEmail,
+        subject: `Expense Recorded - ${category || 'Other'} - Rs.${totalAmount.toFixed(2)}`,
+        html: `<p>An expense of Rs.${totalAmount.toFixed(2)} has been recorded.</p><p>Category: ${category || 'Other'}</p><p>Description: ${description || '-'}</p>`,
+      }).catch(() => {});
+    }
+
+    // Update budget spent amount
+    try {
+      const Budget = require('../models/Budget');
+      const expenseDate = date || new Date();
+      const month = expenseDate.getMonth() + 1;
+      const year = expenseDate.getFullYear();
+      await Budget.findOneAndUpdate(
+        { user: req.user._id, business: req.businessId, category: category || 'Other', month, year, isActive: true },
+        { $inc: { spent: totalAmount } }
+      );
+    } catch (e) { /* budget update optional */ }
 
     res.status(201).json(expense);
   } catch (error) {
@@ -98,6 +158,58 @@ const updateExpense = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    // Update journal entry
+    try {
+      const oldJE = await JournalEntry.findOne({ referenceType: 'expense', referenceId: expense._id, user: req.user._id });
+      if (oldJE) {
+        const jeAccIds = oldJE.lines.filter(l => l.account).map(l => l.account);
+        const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, user: req.user._id });
+        const jeAccMap = new Map(jeAccounts.map(a => [a._id.toString(), a]));
+        const reverseOps = oldJE.lines.filter(l => l.account).map(line => {
+          const acc = jeAccMap.get(line.account.toString());
+          if (!acc) return null;
+          const change = ['asset', 'expense'].includes(acc.type) ? -(line.debit - line.credit) : -(line.credit - line.debit);
+          return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+        }).filter(Boolean);
+        if (reverseOps.length > 0) await Account.bulkWrite(reverseOps);
+        await JournalEntry.findOneAndDelete({ _id: oldJE._id, user: req.user._id });
+      }
+
+      const baseFilterJE = getBaseFilter(req);
+      const escapedCat = (category || 'Other').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const expenseAccount = await Account.findOne({ ...baseFilterJE, type: 'expense', name: { $regex: escapedCat, $options: 'i' } });
+      const cashBankAccount = await Account.findOne({ ...baseFilterJE, type: 'asset', category: (paymentMethod || expense.paymentMethod) === 'cash' ? 'cash' : 'bank' });
+      if (expenseAccount && cashBankAccount) {
+        const newLines = [
+          { account: expenseAccount._id, accountName: expenseAccount.name, accountType: expenseAccount.type, debit: totalAmount, credit: 0 },
+          { account: cashBankAccount._id, accountName: cashBankAccount.name, accountType: cashBankAccount.type, debit: 0, credit: totalAmount },
+        ];
+        await JournalEntry.create({
+          ...getCreateData(req, {
+            entryNumber: `JE-EXP-${expenseNumber || expense._id}`,
+            entryDate: req.body.date || expense.date || new Date(),
+            referenceType: 'expense',
+            referenceId: expense._id,
+            lines: newLines,
+            totalDebit: totalAmount,
+            totalCredit: totalAmount,
+            narration: `Expense: ${description || category || 'Other'}`,
+            isPosted: true,
+            postedAt: new Date(),
+          }),
+        });
+        await Account.findByIdAndUpdate(expenseAccount._id, { $inc: { balance: totalAmount } });
+        await Account.findByIdAndUpdate(cashBankAccount._id, { $inc: { balance: -totalAmount } });
+      }
+    } catch (jeErr) {
+      console.error('Failed to update journal entry for expense:', jeErr.message);
+    }
+
+    createNotification(req.user._id, 'expense_updated', 'Expense Updated',
+      `Expense ${expense.expenseNumber || ''} has been updated - Rs.${totalAmount.toFixed(2)}`,
+      expense._id, 'Expense'
+    ).catch(() => {});
+
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -111,10 +223,67 @@ const deleteExpense = async (req, res) => {
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
     await Expense.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     await Transaction.deleteMany({ referenceModel: 'Expense', referenceId: expense._id, user: req.user._id });
+
+    // Reverse journal entry if one was created
+    try {
+      const oldJE = await JournalEntry.findOne({ referenceType: 'expense', referenceId: expense._id, user: req.user._id });
+      if (oldJE) {
+        const jeAccIds = oldJE.lines.filter(l => l.account).map(l => l.account);
+        const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, user: req.user._id });
+        const jeAccMap = new Map(jeAccounts.map(a => [a._id.toString(), a]));
+        const reverseOps = oldJE.lines.filter(l => l.account).map(line => {
+          const acc = jeAccMap.get(line.account.toString());
+          if (!acc) return null;
+          const change = ['asset', 'expense'].includes(acc.type) ? -(line.debit - line.credit) : -(line.credit - line.debit);
+          return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+        }).filter(Boolean);
+        if (reverseOps.length > 0) await Account.bulkWrite(reverseOps);
+        await JournalEntry.findOneAndDelete({ _id: oldJE._id, user: req.user._id });
+      }
+    } catch (jeErr) {
+      console.error('Failed to reverse journal entry for expense:', jeErr.message);
+    }
+
+    createNotification(req.user._id, 'expense_deleted', 'Expense Removed',
+      `Expense ${expense.expenseNumber || ''} of Rs.${expense.totalAmount?.toFixed(2) || '0'} has been removed`,
+      expense._id, 'Expense'
+    ).catch(() => {});
+
     res.json({ message: 'Expense removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-module.exports = { getExpenses, getExpenseById, createExpense, updateExpense, deleteExpense };
+const approveExpense = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const expense = await Expense.findOne({ ...baseFilter, _id: req.params.id });
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    expense.approvalStatus = 'approved';
+    expense.approvedBy = req.user.name || req.user.email;
+    expense.approvedAt = new Date();
+    await expense.save();
+    res.json(expense);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const rejectExpense = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const expense = await Expense.findOne({ ...baseFilter, _id: req.params.id });
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    expense.approvalStatus = 'rejected';
+    expense.rejectionReason = req.body.reason || '';
+    expense.approvedBy = req.user.name || req.user.email;
+    expense.approvedAt = new Date();
+    await expense.save();
+    res.json(expense);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getExpenses, getExpenseById, createExpense, updateExpense, deleteExpense, approveExpense, rejectExpense };

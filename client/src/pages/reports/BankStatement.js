@@ -6,6 +6,7 @@ import ReportTable from '../../components/reports/common/ReportTable';
 import ReportSummary from '../../components/reports/common/ReportSummary';
 import { reportAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
+import { toast } from 'react-toastify';
 
 const columns = [
   { key: 'date', label: 'Date' },
@@ -29,6 +30,20 @@ const BankStatement = () => {
     setDates(prev => ({ ...prev, [type]: value }));
   };
 
+  const handleDownload = () => {
+    const table = document.querySelector('table');
+    if (!table) return toast.info('No data to export');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'bank-statement.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Exported');
+  };
+
+  const handlePrint = () => window.print();
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -51,7 +66,7 @@ const BankStatement = () => {
 
   return (
     <>
-      <ReportHeader title="Bank Statement" description="Track bank transactions and account balances." onDateChange={handleDateChange} startDate={dates.start} endDate={dates.end} search={search} onSearchChange={setSearch}>
+      <ReportHeader title="Bank Statement" description="Track bank transactions and account balances." onDateChange={handleDateChange} startDate={dates.start} endDate={dates.end} search={search} onSearchChange={setSearch} onDownload={handleDownload} onPrint={handlePrint}>
         <div className="relative">
           <select className="appearance-none bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-lg px-3 py-1.5 pr-7 text-xs text-gray-900 dark:text-[#F8FAFC] cursor-pointer min-w-[160px]">
             <option>Select Bank Account</option>

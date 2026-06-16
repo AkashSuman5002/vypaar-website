@@ -4,15 +4,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import {
   ArrowLeft, FileText, Hash, Calendar, User, Phone, Mail, MapPin, BadgePercent,
-  Plus, Trash2, Package, IndianRupee, Save, Download, Share2, MessageSquare,
+  Plus, Trash2, Package, IndianRupee, Save, Share2, MessageSquare,
   Send, AlertCircle, CheckCircle, Clock, Search, Loader2, CreditCard, Building2,
   Wallet, Landmark, Zap, X, Printer, HelpCircle, GripVertical, Copy, Truck,
   FileDigit, Receipt, PenLine, Layers, Settings2, Play, BarChart3, ChevronDown,
   Box, Barcode, Tag, Eye, EyeOff, RotateCcw, AlertTriangle,
 } from 'lucide-react';
-import { saleAPI, customerAPI, productAPI, settingAPI, partyRateAPI, loyaltyAPI } from '../services/api';
+import { saleAPI, customerAPI, productAPI, settingAPI, partyRateAPI, loyaltyAPI, branchAPI } from '../services/api';
 import { formatCurrency, formatDate } from '../utils/format';
+import { validateMobile, formatMobile, INDIAN_STATE_NAMES } from '../utils/validation';
 import useSettings from '../hooks/useSettings';
+import { shareToWhatsApp, shareViaEmail, copyToClipboard, generateShareContent } from '../utils/shareUtils';
 
 const DEFAULT_GST_RATES = [0, 3, 5, 12, 18, 28];
 const PAYMENT_MODES = [
@@ -24,15 +26,41 @@ const PAYMENT_MODES = [
   { value: 'credit', label: 'Credit', icon: HelpCircle, color: 'rose' },
 ];
 const UNITS = ['Pcs', 'Kg', 'G', 'L', 'Ml', 'M', 'Box', 'Pack', 'Dozen', 'Pair', 'Set', 'Bag'];
-
-const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'];
+const RETURN_REASONS = [
+  'Defective Product', 'Wrong Item Received', 'Quality Issue', 'Damaged in Transit',
+  'Not as Described', 'Excess Quantity', 'Duplicate Order', 'Customer Changed Mind',
+  'Price Dispute', 'Missing Parts', 'Other',
+];
 
 const emptyItem = () => ({
   _id: Date.now(), product: '', productName: '', description: '', hsn: '',
-  quantity: 1, freeQuantity: 0, unit: 'Pcs', rate: 0, mrp: 0,
+  quantity: 1, freeQuantity: 0, unit: 'Pcs', rate: 0, mrp: 0, wholesalePrice: 0,
   amount: 0, gstRate: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, cess: 0,
   discountType: 'none', discountValue: 0, discountAmount: 0,
   costPrice: 0, batchNo: '', expiryDate: '', serialNo: '', isService: false,
+});
+
+const createEmptyForm = (type = 'invoice') => ({
+  invoiceNumber: '', type, status: 'confirmed',
+  date: new Date().toISOString().split('T')[0],
+  time: new Date().toTimeString().slice(0, 5),
+  dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  referenceNumber: '', salesPerson: '',
+  customer: '', customerName: '', customerPhone: '', customerEmail: '',
+  customerGst: '', customerType: '', customerState: '',
+  billingAddress: '', shippingAddress: '', isInterState: false,
+  billingName: '', branch: '', warehouse: '',
+  items: [emptyItem()],
+  taxableAmount: 0, discountTotal: 0, cgstTotal: 0, sgstTotal: 0, igstTotal: 0, cessTotal: 0, taxTotal: 0,
+  shippingCharge: 0, packingCharge: 0, freightCharge: 0, loadingCharge: 0, otherCharge: 0,
+  additionalChargesTotal: 0, discountOnInvoice: 0,
+  roundOff: 0, roundOffEnabled: false, roundingMethod: 'Normal',
+  totalAmount: 0, payments: [], paidAmount: 0, remainingBalance: 0, paymentStatus: 'unpaid',
+  eWayBill: '', transportMode: '', vehicleNo: '', poNumber: '', poDate: '',
+  validityDays: 15,
+  reverseCharge: false, notes: '', internalNotes: '', termsConditions: '', returnReason: '',
+  isRecurring: false, recurringFrequency: 'monthly', recurringNextDate: '', recurringEndDate: '', recurringMaxCount: 0,
+  additionalField1: '', additionalField2: '',
 });
 
 const DOC_TYPE_LABELS = { invoice: 'Invoice', estimate: 'Estimate', quotation: 'Quotation', proforma: 'Proforma', order: 'Sale Order', challan: 'Delivery Challan', credit_note: 'Credit Note' };
@@ -61,29 +89,71 @@ const CreateSale = () => {
   const [openModal, setOpenModal] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [docFile, setDocFile] = useState(null);
-  const [cashMode, setCashMode] = useState(false);
   const [partyRates, setPartyRates] = useState([]);
   const [loyaltyPointsBalance, setLoyaltyPointsBalance] = useState(0);
+  const [branches, setBranches] = useState([]);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(null);
 
-  const [form, setForm] = useState({
-    invoiceNumber: '', type: docType, status: 'confirmed',
-    date: new Date().toISOString().split('T')[0],
-    dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    referenceNumber: '', salesPerson: '',
-    customer: '', customerName: '', customerPhone: '', customerEmail: '',
-    customerGst: '', customerType: '', customerState: '',
-    billingAddress: '', shippingAddress: '', isInterState: false,
-    branch: '', warehouse: '',
-    items: [emptyItem()],
-    taxableAmount: 0, discountTotal: 0, cgstTotal: 0, sgstTotal: 0, igstTotal: 0, cessTotal: 0, taxTotal: 0,
-    shippingCharge: 0, packingCharge: 0, freightCharge: 0, loadingCharge: 0, otherCharge: 0,
-    additionalChargesTotal: 0, discountOnInvoice: 0,
-    roundOff: 0, roundOffEnabled: false, roundingMethod: 'Normal',
-    totalAmount: 0, payments: [], paidAmount: 0, remainingBalance: 0, paymentStatus: 'unpaid',
-    eWayBill: '', transportMode: '', vehicleNo: '', poNumber: '',
-    reverseCharge: false, notes: '', internalNotes: '', termsConditions: '',
-    isRecurring: false, recurringFrequency: 'monthly', recurringNextDate: '', recurringEndDate: '', recurringMaxCount: 0,
-  });
+  const [tabs, setTabs] = useState([{ id: 1, form: createEmptyForm(docType), cashMode: false, saved: true }]);
+  const [activeTabId, setActiveTabId] = useState(1);
+  const activeTabIdRef = useRef(1);
+  const tabCounterRef = useRef(2);
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+  const form = activeTab.form;
+  const cashMode = activeTab.cashMode;
+
+  const setForm = useCallback((updater) => {
+    const tabId = activeTabIdRef.current;
+    setTabs(prev => prev.map(t => {
+      if (t.id !== tabId) return t;
+      const newForm = typeof updater === 'function' ? updater(t.form) : { ...t.form, ...updater };
+      return { ...t, form: newForm, saved: false };
+    }));
+  }, []);
+
+  const setCashMode = useCallback((val) => {
+    const tabId = activeTabIdRef.current;
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, cashMode: val } : t));
+  }, []);
+
+  const addNewTab = () => {
+    const newId = tabCounterRef.current++;
+    const currentForm = tabs.find(t => t.id === activeTabIdRef.current)?.form;
+    const newForm = createEmptyForm(currentForm?.type || docType);
+    setTabs(prev => [...prev, { id: newId, form: newForm, cashMode: false, saved: true }]);
+    setActiveTabId(newId);
+    activeTabIdRef.current = newId;
+  };
+
+  const switchTab = (tabId) => {
+    setActiveTabId(tabId);
+    activeTabIdRef.current = tabId;
+  };
+
+  const performCloseTab = (tabId) => {
+    setTabs(prev => {
+      const remaining = prev.filter(t => t.id !== tabId);
+      if (remaining.length === 0) {
+        navigate('/sales');
+        return prev;
+      }
+      if (activeTabIdRef.current === tabId) {
+        const newActive = remaining[remaining.length - 1];
+        setActiveTabId(newActive.id);
+        activeTabIdRef.current = newActive.id;
+      }
+      return remaining;
+    });
+  };
+
+  const closeTab = (tabId) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab && !tab.saved) {
+      setShowCloseConfirm(tabId);
+      return;
+    }
+    performCloseTab(tabId);
+  };
 
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '', address: '', gstNumber: '', openingBalance: 0 });
 
@@ -98,6 +168,7 @@ const CreateSale = () => {
   const transportEnabled = getPref('transaction', 'transportationDetails');
   const eWayBillEnabled = getPref('transaction', 'eWayBillNo');
   const poEnabled = getPref('transaction', 'customerPODetails');
+  const validityDaysPref = getPref('transaction', 'estimateValidityDays') || 15;
   const dueDatesEnabled = getPref('transaction', 'dueDatesPaymentTerms');
   const showProfit = getPref('transaction', 'showProfitWhileCreatingInvoice');
   const lastSalePriceEnabled = getPref('transaction', 'lastSalePrice');
@@ -108,6 +179,8 @@ const CreateSale = () => {
   const skipPreview = getPref('transaction', 'doNotShowInvoicePreview');
   const invoiceNoMode = getPref('transaction', 'invoiceNo');
   const cessEnabled = getPref('taxes', 'additionalCess');
+  const addTimeEnabled = getPref('transaction', 'addTimeOnTransactions');
+  const wholesalePriceEnabled = getPref('item', 'wholesalePrice');
   const reverseChargeEnabled = getPref('taxes', 'reverseCharge');
   const placeOfSupplyEnabled = getPref('taxes', 'placeOfSupply');
   const savedTaxRates = getPref('taxes', 'taxRates');
@@ -120,13 +193,30 @@ const CreateSale = () => {
   const managePartyStatus = getPref('party', 'managePartyStatus');
   const stockEnabled = getPref('item', 'stockMaintenance');
   const lowStockDialog = getPref('item', 'lowStockDialog');
-  const godownEnabled = getPref('general', 'enableGodown');
   const passcodeForEditDelete = getPref('transaction', 'passcodeForEditDelete');
   const passcodeEnabled = getPref('general', 'enablePasscode');
   const transactionWiseDiscountEnabled = getPref('transaction', 'transactionWiseDiscount');
   const quickEntryEnabled = getPref('transaction', 'quickEntry');
   const transactionWiseTaxEnabled = getPref('transaction', 'transactionWiseTax');
   const additionalFieldsEnabled = getPref('transaction', 'additionalFields');
+
+  const docTypeToggles = {
+    estimate: getPref('general', 'estimateQuotation'),
+    quotation: getPref('general', 'estimateQuotation'),
+    proforma: getPref('general', 'proformaInvoice'),
+    order: getPref('general', 'salePurchaseOrder'),
+    challan: getPref('general', 'deliveryChallan'),
+  };
+
+  const enabledDocTypes = [
+    { value: 'invoice', label: 'Invoice' },
+    { value: 'estimate', label: 'Estimate' },
+    { value: 'quotation', label: 'Quotation' },
+    { value: 'proforma', label: 'Proforma Invoice' },
+    { value: 'order', label: 'Sale Order' },
+    { value: 'challan', label: 'Delivery Challan' },
+    { value: 'credit_note', label: 'Credit Note' },
+  ].filter(opt => opt.value === 'invoice' || opt.value === 'credit_note' || docTypeToggles[opt.value]);
 
   const requirePasscode = async (action) => {
     if (!passcodeForEditDelete || !passcodeEnabled) return true;
@@ -148,18 +238,20 @@ const CreateSale = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [custRes, prodRes, setRes] = await Promise.all([
-          customerAPI.getAll(), productAPI.getAll(), settingAPI.get().catch(() => null),
+        const [custRes, prodRes, setRes, branchRes] = await Promise.all([
+          customerAPI.getAll(), productAPI.getAll(), settingAPI.get().catch(() => null), branchAPI.getAll().catch(() => ({ data: [] })),
         ]);
-        setCustomers(custRes.data);
-        setProducts(prodRes.data);
+        setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data?.data || []);
+        setProducts(Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.data || []);
         setSettings(setRes?.data || null);
+        setBranches(Array.isArray(branchRes.data) ? branchRes.data : branchRes.data?.branches || []);
 
         if (isEdit) {
           const { data } = await saleAPI.getById(id);
-          setForm({
+          const loadedForm = {
             invoiceNumber: data.invoiceNumber, type: data.type || 'invoice', status: data.status || 'confirmed',
             date: data.date ? data.date.split('T')[0] : new Date().toISOString().split('T')[0],
+            time: data.date ? new Date(data.date).toTimeString().slice(0, 5) : new Date().toTimeString().slice(0, 5),
             dueDate: data.dueDate ? data.dueDate.split('T')[0] : '',
             referenceNumber: data.referenceNumber || '', salesPerson: data.salesPerson || '',
             customer: data.customer?._id || data.customer || '', customerName: data.customerName || '',
@@ -167,6 +259,7 @@ const CreateSale = () => {
             customerGst: data.customerGst || '', customerType: data.customerType || '',
             customerState: data.customerState || '',
             billingAddress: data.billingAddress || '', shippingAddress: data.shippingAddress || '',
+            billingName: data.billingName || '',
             branch: data.branch || '', warehouse: data.warehouse || '',
             items: data.items?.length ? data.items.map(i => ({ ...i, _id: Date.now() + Math.random() })) : [emptyItem()],
             taxableAmount: data.taxableAmount || 0, discountTotal: data.discountTotal || 0,
@@ -184,7 +277,7 @@ const CreateSale = () => {
             remainingBalance: data.remainingBalance || 0,
             paymentStatus: data.paymentStatus || 'unpaid',
             eWayBill: data.eWayBill || '', transportMode: data.transportMode || '',
-            vehicleNo: data.vehicleNo || '', poNumber: data.poNumber || '',
+            vehicleNo: data.vehicleNo || '', poNumber: data.poNumber || '', poDate: data.poDate ? data.poDate.split('T')[0] : '',
             reverseCharge: data.reverseCharge || false,
             notes: data.notes || '', internalNotes: data.internalNotes || '',
             termsConditions: data.termsConditions || '',
@@ -192,7 +285,13 @@ const CreateSale = () => {
             recurringNextDate: data.recurringNextDate ? data.recurringNextDate.split('T')[0] : '',
             recurringEndDate: data.recurringEndDate ? data.recurringEndDate.split('T')[0] : '',
             recurringMaxCount: data.recurringMaxCount || 0,
-          });
+            returnReason: data.returnReason || '',
+            additionalField1: data.additionalField1 || '',
+            additionalField2: data.additionalField2 || '',
+          };
+          setTabs([{ id: 1, form: loadedForm, cashMode: false, saved: true }]);
+          setActiveTabId(1);
+          activeTabIdRef.current = 1;
         } else {
           const defaults = {};
           if (invoiceNoMode !== 'Manual') {
@@ -202,7 +301,7 @@ const CreateSale = () => {
           if (cashSaleDefault) {
             defaults.payments = [{ mode: 'cash', amount: 0, date: new Date().toISOString().split('T')[0], transactionNo: '', bankName: '', chequeNo: '', referenceNo: '' }];
           }
-          setForm(f => ({ ...f, ...defaults }));
+          setTabs(prev => prev.map(t => t.id === 1 ? { ...t, form: { ...t.form, ...defaults }, saved: true } : t));
         }
       } catch (err) { toast.error('Failed to load data'); }
       finally { setLoading(false); }
@@ -349,6 +448,7 @@ const CreateSale = () => {
             updated.unit = prod.unit || 'Pcs';
             updated.mrp = prod.price || 0;
             updated.costPrice = prod.costPrice || 0;
+            updated.wholesalePrice = prod.wholesalePrices?.[0]?.price || 0;
             if (lowStockDialog && stockEnabled && prod.stock <= (prod.minStock || 5) && prod.stock > 0) {
               setTimeout(() => toast.warning(`Low stock: ${prod.name} has only ${prod.stock} units left`), 100);
             }
@@ -431,6 +531,10 @@ const CreateSale = () => {
       payload.status = 'confirmed';
       payload.isInterState = !!payload.isInterState;
       if (!payload.customerType) delete payload.customerType;
+      if (addTimeEnabled && form.time) {
+        payload.date = new Date(`${form.date}T${form.time}`).toISOString();
+      }
+      delete payload.time;
 
       if (form.isRecurring) {
         payload.isRecurring = form.isRecurring;
@@ -449,10 +553,16 @@ const CreateSale = () => {
         const res = await saleAPI.create(payload);
         const newId = res?.data?._id;
         toast.success('Invoice created');
-        if (skipPreview || !newId) navigate('/sales');
-        else if (action === 'save') navigate(`/sales/${newId}`);
-        else if (action === 'save_new') navigate(0);
-        else if (action === 'save_print') navigate(`/sales/${newId}`);
+        setTabs(prev => prev.map(t => t.id === activeTabIdRef.current ? { ...t, saved: true } : t));
+        if (action === 'save_new') {
+          addNewTab();
+        } else if (skipPreview || !newId) {
+          navigate('/sales');
+        } else if (action === 'save') {
+          navigate(`/sales/${newId}`);
+        } else if (action === 'save_print') {
+          navigate(`/sales/${newId}`);
+        }
       }
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setSubmitting(false); }
@@ -460,58 +570,58 @@ const CreateSale = () => {
 
   if (loading) return <div className="flex items-center justify-center h-96"><Loader2 className="w-8 h-8 text-blue-600 animate-spin" /></div>;
 
+  if (!enabledDocTypes.some(o => o.value === docType)) {
+    toast.error(`${DOC_TYPE_LABELS[docType] || docType} is disabled in settings`);
+    navigate('/sales/new');
+    return null;
+  }
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[1400px] mx-auto px-2">
       {/* Top Tabs Bar */}
       <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
-        <div className="flex items-center gap-2 px-4 py-2 bg-white border border-b-0 border-slate-200 text-sm font-semibold text-slate-900 rounded-t-lg whitespace-nowrap shadow-sm">
-          <Receipt className="w-4 h-4 text-blue-600" />
-          {isEdit ? 'Edit' : 'New'} {form.invoiceNumber ? `#${form.invoiceNumber}` : 'Document'}
-          <button onClick={() => navigate('/sales')} className="ml-1 text-slate-400 hover:text-red-500 transition-colors"><X className="w-3.5 h-3.5" /></button>
-        </div>
-        <button onClick={() => navigate('/sales/new')} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors bg-white shadow-sm"><Plus className="w-4 h-4" /></button>
+        {tabs.map((tab, idx) => (
+          <div key={tab.id} onClick={() => switchTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg whitespace-nowrap shadow-sm cursor-pointer transition-all border border-b-0 ${
+              tab.id === activeTabId
+                ? 'bg-white border-slate-200 text-slate-900'
+                : 'bg-slate-100 border-slate-200/60 text-slate-500 hover:bg-slate-200'
+            }`}>
+            <Receipt className="w-4 h-4 text-blue-600" />
+            {tab.form.invoiceNumber || `Invoice #${idx + 1}`}
+            {!tab.saved && <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />}
+            {tabs.length > 1 && (
+              <button onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }} className="ml-1 text-slate-400 hover:text-red-500 transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+        <button onClick={addNewTab} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors bg-white shadow-sm">
+          <Plus className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Title Row */}
       <div className="flex items-center gap-6 mb-4 px-1 flex-wrap">
         <h1 className="text-2xl font-bold text-slate-900 capitalize tracking-tight">{form.type === 'credit_note' ? 'Credit Note' : form.type === 'challan' ? 'Delivery Challan' : form.type === 'order' ? 'Sale Order' : form.type === 'proforma' ? 'Proforma Invoice' : form.type === 'estimate' ? 'Estimate' : form.type === 'quotation' ? 'Quotation' : 'Sale'}</h1>
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-full text-sm">
+        <div className="flex items-center gap-2 text-sm">
           <button onClick={() => {
             setCashMode(false);
             setForm(prev => ({ ...prev, payments: [], paidAmount: 0, remainingBalance: prev.totalAmount || 0, paymentStatus: 'unpaid' }));
             toast.success('Marked as Credit');
-          }} className={`px-4 py-1.5 rounded-full transition-all font-medium ${!cashMode ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Credit</button>
-          <button onClick={() => {
-            if (cashMode) {
-              setCashMode(false);
-              setForm(prev => ({ ...prev, payments: [], paidAmount: 0, remainingBalance: prev.totalAmount || 0, paymentStatus: 'unpaid' }));
-              toast.success('Marked as Credit');
-            } else {
-              setCashMode(true);
-              const total = form.totalAmount || 0;
-              setForm(prev => ({ ...prev, payments: [{ mode: 'cash', amount: total, date: new Date().toISOString().split('T')[0], transactionNo: '', bankName: '', chequeNo: '', referenceNo: '' }], paidAmount: total, remainingBalance: 0, paymentStatus: 'paid' }));
-              toast.success('Marked as Cash');
-            }
-          }} className={`relative w-11 h-6 rounded-full transition-colors ${cashMode ? 'bg-blue-600' : 'bg-slate-300'}`}>
-            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${cashMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
-          </button>
+          }} className={`px-5 py-2 rounded-lg transition-all font-semibold border ${!cashMode ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}>Credit</button>
           <button onClick={() => {
             setCashMode(true);
             const total = form.totalAmount || 0;
             setForm(prev => ({ ...prev, payments: [{ mode: 'cash', amount: total, date: new Date().toISOString().split('T')[0], transactionNo: '', bankName: '', chequeNo: '', referenceNo: '' }], paidAmount: total, remainingBalance: 0, paymentStatus: 'paid' }));
             toast.success('Marked as Cash');
-          }} className={`px-4 py-1.5 rounded-full transition-all font-medium ${cashMode ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Cash</button>
+          }} className={`px-5 py-2 rounded-lg transition-all font-semibold border ${cashMode ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:text-emerald-600'}`}>Cash</button>
         </div>
         <div className="ml-auto flex items-center gap-2 text-sm">
           <FileText className="w-4 h-4 text-slate-400" />
           <select value={form.type} onChange={(e) => handleFieldChange('type', e.target.value)} className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 capitalize transition-colors">
-            <option value="invoice">Invoice</option>
-            <option value="estimate">Estimate</option>
-            <option value="quotation">Quotation</option>
-            <option value="proforma">Proforma Invoice</option>
-            <option value="order">Sale Order</option>
-            <option value="challan">Delivery Challan</option>
-            <option value="credit_note">Credit Note</option>
+            {enabledDocTypes.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </div>
       </div>
@@ -528,8 +638,14 @@ const CreateSale = () => {
           </div>
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Phone No.</label>
-            <input value={form.customerPhone} onChange={(e) => handleFieldChange('customerPhone', e.target.value)} placeholder="Phone No." className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+            <input value={form.customerPhone} onChange={(e) => handleFieldChange('customerPhone', formatMobile(e.target.value))} placeholder="Phone No." className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
           </div>
+          {billingNamePref === 'Trading' && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Billing Name</label>
+              <input value={form.billingName || ''} onChange={(e) => handleFieldChange('billingName', e.target.value)} placeholder="Enter billing/trade name" className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -538,16 +654,20 @@ const CreateSale = () => {
           </div>
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Invoice Date <span className="text-red-500">*</span></label>
-            <input type="date" value={form.date} onChange={(e) => handleFieldChange('date', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+            <div className="flex gap-2">
+              <input type="date" value={form.date} onChange={(e) => handleFieldChange('date', e.target.value)} className="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+              {addTimeEnabled && (
+                <input type="time" value={form.time || ''} onChange={(e) => handleFieldChange('time', e.target.value)} className="w-28 px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+              )}
+            </div>
           </div>
-          {godownEnabled && (
           <div>
-            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Warehouse</label>
-            <select value={form.warehouse || ''} onChange={(e) => handleFieldChange('warehouse', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
-              <option value="">Main Warehouse</option>
+            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Branch</label>
+            <select value={form.branch || ''} onChange={(e) => handleFieldChange('branch', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
+              <option value="">No Branch</option>
+              {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
             </select>
           </div>
-          )}
           {placeOfSupplyEnabled && (
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">State of Supply</label>
@@ -557,7 +677,7 @@ const CreateSale = () => {
               handleFieldChange('isInterState', isInter);
             }} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
               <option value="">Select State</option>
-              {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              {INDIAN_STATE_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           )}
@@ -631,9 +751,12 @@ const CreateSale = () => {
                 <th className="px-3 py-3 text-center w-10">#</th>
                 <th className="px-3 py-3 text-left min-w-[200px]">Item <span className="text-red-500">*</span></th>
                 <th className="px-3 py-3 text-center w-20">Qty <span className="text-red-500">*</span></th>
+                {freeQtyEnabled && <th className="px-3 py-3 text-center w-16">Free Qty</th>}
                 <th className="px-3 py-3 text-center w-16">Unit</th>
                 <th className="px-3 py-3 text-right w-28">Price/Unit <span className="text-red-500">*</span></th>
+                {displayPurchasePrice && <th className="px-3 py-3 text-right w-24">Purchase Price</th>}
                 <th className="px-3 py-3 text-center w-24">Discount</th>
+                {wholesalePriceEnabled && <th className="px-3 py-3 text-right w-24">Wholesale Price</th>}
                 <th className="px-3 py-3 text-center w-20">Tax</th>
                 <th className="px-3 py-3 text-right w-28">Amount</th>
                 {showProfit && <th className="px-3 py-3 text-right w-24">Profit</th>}
@@ -654,16 +777,31 @@ const CreateSale = () => {
                   <td className="px-3 py-2.5">
                     <input type="number" min="0.001" step="0.001" value={item.quantity} onChange={(e) => handleItemChange(item._id, 'quantity', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors" />
                   </td>
+                  {freeQtyEnabled && (
+                    <td className="px-3 py-2.5">
+                      <input type="number" min="0" step="1" value={item.freeQuantity || 0} onChange={(e) => handleItemChange(item._id, 'freeQuantity', parseInt(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors" />
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 text-center text-xs text-slate-500 font-medium">{item.unit || 'Pcs'}</td>
                   <td className="px-3 py-2.5">
                     <input type="number" step="0.01" min="0" value={item.rate} onChange={(e) => handleItemChange(item._id, 'rate', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors" />
                   </td>
+                  {displayPurchasePrice && (
+                    <td className="px-3 py-2.5 text-right text-xs text-slate-500">
+                      {item.costPrice > 0 ? fmt(item.costPrice) : <span className="text-slate-300">-</span>}
+                    </td>
+                  )}
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1">
                       <input type="number" min="0" max="100" value={item.discountValue || 0} onChange={(e) => handleItemChange(item._id, 'discountValue', parseFloat(e.target.value) || 0)} className="w-12 px-2 py-1.5 text-xs text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors" />
                       <span className="text-xs text-slate-400">%</span>
                     </div>
                   </td>
+                  {wholesalePriceEnabled && (
+                    <td className="px-3 py-2.5">
+                      <input type="number" step="0.01" min="0" value={item.wholesalePrice || ''} onChange={(e) => handleItemChange(item._id, 'wholesalePrice', parseFloat(e.target.value) || 0)} placeholder="-" className="w-full px-2 py-1.5 text-xs text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors" />
+                    </td>
+                  )}
                   <td className="px-3 py-2.5">
                     <select value={item.gstRate} onChange={(e) => handleItemChange(item._id, 'gstRate', parseFloat(e.target.value))} className="w-full px-2 py-1.5 text-xs text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors">
                       {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
@@ -743,6 +881,24 @@ const CreateSale = () => {
                   <input value={form.vehicleNo || ''} onChange={(e) => handleFieldChange('vehicleNo', e.target.value)} placeholder="Vehicle No." className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
                 </div>
               </>
+            )}
+            {poEnabled && (
+              <>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">PO Number</label>
+                  <input value={form.poNumber || ''} onChange={(e) => handleFieldChange('poNumber', e.target.value)} placeholder="Customer PO Number" className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">PO Date</label>
+                  <input type="date" value={form.poDate || ''} onChange={(e) => handleFieldChange('poDate', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                </div>
+              </>
+            )}
+            {(docType === 'estimate' || docType === 'quotation') && (
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium text-slate-500 w-24">Validity (days)</label>
+                <input type="number" min="0" value={form.validityDays || validityDaysPref} onChange={e => setForm(f => ({ ...f, validityDays: parseInt(e.target.value) || 0 }))} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              </div>
             )}
             {dueDatesEnabled && (
               <div>
@@ -881,9 +1037,26 @@ const CreateSale = () => {
         </div>
       )}
 
+      {/* Return Reason (Credit Note only) */}
+      {docType === 'credit_note' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-medium text-slate-500 w-24">Return Reason</label>
+            <select value={form.returnReason || ''} onChange={e => setForm(f => ({ ...f, returnReason: e.target.value }))} className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <option value="">Select reason</option>
+              {RETURN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex items-center justify-end gap-3 mb-4">
-        <button disabled className="px-4 py-2.5 text-sm font-medium text-slate-400 border border-slate-200 rounded-lg cursor-not-allowed flex items-center gap-2 bg-white">
+        <button onClick={async () => {
+          const { message, subject } = generateShareContent(form.type || 'invoice', form);
+          const shared = await copyToClipboard(message);
+          toast.success(shared ? 'Invoice details copied to clipboard' : 'Failed to copy');
+        }} className="px-4 py-2.5 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors bg-white flex items-center gap-2">
           <Share2 className="w-4 h-4" /> Share
         </button>
         <button onClick={() => navigate('/sales')} className="px-4 py-2.5 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors bg-white">
@@ -1012,7 +1185,41 @@ const CreateSale = () => {
                   </div>
                 </div>
               )}
-            </motion.div>
+      {/* Close Confirmation Dialog */}
+      {showCloseConfirm !== null && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCloseConfirm(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-slate-900 mb-2">Unsaved Changes</h3>
+            <p className="text-sm text-slate-600 mb-4">This invoice has unsaved changes. What would you like to do?</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowCloseConfirm(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+              <button onClick={() => { const tabId = showCloseConfirm; setShowCloseConfirm(null); performCloseTab(tabId); }}
+                className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors">Discard</button>
+              <button onClick={async () => {
+                const tabToSave = tabs.find(t => t.id === showCloseConfirm);
+                const tabId = showCloseConfirm;
+                setShowCloseConfirm(null);
+                if (tabToSave) {
+                  try {
+                    const payload = { ...tabToSave.form };
+                    payload.items = (payload.items || []).map(i => ({ ...i, _id: undefined }));
+                    payload.type = payload.type || 'invoice';
+                    payload.status = 'confirmed';
+                    payload.isInterState = !!payload.isInterState;
+                    if (!payload.customerType) delete payload.customerType;
+                    delete payload.time;
+                    await saleAPI.create(payload);
+                    toast.success('Invoice saved');
+                  } catch (err) { toast.error(err.response?.data?.message || 'Failed to save'); }
+                }
+                performCloseTab(tabId);
+              }}
+                className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">Save & Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

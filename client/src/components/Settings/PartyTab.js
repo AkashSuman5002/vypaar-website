@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import ToggleSwitch from './ToggleSwitch';
@@ -15,6 +16,7 @@ const DEFAULT_CUSTOM_FIELDS = [
 ];
 
 const PartyTab = () => {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState(defaultPrefs.party);
   const [customFields, setCustomFields] = useState(DEFAULT_CUSTOM_FIELDS);
   const [newFieldName, setNewFieldName] = useState('');
@@ -74,7 +76,7 @@ const PartyTab = () => {
           <SettingsSection title="Payment Reminder">
             <ToggleSwitch label="Payment Reminder" checked={settings.paymentReminder} onChange={v => update('paymentReminder', v)} />
             <SettingsInputRow label="Reminder Days" value={settings.reminderDays} onChange={v => update('reminderDays', v)} placeholder="7" suffix="days before" type="number" />
-            <SettingsButtonRow label="Reminder Message" buttonLabel="Configure Message" buttonColor="bg-gray-500" />
+            <SettingsButtonRow label="Reminder Message" buttonLabel="Configure Message" buttonColor="bg-gray-500" onClick={() => navigate('/settings?tab=transactionMessage')} />
           </SettingsSection>
           <SettingsSection title="Enable Loyalty Points">
             <div className="py-2">

@@ -23,6 +23,15 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 
+const pad = (n) => String(n).padStart(2, '0');
+// Local-timezone YYYY-MM-DD key. Avoids the UTC shift that toISOString() introduces,
+// which otherwise places transactions on the wrong day (or outside the visible month).
+const toDateKey = (val) => {
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 const CalendarPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -41,8 +50,12 @@ const CalendarPage = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const dateFrom = new Date(year, month, 1).toISOString().split('T')[0];
-      const dateTo = new Date(year, month + 1, 0).toISOString().split('T')[0];
+      // Widen the fetch window by a day on each side so timezone differences at the
+      // month boundary never drop transactions; local-key matching narrows it back down.
+      const fromDate = new Date(year, month, 0);          // last day of previous month
+      const toDate = new Date(year, month + 1, 1);        // first day of next month
+      const dateFrom = toDateKey(fromDate);
+      const dateTo = toDateKey(toDate);
       const [salesRes, purchaseRes, expenseRes] = await Promise.all([
         saleAPI.getAll({ dateFrom, dateTo, limit: 500 }).catch(() => ({ data: { sales: [] } })),
         purchaseAPI.getAll({ dateFrom, dateTo, limit: 500 }).catch(() => ({ data: { purchases: [] } })),
@@ -61,19 +74,10 @@ const CalendarPage = () => {
   useEffect(() => { loadData(); }, [loadData]);
 
   const getTransactionsForDay = (day) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const daySales = sales.filter(s => {
-      const d = new Date(s.date).toISOString().split('T')[0];
-      return d === dateStr;
-    });
-    const dayPurchases = purchases.filter(p => {
-      const d = new Date(p.date).toISOString().split('T')[0];
-      return d === dateStr;
-    });
-    const dayExpenses = expenses.filter(e => {
-      const d = new Date(e.date).toISOString().split('T')[0];
-      return d === dateStr;
-    });
+    const dateStr = `${year}-${pad(month + 1)}-${pad(day)}`;
+    const daySales = sales.filter(s => toDateKey(s.date) === dateStr);
+    const dayPurchases = purchases.filter(p => toDateKey(p.date) === dateStr);
+    const dayExpenses = expenses.filter(e => toDateKey(e.date) === dateStr);
     return { sales: daySales, purchases: dayPurchases, expenses: dayExpenses };
   };
 
@@ -91,8 +95,8 @@ const CalendarPage = () => {
   for (let i = 0; i < firstDay; i++) days.push(null);
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
 
-  const totalSales = sales.reduce((s, sale) => s + (sale.total || 0), 0);
-  const totalPurchases = purchases.reduce((s, p) => s + (p.total || 0), 0);
+  const totalSales = sales.reduce((s, sale) => s + (sale.totalAmount || 0), 0);
+  const totalPurchases = purchases.reduce((s, p) => s + (p.totalAmount || 0), 0);
   const totalExpenses = expenses.reduce((s, e) => s + (e.totalAmount || 0), 0);
 
   if (loading && sales.length === 0 && purchases.length === 0 && expenses.length === 0) {
@@ -256,7 +260,7 @@ const CalendarPage = () => {
                             <p className="text-sm font-medium text-slate-900">{s.invoiceNumber || s._id?.slice(-6)}</p>
                             <p className="text-xs text-slate-500">{s.customerName || 'Walk-in'}</p>
                           </div>
-                          <span className="text-sm font-bold text-blue-700">{formatCurrency(s.total)}</span>
+                          <span className="text-sm font-bold text-blue-700">{formatCurrency(s.totalAmount)}</span>
                         </div>
                       ))}
                     </div>
@@ -271,10 +275,10 @@ const CalendarPage = () => {
                       {selectedDay.purchases.map(p => (
                         <div key={p._id} className="flex items-center justify-between p-2.5 bg-orange-50 dark:bg-orange-900/20 rounded-xl">
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{p.invoiceNumber || p._id?.slice(-6)}</p>
+                            <p className="text-sm font-medium text-slate-900">{p.billNumber || p._id?.slice(-6)}</p>
                             <p className="text-xs text-slate-500">{p.supplierName || 'Supplier'}</p>
                           </div>
-                          <span className="text-sm font-bold text-orange-700">{formatCurrency(p.total)}</span>
+                          <span className="text-sm font-bold text-orange-700">{formatCurrency(p.totalAmount)}</span>
                         </div>
                       ))}
                     </div>

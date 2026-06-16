@@ -7,6 +7,8 @@ import LoadingSpinner from '../components/UI/LoadingSpinner';
 import EmptyState from '../components/UI/EmptyState';
 import { toast } from 'react-toastify';
 import { formatCurrency } from '../utils/format';
+import { validateMobile, validateEmail, formatMobile } from '../utils/validation';
+import { useSettings } from '../hooks/useSettings';
 import { motion } from 'framer-motion';
 import { Pencil, Trash2, Plus, Eye, Truck, IndianRupee } from 'lucide-react';
 
@@ -20,21 +22,32 @@ const Suppliers = () => {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState(null);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', openingBalance: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', openingBalance: '', gstNumber: '', creditLimit: '', state: '', notes: '' });
+  const [errors, setErrors] = useState({});
+  const [customFields, setCustomFields] = useState({});
+  const { getPref } = useSettings();
 
   useEffect(() => { loadSuppliers(); }, []);
 
   const loadSuppliers = async () => {
     try {
       const { data } = await supplierAPI.getAll();
-      setSuppliers(data);
+      setSuppliers(Array.isArray(data) ? data : data?.data || []);
     } catch { toast.error('Failed to load suppliers'); }
     finally { setLoading(false); }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const payload = { ...form, openingBalance: parseFloat(form.openingBalance) || 0 };
+    const newErrors = {};
+    const phoneResult = validateMobile(form.phone);
+    if (!phoneResult.valid) newErrors.phone = phoneResult.error;
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+    if (!form.name.trim()) newErrors.name = 'Supplier name is required';
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
+    const payload = { ...form, openingBalance: parseFloat(form.openingBalance) || 0, creditLimit: parseFloat(form.creditLimit) || 0, customFields };
     try {
       if (edit) {
         await supplierAPI.update(edit._id, payload);
@@ -44,7 +57,9 @@ const Suppliers = () => {
         toast.success('Supplier created');
       }
       setModal(false); setEdit(null);
-      setForm({ name: '', phone: '', email: '', address: '', openingBalance: '' });
+      setForm({ name: '', phone: '', email: '', address: '', openingBalance: '', gstNumber: '', creditLimit: '', state: '', notes: '' });
+      setCustomFields({});
+      setErrors({});
       loadSuppliers();
     } catch { toast.error('Operation failed'); }
   };
@@ -66,7 +81,12 @@ const Suppliers = () => {
       email: supplier.email || '',
       address: supplier.address || '',
       openingBalance: supplier.openingBalance || '',
+      gstNumber: supplier.gstNumber || '',
+      creditLimit: supplier.creditLimit || '',
+      state: supplier.state || '',
+      notes: supplier.notes || '',
     });
+    setCustomFields(supplier.customFields || {});
     setModal(true);
   };
 
@@ -110,7 +130,7 @@ const Suppliers = () => {
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Suppliers</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Manage your vendor relationships</p>
         </div>
-        <button onClick={() => { setEdit(null); setForm({ name: '', phone: '', email: '', address: '', openingBalance: '' }); setModal(true); }} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+        <button onClick={() => { setEdit(null); setForm({ name: '', phone: '', email: '', address: '', openingBalance: '' }); setCustomFields({}); setErrors({}); setModal(true); }} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
           <Plus className="w-4 h-4" /> Add Supplier
         </button>
       </div>
@@ -131,7 +151,7 @@ const Suppliers = () => {
       </div>
 
       {suppliers.length === 0 ? (
-        <EmptyState type="suppliers" actionLabel="Add Supplier" onAction={() => { setEdit(null); setForm({ name: '', phone: '', email: '', address: '', openingBalance: '' }); setModal(true); }} />
+        <EmptyState type="suppliers" actionLabel="Add Supplier" onAction={() => { setEdit(null); setForm({ name: '', phone: '', email: '', address: '', openingBalance: '' }); setCustomFields({}); setErrors({}); setModal(true); }} />
       ) : (
         <DataTable columns={columns} data={suppliers} />
       )}
@@ -140,26 +160,71 @@ const Suppliers = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Supplier Name</label>
-            <input placeholder="Enter supplier name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+            <input placeholder="Enter supplier name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 text-sm ${errors.name ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+              {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Phone</label>
-              <input placeholder="Phone number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+              <input placeholder="Phone number" value={form.phone} onChange={(e) => setForm({ ...form, phone: formatMobile(e.target.value) })} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 text-sm ${errors.phone ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+              {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Email</label>
-              <input placeholder="Email address" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+              <input placeholder="Email address" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 text-sm ${errors.email ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+              {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Address</label>
-            <textarea placeholder="Enter address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={2} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+          {getPref('party', 'partyShowAddresses') !== false && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Address</label>
+              <textarea placeholder={getPref('party', 'partyDefaultAddress') || 'Enter address'} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={2} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Opening Balance</label>
+              <input placeholder="0.00" type="number" step="0.01" value={form.openingBalance} onChange={(e) => setForm({ ...form, openingBalance: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+            </div>
+            {getPref('party', 'partyShowStatutory') && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">GST Number</label>
+                <input placeholder="GSTIN" value={form.gstNumber} onChange={(e) => setForm({ ...form, gstNumber: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+              </div>
+            )}
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Opening Balance</label>
-            <input placeholder="0.00" type="number" step="0.01" value={form.openingBalance} onChange={(e) => setForm({ ...form, openingBalance: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">State</label>
+              <select value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm">
+                <option value="">Select State</option>
+                {['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu and Kashmir','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal'].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            {getPref('party', 'partyShowPricing') && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Credit Limit</label>
+                <input placeholder="0.00" type="number" step="0.01" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: e.target.value })} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+              </div>
+            )}
           </div>
+          {getPref('party', 'partyShowNotes') && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Notes</label>
+              <textarea placeholder="Additional notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+            </div>
+          )}
+          {Array.isArray(getPref('party', 'customFieldDefs')) && getPref('party', 'customFieldDefs').length > 0 && (
+            <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-gray-600">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Additional Fields</p>
+              {getPref('party', 'customFieldDefs').map(field => (
+                <div key={field.id}>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">{field.name}</label>
+                  <input placeholder={field.name} value={customFields[field.id] || ''} onChange={(e) => setCustomFields(prev => ({ ...prev, [field.id]: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm transition-all" />
+                </div>
+              ))}
+            </div>
+          )}
           <button type="submit" className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">{edit ? 'Update Supplier' : 'Create Supplier'}</button>
         </form>
       </Modal>

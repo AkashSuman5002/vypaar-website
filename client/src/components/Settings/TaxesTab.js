@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import ToggleSwitch from './ToggleSwitch';
@@ -7,6 +8,7 @@ import { Plus, Edit3, Trash2, Percent, Save } from 'lucide-react';
 import { defaultPrefs, loadSettings, saveCategory } from '../../hooks/useSettings';
 
 const TaxesTab = () => {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState(defaultPrefs.taxes);
   const [saving, setSaving] = useState(false);
   const [taxRates, setTaxRates] = useState(defaultPrefs.taxes.taxRates);
@@ -67,13 +69,34 @@ const TaxesTab = () => {
             <ToggleSwitch label="HSN/SAC Code" checked={settings.hsnSac} onChange={v => update('hsnSac', v)} />
             <ToggleSwitch label="Additional Cess" checked={settings.additionalCess} onChange={v => update('additionalCess', v)} />
             <ToggleSwitch label="Reverse Charge" checked={settings.reverseCharge} onChange={v => update('reverseCharge', v)} />
+            {settings.additionalCess && (
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-[#1F2937]">Cess Rate (%)</span>
+                <input type="number" step="0.01" min="0" max="100" value={settings.cessRate || ''} onChange={e => update('cessRate', e.target.value)}
+                  placeholder="0" className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937] text-center" />
+              </div>
+            )}
+            {settings.enableTCS && (
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-[#1F2937]">TCS Rate (%)</span>
+                <input type="number" step="0.01" min="0" max="100" value={settings.tcsRate || ''} onChange={e => update('tcsRate', e.target.value)}
+                  placeholder="0" className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937] text-center" />
+              </div>
+            )}
+            {settings.enableTDS && (
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-[#1F2937]">TDS Rate (%)</span>
+                <input type="number" step="0.01" min="0" max="100" value={settings.tdsRate || ''} onChange={e => update('tdsRate', e.target.value)}
+                  placeholder="0" className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937] text-center" />
+              </div>
+            )}
             <ToggleSwitch label="Place of Supply" checked={settings.placeOfSupply} onChange={v => update('placeOfSupply', v)} />
             <ToggleSwitch label="Composition Scheme" checked={settings.compositionScheme} onChange={v => update('compositionScheme', v)} />
             <ToggleSwitch label="Enable TCS" checked={settings.enableTCS} onChange={v => update('enableTCS', v)} />
             <ToggleSwitch label="Enable TDS" checked={settings.enableTDS} onChange={v => update('enableTDS', v)} />
           </SettingsSection>
           <div className="px-5">
-            <button className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors">
+            <button onClick={() => navigate('/reports/taxes/gst-report')} className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors">
               Tax List
             </button>
           </div>

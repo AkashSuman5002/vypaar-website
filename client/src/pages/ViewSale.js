@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI } from '../services/api';
+import { saleAPI, settingAPI, whatsappAPI, BASE_URL } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import Modal from '../components/UI/Modal';
 import Badge from '../components/UI/Badge';
@@ -44,12 +44,30 @@ const ViewSale = () => {
   const handlePrint = () => {
     const printContent = document.getElementById('invoice-print-area');
     if (!printContent) return;
-    const original = document.body.innerHTML;
-    document.body.innerHTML = printContent.outerHTML;
-    document.title = `Invoice ${sale.invoiceNumber}`;
-    window.print();
-    document.body.innerHTML = original;
-    window.location.reload();
+    const copies = parseInt(settings?.preferences?.print?.numberOfCopies) || 1;
+    const printWindow = window.open('', '_blank');
+    let repeatedContent = '';
+    for (let i = 0; i < copies; i++) {
+      repeatedContent += `<div class="invoice-copy">${printContent.innerHTML}</div>`;
+      if (i < copies - 1) {
+        repeatedContent += '<div style="page-break-after: always;"></div>';
+      }
+    }
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice ${sale.invoiceNumber}</title>
+          <style>
+            @media print { .invoice-copy { page-break-after: always; } }
+            .invoice-copy:last-child { page-break-after: auto; }
+            body { margin: 0; padding: 0; }
+          </style>
+        </head>
+        <body>${repeatedContent}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const handleDownloadPDF = async () => {
@@ -109,7 +127,7 @@ const ViewSale = () => {
   const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 16;
   const invoiceHeadingSize = parseInt(printPrefs.invoiceTextSize) || 14;
 
-  const bizLogo = settings?.logo ? `http://localhost:5000/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[210mm] mx-auto">
@@ -172,9 +190,14 @@ const ViewSale = () => {
           <button onClick={handleDownloadPDF} className="inline-flex items-center gap-1.5 px-3 py-2 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
             <Download className="w-4 h-4" /> PDF
           </button>
-          <button onClick={() => {
+          <button onClick={async () => {
             const msg = `*Invoice ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}\nStatus: ${sale.paymentStatus}`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+            try {
+              await whatsappAPI.send({ phone: sale.customerPhone || sale.customer?.phone, message: msg });
+              toast.success('WhatsApp message sent');
+            } catch {
+              window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+            }
           }} className="inline-flex items-center gap-1.5 px-3 py-2 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-sm font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors">
             <MessageSquare className="w-4 h-4" /> WhatsApp
           </button>
@@ -392,6 +415,16 @@ const ViewSale = () => {
             </div>
           )}
 
+          {(sale.additionalField1 || sale.additionalField2) && (
+            <div className="mb-6 p-4 border border-gray-200 dark:border-gray-700 print:border-gray-300 rounded-xl">
+              <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider mb-3">Additional Fields</h3>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                {sale.additionalField1 && <div><span className="text-gray-400 dark:text-gray-500 print:text-gray-500">Field 1</span><p className="font-medium text-slate-900 dark:text-slate-100 print:text-gray-900 mt-0.5">{sale.additionalField1}</p></div>}
+                {sale.additionalField2 && <div><span className="text-gray-400 dark:text-gray-500 print:text-gray-500">Field 2</span><p className="font-medium text-slate-900 dark:text-slate-100 print:text-gray-900 mt-0.5">{sale.additionalField2}</p></div>}
+              </div>
+            </div>
+          )}
+
           {/* FOOTER */}
           <div className="border-t border-gray-200 dark:border-gray-700 print:border-gray-300 pt-6">
             <div className="flex flex-col sm:flex-row justify-between gap-6">
@@ -429,8 +462,8 @@ const ViewSale = () => {
                 </p>
                 </>
                 )}
-                {printPrefs.footerSettings !== false && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 print:text-gray-500 mt-4">Generated by Vyapar Business Solutions</p>
+                {printPrefs.footerSettings && typeof printPrefs.footerSettings === 'string' && printPrefs.footerSettings.trim() && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 print:text-gray-500 mt-4">{printPrefs.footerSettings}</p>
                 )}
               </div>
             </div>

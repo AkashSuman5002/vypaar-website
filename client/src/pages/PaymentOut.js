@@ -10,6 +10,7 @@ import {
   Calculator, Delete, Settings as SettingsIcon,
 } from 'lucide-react';
 import { supplierAPI, paymentOutAPI, fetchCsrfToken } from '../services/api';
+import { generateShareContent, shareToWhatsApp, shareViaEmail, copyToClipboard } from '../utils/shareUtils';
 
 const PAYMENT_MODES = ['Cash', 'Bank', 'UPI', 'Cheque', 'Card', 'Credit', 'NEFT', 'RTGS', 'IMPS', 'Wallet'];
 const DEFAULT_PAYMENT_TYPES = ['Cash', 'Bank', 'UPI', 'Cheque'];
@@ -404,11 +405,11 @@ const PaymentOut = () => {
                           className="absolute right-0 bottom-full mb-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-20 p-1"
                         >
                           {[
-                            { label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600' },
-                            { label: 'Email', icon: Mail, color: 'text-blue-600' },
-                            { label: 'Copy Link', icon: Link2, color: 'text-slate-600' },
+                            { label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600', action: () => { const { message } = generateShareContent('payment', form); shareToWhatsApp(message); } },
+                            { label: 'Email', icon: Mail, color: 'text-blue-600', action: () => { const { subject, message } = generateShareContent('payment', form); shareViaEmail(subject, message); } },
+                            { label: 'Copy Link', icon: Link2, color: 'text-slate-600', action: () => { const { message } = generateShareContent('payment', form); copyToClipboard(message); } },
                           ].map(opt => (
-                            <button key={opt.label} onClick={() => { toast.info(`${opt.label} share coming soon`); setShareOpen(false); }}
+                            <button key={opt.label} onClick={() => { opt.action(); setShareOpen(false); }}
                               className="w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 rounded flex items-center gap-2 transition-colors"
                             >
                               <opt.icon className={`w-3.5 h-3.5 ${opt.color}`} />

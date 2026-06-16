@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI } from '../services/api';
+import { saleAPI, settingAPI, BASE_URL } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
@@ -33,12 +33,24 @@ const ViewProforma = () => {
   const handlePrint = () => {
     const printContent = document.getElementById('invoice-print-area');
     if (!printContent) return;
-    const original = document.body.innerHTML;
-    document.body.innerHTML = printContent.outerHTML;
-    document.title = `Proforma ${sale.invoiceNumber}`;
-    window.print();
-    document.body.innerHTML = original;
-    window.location.reload();
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${sale.invoiceNumber || 'Invoice'}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>${printContent.innerHTML}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
 
   const handleDownloadPDF = async () => {
@@ -66,7 +78,7 @@ const ViewProforma = () => {
   const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 16;
   const invoiceHeadingSize = parseInt(printPrefs.invoiceTextSize) || 14;
   const fmt = (amt) => formatCurrency(amt, currencyPref, decimalPref);
-  const bizLogo = settings?.logo ? `http://localhost:5000/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[210mm] mx-auto">

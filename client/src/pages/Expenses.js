@@ -7,8 +7,10 @@ import {
   Plus, Search, Download, Printer, Eye, Pencil, Trash2, X,
   ChevronLeft, ChevronRight, IndianRupee, FileText, Receipt,
   Percent, Save, Share2, Wallet, Tag, Calendar, Loader2,
+  CheckCircle, XCircle,
 } from 'lucide-react';
 import { expenseAPI } from '../services/api';
+import { generateShareContent, shareToWhatsApp, shareViaEmail, copyToClipboard, shareToSMS } from '../utils/shareUtils';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -137,6 +139,24 @@ const Expenses = () => {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to delete expense');
     }
+  };
+
+  const handleApprove = async (id) => {
+    try {
+      await expenseAPI.approve(id);
+      toast.success('Expense approved');
+      setRefreshKey(k => k + 1);
+    } catch { toast.error('Failed to approve'); }
+  };
+
+  const handleReject = async (id) => {
+    const reason = window.prompt('Rejection reason:');
+    if (reason === null) return;
+    try {
+      await expenseAPI.reject(id, reason);
+      toast.success('Expense rejected');
+      setRefreshKey(k => k + 1);
+    } catch { toast.error('Failed to reject'); }
   };
 
   const totalExpenses = expenses.reduce((s, e) => s + (e.totalAmount || 0), 0);
@@ -274,14 +294,14 @@ const Expenses = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100">
-                {['#', 'Date', 'Expense No', 'Category', 'Items', 'Payment', 'Total', ''].map(h => (
+                {['#', 'Date', 'Expense No', 'Category', 'Items', 'Payment', 'Total', 'Status', ''].map(h => (
                   <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto" /></td></tr>
+                <tr><td colSpan={9} className="px-4 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto" /></td></tr>
               )}
               {!loading && expenses.map((exp, idx) => (
                 <tr key={exp._id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
@@ -297,6 +317,15 @@ const Expenses = () => {
                   <td className="px-4 py-3"><span className="text-sm text-slate-600 capitalize">{exp.paymentMethod}</span></td>
                   <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900">{formatCurrency(exp.totalAmount)}</span></td>
                   <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      exp.approvalStatus === 'approved' ? 'bg-green-100 text-green-800' :
+                      exp.approvalStatus === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {exp.approvalStatus || 'approved'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => {
                         const detail = [
@@ -310,6 +339,16 @@ const Expenses = () => {
                         alert(detail);
                       }}
                         className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="View"><Eye className="w-3.5 h-3.5" /></button>
+                      {exp.approvalStatus === 'pending' && (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleApprove(exp._id)} className="p-1.5 rounded-lg hover:bg-green-50 text-green-500 hover:text-green-700 transition-colors" title="Approve">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleReject(exp._id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors" title="Reject">
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                       <button onClick={() => {
                           setEditing(exp);
                           setForm({
@@ -336,7 +375,7 @@ const Expenses = () => {
                 </tr>
               ))}
               {!loading && expenses.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-500">No expenses found</td></tr>
+                <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">No expenses found</td></tr>
               )}
             </tbody>
           </table>
@@ -508,9 +547,14 @@ const Expenses = () => {
                   className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
                 >Cancel</button>
                 <button onClick={() => {
-                  const total = expenses.reduce((s, e) => s + (e.totalAmount || 0), 0);
-                  const msg = `Expense Summary:\nTotal: ${formatCurrency(total)}\nEntries: ${expenses.length}`;
-                  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                  const itemList = items.filter(i => i.name).map(i => `  ${i.name} x${i.qty} = ${formatCurrency(i.amount)}`).join('\n');
+                  const shareText = `Expense: ${form.category || 'N/A'}\nExpense No: ${form.expenseNo || 'N/A'}\nDate: ${form.date}\nPayment: ${form.paymentType}\nItems:\n${itemList || '  N/A'}\nTotal: ${formatCurrency(grandTotal)}`;
+                  if (navigator.share) {
+                    navigator.share({ text: shareText });
+                  } else {
+                    navigator.clipboard.writeText(shareText);
+                    toast.success('Expense details copied to clipboard');
+                  }
                 }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-all"
                 ><Share2 className="w-4 h-4" /> Share</button>

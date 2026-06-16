@@ -6,13 +6,9 @@ import ReportTable from '../../components/reports/common/ReportTable';
 import ReportSummary from '../../components/reports/common/ReportSummary';
 import { reportAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
+import { exportToExcel } from '../../utils/exportUtils';
 
-const summaryCards = [
-  { label: 'Opening Balance', color: '#3B82F6', value: '₹0.00' },
-  { label: 'Loan Amount', color: '#8B5CF6', value: '₹0.00' },
-  { label: 'Interest Paid', color: '#EF4444', value: '₹0.00' },
-  { label: 'Closing Balance', color: '#22C55E', value: '₹0.00' },
-];
+const fmt = (v) => v != null ? `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₹0.00';
 
 const columns = [
   { key: 'date', label: 'Date' },
@@ -30,6 +26,21 @@ const LoanStatement = () => {
   const [search, setSearch] = useState('');
   const filteredData = data.filter(d => !search || Object.values(d).some(v => String(v).toLowerCase().includes(search.toLowerCase())));
   const [dates, setDates] = useState({ start: '', end: '' });
+  const [loanSummary, setLoanSummary] = useState(null);
+
+  const summaryCards = loanSummary
+    ? [
+        { label: 'Opening Balance', color: '#3B82F6', value: fmt(loanSummary.openingBalance || loanSummary.outstanding) },
+        { label: 'Loan Amount', color: '#8B5CF6', value: fmt(loanSummary.loanAmount || loanSummary.principal || loanSummary.totalPrincipal) },
+        { label: 'Interest Paid', color: '#EF4444', value: fmt(loanSummary.interestPaid || loanSummary.totalInterest) },
+        { label: 'Closing Balance', color: '#22C55E', value: fmt(loanSummary.closingBalance || loanSummary.outstanding || loanSummary.balance) },
+      ]
+    : [
+        { label: 'Opening Balance', color: '#3B82F6', value: '₹0.00' },
+        { label: 'Loan Amount', color: '#8B5CF6', value: '₹0.00' },
+        { label: 'Interest Paid', color: '#EF4444', value: '₹0.00' },
+        { label: 'Closing Balance', color: '#22C55E', value: '₹0.00' },
+      ];
 
   const handleDateChange = (type, value) => {
     setDates(prev => ({ ...prev, [type]: value }));
@@ -43,6 +54,7 @@ const LoanStatement = () => {
         if (dates.start && dates.end) { params.startDate = dates.start; params.endDate = dates.end; }
         const res = await reportAPI.getLoanStatement(params);
         setData(res.data.entries || []);
+        setLoanSummary(res.data);
       } catch (err) { console.error('Failed to load loan statement', err); }
       finally { setLoading(false); }
     };
@@ -64,6 +76,8 @@ const LoanStatement = () => {
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 dark:text-[#64748B] pointer-events-none" />
         </div>
+        <button onClick={() => exportToExcel(filteredData, columns, 'Loan_Statement')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+        <button onClick={() => window.print()} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
       </ReportHeader>
       <div className="bg-white dark:bg-[#0F172A] min-h-full p-6 space-y-5">
         <div className="grid grid-cols-4 gap-3">

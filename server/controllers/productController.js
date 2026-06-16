@@ -1,11 +1,40 @@
 const Product = require('../models/Product');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { getSettings } = require('../utils/settingsHelper');
 
 const getProducts = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const products = await Product.find({ ...baseFilter }).sort({ createdAt: -1 });
-    res.json(products);
+    const { search, page = 1, limit = 50, warehouse, category } = req.query;
+
+    let filter = { ...baseFilter };
+    if (warehouse) filter.warehouse = warehouse;
+    if (category) filter.category = category;
+    if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { sku: { $regex: escaped, $options: 'i' } },
+        { category: { $regex: escaped, $options: 'i' } }
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const total = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    res.json({
+      data: products,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -13,10 +42,46 @@ const getProducts = async (req, res) => {
 
 const createProduct = async (req, res) => {
   try {
-    const { name, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp } = req.body;
+    const prefs = await getSettings(req);
+    if (prefs.item.enableItem === false) {
+      return res.status(400).json({ message: 'Item creation is disabled in settings' });
+    }
+    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp } = req.body;
+    const type = itemType === 'Service' ? 'service' : 'product';
+    if (prefs.item.batchTracking === true && !batchNo) {
+      return res.status(400).json({ message: 'Batch tracking is enabled. Batch number is required' });
+    }
+    if (prefs.item.serialNumberTracking === true && !serialNo) {
+      return res.status(400).json({ message: 'Serial number tracking is enabled. Serial number is required' });
+    }
+    if (prefs.item.expiryDate === true && !expiryDate) {
+      return res.status(400).json({ message: 'Expiry date tracking is enabled. Expiry date is required' });
+    }
+    if (prefs.item.manufacturingDate === true && !mfgDate) {
+      return res.status(400).json({ message: 'Manufacturing date is required' });
+    }
+    if (prefs.item.modelNumber === true && !modelNo) {
+      return res.status(400).json({ message: 'Model number is required' });
+    }
+    if (prefs.item.size === true && !size) {
+      return res.status(400).json({ message: 'Size is required' });
+    }
+    if (prefs.item.itemCategory === true && !category) {
+      return res.status(400).json({ message: 'Item category is required' });
+    }
+    if (prefs.taxes.hsnSac === true && !hsn) {
+      return res.status(400).json({ message: 'HSN/SAC code is required' });
+    }
+    if (prefs.general.enableGodown === true && !warehouse) {
+      const Godown = require('../models/Godown');
+      const godownCount = await Godown.countDocuments({ user: req.user._id, business: req.businessId, isActive: true });
+      if (godownCount > 0) {
+        return res.status(400).json({ message: 'Godown/Warehouse assignment is required' });
+      }
+    }
     const product = await Product.create({
       ...getCreateData(req),
-      name, category, price, costPrice, stock, unit, gstRate,
+      name, type, category, price, costPrice, stock, unit, gstRate,
       sku, brand, hsn, description, image, supplier, warehouse,
       storageLocation, modelNo, size, serialNo, batchNo,
       expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp,
@@ -32,8 +97,71 @@ const updateProduct = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const product = await Product.findOne({ ...baseFilter, _id: req.params.id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
-    const { name, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp } = req.body;
-    const updated = await Product.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, { name, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp }, { new: true });
+    const prefs = await getSettings(req);
+    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp } = req.body;
+    const type = itemType !== undefined ? (itemType === 'Service' ? 'service' : 'product') : product.type;
+    const merged = {
+      name: name !== undefined ? name : product.name,
+      type,
+      category: category !== undefined ? category : product.category,
+      price: price !== undefined ? price : product.price,
+      costPrice: costPrice !== undefined ? costPrice : product.costPrice,
+      stock: stock !== undefined ? stock : product.stock,
+      unit: unit !== undefined ? unit : product.unit,
+      gstRate: gstRate !== undefined ? gstRate : product.gstRate,
+      sku: sku !== undefined ? sku : product.sku,
+      brand: brand !== undefined ? brand : product.brand,
+      hsn: hsn !== undefined ? hsn : product.hsn,
+      description: description !== undefined ? description : product.description,
+      image: image !== undefined ? image : product.image,
+      supplier: supplier !== undefined ? supplier : product.supplier,
+      warehouse: warehouse !== undefined ? warehouse : product.warehouse,
+      storageLocation: storageLocation !== undefined ? storageLocation : product.storageLocation,
+      modelNo: modelNo !== undefined ? modelNo : product.modelNo,
+      size: size !== undefined ? size : product.size,
+      serialNo: serialNo !== undefined ? serialNo : product.serialNo,
+      batchNo: batchNo !== undefined ? batchNo : product.batchNo,
+      expiryDate: expiryDate !== undefined ? expiryDate : product.expiryDate,
+      mfgDate: mfgDate !== undefined ? mfgDate : product.mfgDate,
+      cgst: cgst !== undefined ? cgst : product.cgst,
+      sgst: sgst !== undefined ? sgst : product.sgst,
+      igst: igst !== undefined ? igst : product.igst,
+      minStock: minStock !== undefined ? minStock : product.minStock,
+      barcode: barcode !== undefined ? barcode : product.barcode,
+      mrp: mrp !== undefined ? mrp : product.mrp,
+    };
+    if (prefs.item.batchTracking === true && !merged.batchNo) {
+      return res.status(400).json({ message: 'Batch tracking is enabled. Batch number is required' });
+    }
+    if (prefs.item.serialNumberTracking === true && !merged.serialNo) {
+      return res.status(400).json({ message: 'Serial number tracking is enabled. Serial number is required' });
+    }
+    if (prefs.item.expiryDate === true && !merged.expiryDate) {
+      return res.status(400).json({ message: 'Expiry date tracking is enabled. Expiry date is required' });
+    }
+    if (prefs.item.manufacturingDate === true && !merged.mfgDate) {
+      return res.status(400).json({ message: 'Manufacturing date is required' });
+    }
+    if (prefs.item.modelNumber === true && !merged.modelNo) {
+      return res.status(400).json({ message: 'Model number is required' });
+    }
+    if (prefs.item.size === true && !merged.size) {
+      return res.status(400).json({ message: 'Size is required' });
+    }
+    if (prefs.item.itemCategory === true && !merged.category) {
+      return res.status(400).json({ message: 'Item category is required' });
+    }
+    if (prefs.taxes.hsnSac === true && !merged.hsn) {
+      return res.status(400).json({ message: 'HSN/SAC code is required' });
+    }
+    if (prefs.general.enableGodown === true && !merged.warehouse) {
+      const Godown = require('../models/Godown');
+      const godownCount = await Godown.countDocuments({ user: req.user._id, business: req.businessId, isActive: true });
+      if (godownCount > 0) {
+        return res.status(400).json({ message: 'Godown/Warehouse assignment is required' });
+      }
+    }
+    const updated = await Product.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, merged, { new: true });
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });

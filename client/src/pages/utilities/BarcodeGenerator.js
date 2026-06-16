@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Info, Printer, Settings2, Plus, Trash2 } from 'lucide-react';
@@ -17,10 +18,11 @@ const BarcodeGenerator = () => {
   const [barcodeItems, setBarcodeItems] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     productAPI.getAll().then(r => {
-      setProducts(r.data.products || r.data || []);
+      setProducts(r.data?.data || []);
     }).catch(() => toast.error('Failed to load items'))
       .finally(() => setLoading(false));
   }, []);
@@ -75,7 +77,7 @@ const BarcodeGenerator = () => {
         <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">Barcode Generator <Info className="w-5 h-5 text-slate-400" /></h1>
         <div className="flex items-center gap-3 text-sm text-slate-600">
           <Printer className="w-4 h-4" /> Label Printer | Size 2 Labels (50x25mm)
-          <button onClick={() => toast.info('Label size: 50x25mm | Printer: Label Printer | Configure from Settings > Print')} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"><Settings2 className="w-4 h-4 text-slate-500" /></button>
+          <button onClick={() => navigate('/settings?tab=print')} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"><Settings2 className="w-4 h-4 text-slate-500" /></button>
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -335,7 +335,7 @@ const ImportFromBarcode = () => {
             <motion.button
               key={m.id} whileHover={{ y: -2 }}
               onClick={() => { setMethod(m.id); setStep(m.id === 'csv_import' ? 'csv_import' : m.id === 'image_upload' ? 'image_upload' : 'live_scanner'); }}
-              className="group bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-5 text-left hover:shadow-lg transition-all text-start"
+              className="group bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-5 text-left hover:shadow-lg transition-all"
             >
               <div className={`w-12 h-12 rounded-xl bg-${m.color}-100 dark:bg-${m.color}-500/20 flex items-center justify-center mb-4`}>
                 <Icon className={`w-6 h-6 text-${m.color}-600 dark:text-${m.color}-400`} />

@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+export const BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
 const API = axios.create({ baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api', withCredentials: true });
 const CSRF_STORAGE_KEY = 'vyapar_csrf_token';
 
@@ -95,6 +96,9 @@ export const saleAPI = {
   convertToEstimate: (id) => API.post(`/sales/${id}/convert-to-estimate`),
   convertToInvoice: (id) => API.post(`/sales/${id}/convert-to-invoice`),
   receivePayment: (id, data) => API.post(`/sales/${id}/receive-payment`, data),
+  generateEWayBill: (id) => API.post(`/sales/${id}/generate-eway-bill`),
+  generateEInvoice: (id) => API.post(`/sales/${id}/generate-einvoice`),
+  updateDelivery: (id, data) => API.put(`/sales/${id}/deliver`, data),
   getByCustomer: (customerId) => API.get(`/sales/customer/${customerId}`),
 };
 
@@ -128,6 +132,22 @@ export const purchaseOrderAPI = {
   create: (data) => API.post('/purchase-orders', data),
   update: (id, data) => API.put(`/purchase-orders/${id}`, data),
   delete: (id) => API.delete(`/purchase-orders/${id}`),
+  approve: (id) => API.put(`/purchase-orders/${id}/approve`),
+  cancel: (id, data) => API.put(`/purchase-orders/${id}/cancel`, data),
+  receive: (id, data) => API.put(`/purchase-orders/${id}/receive`, data),
+};
+
+export const gstFilingAPI = {
+  getGSTR1: (params) => API.get('/gst-filing/gstr1', { params }),
+  getGSTR2: (params) => API.get('/gst-filing/gstr2', { params }),
+  getGSTR3B: (params) => API.get('/gst-filing/gstr3b', { params }),
+  prepareGSTR1: (params) => API.get('/gst-filing/prepare-gstr1', { params }),
+  getFilings: () => API.get('/gst-filing/filings'),
+  markFiled: (id, data) => API.put(`/gst-filing/filings/${id}/filed`, data),
+};
+
+export const pushNotificationAPI = {
+  subscribe: (data) => API.post('/notifications/push/subscribe', data),
 };
 
 export const paymentOutAPI = {
@@ -269,12 +289,23 @@ export const exportAPI = {
   deleteHistory: (id) => API.delete(`/export/history/${id}`),
 };
 
+export const budgetAPI = {
+  getAll: (params) => API.get('/budgets', { params }),
+  create: (data) => API.post('/budgets', data),
+  update: (id, data) => API.put(`/budgets/${id}`, data),
+  delete: (id) => API.delete(`/budgets/${id}`),
+  getActual: (params) => API.get('/budgets/actual', { params }),
+  getAlerts: () => API.get('/budgets/alerts'),
+};
+
 export const expenseAPI = {
   getAll: (params) => API.get('/expenses', { params }),
   getById: (id) => API.get(`/expenses/${id}`),
   create: (data) => API.post('/expenses', data),
   update: (id, data) => API.put(`/expenses/${id}`, data),
   delete: (id) => API.delete(`/expenses/${id}`),
+  approve: (id) => API.put(`/expenses/${id}/approve`),
+  reject: (id, reason) => API.put(`/expenses/${id}/reject`, { reason }),
 };
 
 export const journalAPI = {
@@ -328,6 +359,14 @@ export const themeAPI = {
 
 export const barcodeLabelAPI = {
   generate: (data) => API.post('/barcode-labels/labels', data, { responseType: 'blob' }),
+};
+
+export const branchAPI = {
+  getAll: () => API.get('/branches'),
+  getById: (id) => API.get(`/branches/${id}`),
+  create: (data) => API.post('/branches', data),
+  update: (id, data) => API.put(`/branches/${id}`, data),
+  delete: (id) => API.delete(`/branches/${id}`),
 };
 
 export const godownAPI = {
@@ -401,6 +440,37 @@ export const whatsappAPI = {
   saveTemplates: (templates) => API.post('/whatsapp/templates', { templates }),
 };
 
+export const godownTransferAPI = {
+  getAll: (params) => API.get('/godown-transfers', { params }),
+  getById: (id) => API.get(`/godown-transfers/${id}`),
+  create: (data) => API.post('/godown-transfers', data),
+  delete: (id) => API.delete(`/godown-transfers/${id}`),
+};
+
+export const stockReconciliationAPI = {
+  getAll: (params) => API.get('/stock-reconciliations', { params }),
+  getById: (id) => API.get(`/stock-reconciliations/${id}`),
+  getStockForCount: (params) => API.get('/stock-reconciliations/stock-for-count', { params }),
+  create: (data) => API.post('/stock-reconciliations', data),
+  apply: (id) => API.put(`/stock-reconciliations/${id}/apply`),
+  delete: (id) => API.delete(`/stock-reconciliations/${id}`),
+};
+
+export const partyTransferAPI = {
+  getAll: (params) => API.get('/party-transfers', { params }),
+  getById: (id) => API.get(`/party-transfers/${id}`),
+  create: (data) => API.post('/party-transfers', data),
+  delete: (id) => API.delete(`/party-transfers/${id}`),
+};
+
+export const partyGroupAPI = {
+  getAll: (params) => API.get('/party-groups', { params }),
+  create: (data) => API.post('/party-groups', data),
+  update: (id, data) => API.put(`/party-groups/${id}`, data),
+  delete: (id) => API.delete(`/party-groups/${id}`),
+  getSummary: () => API.get('/party-groups/summary'),
+};
+
 export const staffAPI = {
   getAll: (params) => API.get('/staff', { params }),
   create: (data) => API.post('/staff', data),
@@ -416,6 +486,16 @@ export const serviceReminderAPI = {
   update: (id, data) => API.put(`/service-reminders/${id}`, data),
   delete: (id) => API.delete(`/service-reminders/${id}`),
   getItems: (params) => API.get('/service-reminders/items', { params }),
+};
+
+export const manufacturingAPI = {
+  getAll: (params) => API.get('/manufacturing', { params }),
+  getById: (id) => API.get(`/manufacturing/${id}`),
+  getNextOrder: () => API.get('/manufacturing/next-order'),
+  create: (data) => API.post('/manufacturing', data),
+  update: (id, data) => API.put(`/manufacturing/${id}`, data),
+  complete: (id, data) => API.post(`/manufacturing/${id}/complete`, data),
+  delete: (id) => API.delete(`/manufacturing/${id}`),
 };
 
 export default API;

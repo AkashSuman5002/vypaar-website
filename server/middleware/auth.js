@@ -11,13 +11,10 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    const queryToken = req.query.token;
     let token = null;
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
-    } else if (queryToken) {
-      token = queryToken;
     }
 
     if (!token) {
@@ -40,7 +37,13 @@ const authMiddleware = async (req, res, next) => {
 
 const sseAuthMiddleware = async (req, res, next) => {
   try {
-    const token = req.query.token;
+    const authHeader = req.headers.authorization;
+    let token = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });
     }

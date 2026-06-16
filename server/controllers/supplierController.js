@@ -17,7 +17,7 @@ const createSupplier = async (req, res) => {
     const {
       name, phone, email, address, openingBalance,
       shippingAddress, state, pincode, gstNumber,
-      creditLimit, dueDays, notes, customFields,
+      creditLimit, dueDays, notes, customFields, group,
     } = req.body;
     const supplier = await Supplier.create({
       ...getCreateData(req),
@@ -34,6 +34,7 @@ const createSupplier = async (req, res) => {
       dueDays: dueDays || 30,
       notes: notes || '',
       customFields: customFields || {},
+      group: group || null,
     });
     createNotification(req.user._id, 'party_added', 'New Supplier Added',
       `${name}${phone ? ` (${phone})` : ''} added to your party list`,
@@ -52,7 +53,7 @@ const updateSupplier = async (req, res) => {
     if (!supplier) return res.status(404).json({ message: 'Supplier not found' });
     const allowed = [
       'name', 'phone', 'email', 'address', 'shippingAddress', 'state', 'pincode',
-      'gstNumber', 'openingBalance', 'creditLimit', 'dueDays', 'notes', 'customFields', 'isActive',
+      'gstNumber', 'openingBalance', 'creditLimit', 'dueDays', 'notes', 'customFields', 'group', 'isActive',
     ];
     const patch = {};
     for (const k of allowed) if (req.body[k] !== undefined) patch[k] = req.body[k];

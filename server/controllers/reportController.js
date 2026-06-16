@@ -90,30 +90,44 @@ const getProfitReport = async (req, res) => {
       filter.date = { $gte: new Date(startDate), $lt: end };
     }
 
-    const sales = await Sale.find({ ...filter, type: 'invoice' });
-    const purchases = await Purchase.find(filter);
-    const products = await Product.find({ ...baseFilter });
+    const sales = await Sale.find({ ...filter, type: 'invoice' }).lean();
+    const purchases = await Purchase.find(filter).lean();
+    const products = await Product.find({ ...baseFilter }).lean();
 
-    const totalSales = sales.reduce((sum, s) => sum + s.totalAmount, 0);
-    const totalPurchases = purchases.reduce((sum, p) => sum + p.totalAmount, 0);
+    // Build a product map once for COGS fallback lookups (and to avoid O(n^2) find()).
+    const productMap = new Map(products.map((p) => [p._id.toString(), p]));
 
-    let totalCOGS = 0;
-    sales.forEach((s) => {
-      s.items.forEach((item) => {
-        if (item.product) {
-          const prod = products.find((p) => p._id.toString() === item.product.toString());
-          if (prod) totalCOGS += (prod.costPrice || 0) * item.quantity;
-        } else {
-          totalCOGS += (item.costPrice || 0) * item.quantity;
-        }
-      });
-    });
-
-    const grossProfit = totalSales - totalCOGS;
+    // Output GST collected on sales and input GST paid on purchases.
     const totalGST = sales.reduce((s, sale) => s + (sale.cgstTotal || 0) + (sale.sgstTotal || 0) + (sale.igstTotal || 0), 0);
     const purchaseGST = purchases.reduce((s, p) => s + (p.cgstTotal || 0) + (p.sgstTotal || 0) + (p.igstTotal || 0), 0);
 
-    const expenses = await Expense.find({ ...baseFilter });
+    // totalSales/totalPurchases are reported gross (GST-inclusive) as before for display,
+    // but profit must be computed net of GST since collected output GST is a liability, not revenue.
+    const totalSales = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    const totalPurchases = purchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+
+    // Net-of-GST revenue (revenue excluding output GST we owe to the govt).
+    const netSales = totalSales - totalGST;
+
+    let totalCOGS = 0;
+    sales.forEach((s) => {
+      (s.items || []).forEach((item) => {
+        // Prefer the line's own costPrice; fall back to the Product master's
+        // costPrice/purchasePrice so deleted/zeroed line costs don't make COGS 0.
+        let unitCost = item.costPrice || 0;
+        if (!unitCost && item.product) {
+          const prod = productMap.get(item.product.toString());
+          if (prod) unitCost = prod.costPrice || prod.purchasePrice || 0;
+        }
+        totalCOGS += unitCost * (item.quantity || 0);
+      });
+    });
+
+    // Gross profit = net-of-output-GST revenue minus COGS (COGS is already net of input GST,
+    // since product cost prices are recorded exclusive of recoverable input GST).
+    const grossProfit = netSales - totalCOGS;
+
+    const expenses = await Expense.find({ ...baseFilter }).lean();
     const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
 
     res.json({
@@ -228,18 +242,37 @@ const getGSTR3B = async (req, res) => {
     const sales = await Sale.find({ ...filter, type: 'invoice' });
     const purchases = await Purchase.find(filter);
 
-    // 3.1 Supply details
+    // 3.1 Supply details — use the ACTUAL stored CGST/SGST/IGST totals per document
+    // instead of fabricating a 50/50 central/state split that ignores inter-state IGST.
     const taxableValue = sales.reduce((s, sale) => s + (sale.taxableAmount || 0), 0);
-    const totalGST = sales.reduce((s, sale) => s + (sale.cgstTotal || 0) + (sale.sgstTotal || 0) + (sale.igstTotal || 0), 0);
+    const supplyCentralTax = sales.reduce((s, sale) => s + (sale.cgstTotal || 0), 0);
+    const supplyStateTax = sales.reduce((s, sale) => s + (sale.sgstTotal || 0), 0);
+    const supplyIntegratedTax = sales.reduce((s, sale) => s + (sale.igstTotal || 0), 0);
+    const supplyCess = sales.reduce((s, sale) => s + (sale.cessTotal || 0), 0);
+    const totalGST = supplyCentralTax + supplyStateTax + supplyIntegratedTax;
 
-    // 4. ITC
+    // 4. ITC — likewise use the real purchase tax totals (Purchase has no cess field).
     const itcValue = purchases.reduce((s, p) => s + (p.taxableAmount || 0), 0);
-    const itcGST = purchases.reduce((s, p) => s + (p.cgstTotal || 0) + (p.sgstTotal || 0) + (p.igstTotal || 0), 0);
+    const itcCentralTax = purchases.reduce((s, p) => s + (p.cgstTotal || 0), 0);
+    const itcStateTax = purchases.reduce((s, p) => s + (p.sgstTotal || 0), 0);
+    const itcIntegratedTax = purchases.reduce((s, p) => s + (p.igstTotal || 0), 0);
+    const itcGST = itcCentralTax + itcStateTax + itcIntegratedTax;
 
     res.json({
       gstr3b: {
-        supply: { taxableValue, centralTax: totalGST / 2, stateTax: totalGST / 2 },
-        itc: { eligible: itcValue, centralTax: itcGST / 2, stateTax: itcGST / 2 },
+        supply: {
+          taxableValue,
+          centralTax: supplyCentralTax,
+          stateTax: supplyStateTax,
+          integratedTax: supplyIntegratedTax,
+          cess: supplyCess,
+        },
+        itc: {
+          eligible: itcValue,
+          centralTax: itcCentralTax,
+          stateTax: itcStateTax,
+          integratedTax: itcIntegratedTax,
+        },
         netGSTPayable: totalGST - itcGST,
       },
     });
@@ -605,9 +638,47 @@ const getGSTR2 = async (req, res) => {
       end.setDate(end.getDate() + 1);
       filter.date = { $gte: new Date(startDate), $lt: end };
     }
-    const purchases = await Purchase.find(filter).sort({ date: -1 }).populate('supplier', 'name gstNumber');
+    const purchases = await Purchase.find(filter).sort({ date: -1 }).populate('supplier', 'name gstNumber state');
     const b2b = purchases.filter((p) => p.supplier);
     const b2c = purchases.filter((p) => !p.supplier);
+    const invoices = purchases.map((p) => {
+      const taxableValue = p.taxableAmount || 0;
+      const igst = p.igstTotal || 0;
+      const cgst = p.cgstTotal || 0;
+      const sgst = p.sgstTotal || 0;
+      // Prefer the actual stored line-item gstRate when all items share one rate;
+      // only fall back to deriving the effective rate from tax/taxable when items
+      // carry no gstRate. This avoids fabricating a misleading single rate.
+      const itemRates = [...new Set((p.items || []).map((it) => it.gstRate || 0).filter((r) => r > 0))];
+      let rate;
+      if (itemRates.length === 1) {
+        rate = itemRates[0];
+      } else if (itemRates.length === 0) {
+        rate = taxableValue ? Math.round(((igst + cgst + sgst) / taxableValue) * 100) : 0;
+      } else {
+        // Mixed-rate bill: report blended effective rate from stored tax totals.
+        rate = taxableValue ? Math.round(((igst + cgst + sgst) / taxableValue) * 100) : 0;
+      }
+      return {
+        _id: p._id,
+        gstin: p.supplier?.gstNumber || '',
+        partyName: p.supplierName || p.supplier?.name || 'Unknown',
+        billNo: p.billNumber || '-',
+        date: p.date ? new Date(p.date).toLocaleDateString('en-IN') : '-',
+        value: p.totalAmount || 0,
+        rate,
+        // NOTE: Purchase has no cess field stored, so cess/cessRate cannot be sourced.
+        cessRate: 0,
+        taxableValue,
+        // NOTE: Purchase model has no reverseCharge flag; cannot be derived, defaulting to 'N'.
+        reverseCharge: 'N',
+        igst,
+        cgst,
+        sgst,
+        cess: 0,
+        pos: p.supplier?.state || '-',
+      };
+    });
     const summary = {
       totalInvoices: purchases.length,
       totalTaxable: purchases.reduce((s, p) => s + (p.taxableAmount || 0), 0),
@@ -615,7 +686,7 @@ const getGSTR2 = async (req, res) => {
       b2bCount: b2b.length,
       b2cCount: b2c.length,
     };
-    res.json({ invoices: purchases, b2b, b2c, summary });
+    res.json({ invoices, b2b, b2c, summary });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -631,10 +702,10 @@ const getSAC = async (req, res) => {
       s.items.forEach((item) => {
         const hsn = item.hsn || '';
         if (hsn.startsWith('99')) {
-          if (!sacMap[hsn]) sacMap[hsn] = { sac: hsn, description: item.productName || 'SAC Service', quantity: 0, taxableAmount: 0, gstAmount: 0 };
+          if (!sacMap[hsn]) sacMap[hsn] = { sac: hsn, description: item.productName || 'SAC Service', quantity: 0, value: 0, tax: 0 };
           sacMap[hsn].quantity += item.quantity;
-          sacMap[hsn].taxableAmount += item.taxableAmount || 0;
-          sacMap[hsn].gstAmount += (item.cgst || 0) + (item.sgst || 0) + (item.igst || 0);
+          sacMap[hsn].value += item.taxableAmount || 0;
+          sacMap[hsn].tax += (item.cgst || 0) + (item.sgst || 0) + (item.igst || 0);
         }
       });
     });
@@ -644,20 +715,247 @@ const getSAC = async (req, res) => {
   }
 };
 
-const tdsTcsNotConfigured = (req, res) => {
-  res.json({
-    message: 'TDS/TCS Module Not Configured',
-    enabled: false,
-    entries: [],
-    total: 0,
-    sections: [],
-  });
+const Setting = require('../models/Setting');
+
+const TDS_RATE = 10;
+const TDS_THRESHOLD = 30000;
+const TCS_RATE = 1;
+const TCS_THRESHOLD = 50000;
+
+function getQuarter(date) {
+  const d = new Date(date);
+  const month = d.getMonth();
+  const year = d.getFullYear();
+  if (month < 3) return { quarter: 'Q4', fy: `${year - 1}-${year}` };
+  if (month < 6) return { quarter: 'Q1', fy: `${year}-${year + 1}` };
+  if (month < 9) return { quarter: 'Q2', fy: `${year}-${year + 1}` };
+  return { quarter: 'Q3', fy: `${year}-${year + 1}` };
+}
+
+const getTDSReceivable = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { startDate, endDate } = req.query;
+    const filter = { ...baseFilter, type: 'invoice' };
+    if (startDate && endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      filter.date = { $gte: new Date(startDate), $lt: end };
+    }
+
+    const userSetting = await Setting.findOne(getSettingQuery(req));
+    const enableTDS = userSetting?.preferences?.taxes?.enableTDS;
+    if (!enableTDS) {
+      return res.json({ enabled: false, entries: [], totalTDS: 0, summary: { totalTaxableAmount: 0, totalTDS: 0, entryCount: 0 } });
+    }
+
+    const sales = await Sale.find(filter)
+      .sort({ date: -1 })
+      .populate('customer', 'name gstNumber panNumber');
+
+    const entries = [];
+    let totalTDS = 0;
+    let totalTaxableAmount = 0;
+
+    for (const sale of sales) {
+      const taxableAmount = sale.taxableAmount || sale.totalAmount || 0;
+      if (taxableAmount <= TDS_THRESHOLD) continue;
+
+      const tdsAmount = Math.round((taxableAmount * TDS_RATE) / 100 * 100) / 100;
+      totalTDS += tdsAmount;
+      totalTaxableAmount += taxableAmount;
+
+      entries.push({
+        date: sale.date,
+        partyName: sale.customerName || sale.customer?.name || 'Walk-in',
+        invoiceNo: sale.invoiceNumber || '-',
+        taxableAmount,
+        tdsPct: TDS_RATE,
+        tdsAmount,
+        receivableAmount: taxableAmount - tdsAmount,
+      });
+    }
+
+    res.json({
+      enabled: true,
+      entries,
+      totalTDS,
+      summary: { totalTaxableAmount, totalTDS, entryCount: entries.length },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
-const getTDSReceivable = tdsTcsNotConfigured;
-const getTDSPayable = tdsTcsNotConfigured;
-const getTCSReceivable = tdsTcsNotConfigured;
-const getForm27EQ = tdsTcsNotConfigured;
+const getTDSPayable = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { startDate, endDate } = req.query;
+    const filter = { ...baseFilter };
+    if (startDate && endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      filter.date = { $gte: new Date(startDate), $lt: end };
+    }
+
+    const userSetting = await Setting.findOne(getSettingQuery(req));
+    const enableTDS = userSetting?.preferences?.taxes?.enableTDS;
+    if (!enableTDS) {
+      return res.json({ enabled: false, entries: [], totalTDS: 0, summary: { totalTaxableAmount: 0, totalTDS: 0, entryCount: 0 } });
+    }
+
+    const purchases = await Purchase.find(filter)
+      .sort({ date: -1 })
+      .populate('supplier', 'name panNumber');
+
+    const entries = [];
+    let totalTDS = 0;
+    let totalTaxableAmount = 0;
+
+    for (const purchase of purchases) {
+      const taxableAmount = purchase.taxableAmount || purchase.totalAmount || 0;
+      if (taxableAmount <= TDS_THRESHOLD) continue;
+
+      const tdsAmount = Math.round((taxableAmount * TDS_RATE) / 100 * 100) / 100;
+      totalTDS += tdsAmount;
+      totalTaxableAmount += taxableAmount;
+
+      entries.push({
+        date: purchase.date,
+        vendorName: purchase.supplierName || purchase.supplier?.name || 'Unknown',
+        billNo: purchase.billNumber || '-',
+        taxableAmount,
+        tdsPct: TDS_RATE,
+        tdsAmount,
+        payableAmount: taxableAmount - tdsAmount,
+      });
+    }
+
+    res.json({
+      enabled: true,
+      entries,
+      totalTDS,
+      summary: { totalTaxableAmount, totalTDS, entryCount: entries.length },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const getTCSReceivable = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { startDate, endDate } = req.query;
+    const filter = { ...baseFilter, type: 'invoice' };
+    if (startDate && endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      filter.date = { $gte: new Date(startDate), $lt: end };
+    }
+
+    const userSetting = await Setting.findOne(getSettingQuery(req));
+    const enableTCS = userSetting?.preferences?.taxes?.enableTCS;
+    if (!enableTCS) {
+      return res.json({ enabled: false, entries: [], totalTCS: 0, summary: { totalTaxableAmount: 0, totalTCS: 0, entryCount: 0 } });
+    }
+
+    const sales = await Sale.find(filter)
+      .sort({ date: -1 })
+      .populate('customer', 'name gstNumber');
+
+    const entries = [];
+    let totalTCS = 0;
+    let totalTaxableAmount = 0;
+
+    for (const sale of sales) {
+      const taxableAmount = sale.taxableAmount || sale.totalAmount || 0;
+      if (taxableAmount <= TCS_THRESHOLD) continue;
+
+      const tcsAmount = Math.round((taxableAmount * TCS_RATE) / 100 * 100) / 100;
+      totalTCS += tcsAmount;
+      totalTaxableAmount += taxableAmount;
+
+      entries.push({
+        date: sale.date,
+        partyName: sale.customerName || sale.customer?.name || 'Walk-in',
+        invoiceNo: sale.invoiceNumber || '-',
+        taxableAmount,
+        tcsPct: TCS_RATE,
+        tcsAmount,
+        receivableAmount: taxableAmount + tcsAmount,
+      });
+    }
+
+    res.json({
+      enabled: true,
+      entries,
+      totalTCS,
+      summary: { totalTaxableAmount, totalTCS, entryCount: entries.length },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const getForm27EQ = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { startDate, endDate } = req.query;
+    const filter = { ...baseFilter, type: 'invoice' };
+    if (startDate && endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      filter.date = { $gte: new Date(startDate), $lt: end };
+    }
+
+    const userSetting = await Setting.findOne(getSettingQuery(req));
+    const enableTCS = userSetting?.preferences?.taxes?.enableTCS;
+    if (!enableTCS) {
+      return res.json({ enabled: false, sections: [], summary: { totalTransactionAmount: 0, totalTCS: 0, entryCount: 0 } });
+    }
+
+    const sales = await Sale.find(filter)
+      .sort({ date: -1 })
+      .populate('customer', 'name gstNumber panNumber');
+
+    const businessSetting = await Setting.findOne(getSettingQuery(req));
+    const collectorName = businessSetting?.businessName || 'N/A';
+    const tan = businessSetting?.gstNumber || 'N/A';
+
+    const sections = [];
+    let totalTCS = 0;
+    let totalTransactionAmount = 0;
+
+    for (const sale of sales) {
+      const taxableAmount = sale.taxableAmount || sale.totalAmount || 0;
+      if (taxableAmount <= TCS_THRESHOLD) continue;
+
+      const tcsAmount = Math.round((taxableAmount * TCS_RATE) / 100 * 100) / 100;
+      totalTCS += tcsAmount;
+      totalTransactionAmount += taxableAmount;
+
+      const customerPan = sale.customer?.panNumber || sale.customerGst?.substring(2, 12) || 'N/A';
+
+      sections.push({
+        collectorName,
+        tan,
+        partyName: sale.customerName || sale.customer?.name || 'Walk-in',
+        pan: customerPan,
+        transactionAmount: taxableAmount,
+        tcsPct: TCS_RATE,
+        tcsAmount,
+      });
+    }
+
+    res.json({
+      enabled: true,
+      sections,
+      summary: { totalTransactionAmount, totalTCS, entryCount: sections.length },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
 const getBankStatement = async (req, res) => {
   try {
@@ -714,7 +1012,13 @@ const getExpenseReport = async (req, res) => {
 const getSaleOrders = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
+    const { startDate, endDate } = req.query;
     const filter = { ...baseFilter, type: 'order' };
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) filter.date.$gte = new Date(startDate);
+      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+    }
     const orders = await Sale.find(filter).sort({ date: -1 });
     const totalOrders = orders.length;
     const totalAmount = orders.reduce((s, o) => s + o.totalAmount, 0);
@@ -877,7 +1181,7 @@ const getPartyStatement = async (req, res) => {
       totalPaid = allPurchases.reduce((s, p) => s + (p.paidAmount || 0), 0);
 
       transactions = purchasesInRange.map(p => ({
-        date: p.date, txnType: 'Purchase', refNo: p.invoiceNumber,
+        date: p.date, txnType: 'Purchase', refNo: p.billNumber,
         paymentType: p.paymentStatus || 'unpaid',
         total: p.totalAmount, received: p.paidAmount || 0,
         txnBalance: (p.totalAmount - (p.paidAmount || 0)),
@@ -1316,7 +1620,7 @@ const getItemDetail = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const { search } = req.query;
     const filter = { ...baseFilter, isActive: true };
-    if (search) filter.name = { $regex: search, $options: 'i' };
+    if (search) filter.name = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
     const products = await Product.find(filter).sort({ name: 1 }).lean();
     const entries = products.map(p => ({
       itemName: p.name,
@@ -1623,33 +1927,36 @@ const getGSTR2AReconciliation = async (req, res) => {
     const reconciliation = purchases.map(p => {
       const supplierGst = p.supplier?.gstNumber || '';
       const itcEligible = !!supplierGst && supplierGst.length === 15;
+      const totalGst = (p.cgstTotal || 0) + (p.sgstTotal || 0) + (p.igstTotal || 0);
       return {
         _id: p._id,
-        billNo: p.billNumber || p._id,
+        invoiceNo: p.billNumber || String(p._id),
         date: p.date,
-        supplierName: p.supplier?.name || 'Unknown',
+        supplierName: p.supplier?.name || p.supplierName || 'Unknown',
         supplierGstin: supplierGst,
-        taxableAmount: p.taxableAmount || 0,
+        taxableValue: p.taxableAmount || 0,
         cgst: p.cgstTotal || 0,
         sgst: p.sgstTotal || 0,
         igst: p.igstTotal || 0,
-        totalGst: (p.cgstTotal || 0) + (p.sgstTotal || 0) + (p.igstTotal || 0),
-        totalAmount: p.totalAmount || 0,
+        total: p.totalAmount || 0,
+        difference: 0,
         itcEligible,
-        itcClaimable: itcEligible ? (p.cgstTotal || 0) + (p.sgstTotal || 0) + (p.igstTotal || 0) : 0,
-        reversed: p.isReversed || false,
+        itcClaimable: itcEligible ? totalGst : 0,
         matchingStatus: itcEligible ? 'matched' : 'unmatched',
       };
     });
 
+    const matched = reconciliation.filter(r => r.matchingStatus === 'matched');
+    const mismatched = reconciliation.filter(r => r.matchingStatus === 'unmatched');
+
     const summary = {
       totalInvoices: reconciliation.length,
-      totalTaxable: reconciliation.reduce((s, r) => s + r.taxableAmount, 0),
+      totalTaxable: reconciliation.reduce((s, r) => s + r.taxableValue, 0),
       totalItcClaimable: reconciliation.reduce((s, r) => s + r.itcClaimable, 0),
-      matchedCount: reconciliation.filter(r => r.matchingStatus === 'matched').length,
-      unmatchedCount: reconciliation.filter(r => r.matchingStatus === 'unmatched').length,
+      matchedCount: matched.length,
+      unmatchedCount: mismatched.length,
     };
-    res.json({ reconciliation, summary });
+    res.json({ matched, mismatched, summary });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

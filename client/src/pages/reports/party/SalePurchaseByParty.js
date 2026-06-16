@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel, printReport } from '../../../utils/exportUtils';
+
+const currentYear = new Date().getFullYear();
+const fyStart = new Date().getMonth() >= 3 ? `${currentYear}-04-01` : `${currentYear - 1}-04-01`;
+const today = new Date().toISOString().split('T')[0];
 
 const columns = [
   { key: 'index', label: '#', width: 'w-[50px]' },
@@ -13,8 +18,8 @@ const columns = [
 const SalePurchaseByParty = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(fyStart);
+  const [endDate, setEndDate] = useState(today);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,6 +55,8 @@ const SalePurchaseByParty = () => {
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
               className="border border-gray-300 dark:border-[#334155] dark:bg-[#1E293B] dark:text-[#94A3B8] rounded px-2 py-1.5 w-[110px] text-xs" />
           </div>
+          <button onClick={() => exportToExcel(data, columns, 'Sale_Purchase_By_Party')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+          <button onClick={() => printReport()} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
         </div>
       </div>
 

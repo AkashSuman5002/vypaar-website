@@ -33,8 +33,8 @@ const BusinessNetwork = () => {
   const loadParties = useCallback(async () => {
     try {
       const [cRes, sRes] = await Promise.all([customerAPI.getAll(), supplierAPI.getAll()]);
-      setCustomers(cRes.data);
-      setSuppliers(sRes.data);
+      setCustomers(cRes.data?.data || []);
+      setSuppliers(Array.isArray(sRes.data) ? sRes.data : sRes.data?.data || []);
     } catch {
       toast.error('Failed to load network');
     } finally {

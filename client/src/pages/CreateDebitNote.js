@@ -8,22 +8,19 @@ import {
 } from 'lucide-react';
 import { supplierAPI, productAPI, purchaseReturnAPI, fetchCsrfToken } from '../services/api';
 import useSettings from '../hooks/useSettings';
+import { validateMobile, validateEmail, validateGST, formatMobile, formatGST, INDIAN_STATE_NAMES } from '../utils/validation';
+import StateDropdown from '../components/UI/StateDropdown';
 
 const UNITS = ['pcs', 'kg', 'g', 'ltr', 'ml', 'm', 'ft', 'box', 'dozen', 'pair', 'none'];
 const DEFAULT_GST_RATES = [0, 3, 5, 12, 18, 28];
 const REASONS = ['Damaged Goods', 'Defective Product', 'Wrong Item', 'Excess Quantity', 'Quality Issue', 'Other'];
-
-const INDIAN_STATES = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-  'Andaman and Nicobar Islands', 'Chandigarh',
-  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
-  'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+const RETURN_REASONS = [
+  'Defective Product', 'Wrong Item Received', 'Quality Issue', 'Damaged in Transit',
+  'Not as Described', 'Excess Quantity', 'Duplicate Order', 'Customer Changed Mind',
+  'Price Dispute', 'Missing Parts', 'Other',
 ];
+
+
 
 const CalcPopup = ({ open, onClose, onUse }) => {
   const [display, setDisplay] = useState('0');
@@ -157,6 +154,7 @@ const CreateDebitNote = () => {
   const savedTaxRates = getPref('taxes', 'taxRates');
   const GST_RATES = savedTaxRates?.length ? savedTaxRates.map(r => r.igst) : DEFAULT_GST_RATES;
 
+  const [errors, setErrors] = useState({});
   const [form, setForm] = useState({
     party: '',
     partyId: '',
@@ -167,6 +165,7 @@ const CreateDebitNote = () => {
     date: new Date().toISOString().split('T')[0],
     stateOfSupply: '',
     reason: '',
+    returnReason: '',
     paymentType: 'Cash',
     roundOff: true,
     roundOffValue: 0,
@@ -185,8 +184,8 @@ const CreateDebitNote = () => {
   }
 
   useEffect(() => {
-    supplierAPI.getAll().then(({ data }) => setSuppliers(data.suppliers || data || [])).catch(() => {});
-    productAPI.getAll().then(({ data }) => setProducts(data.products || data || [])).catch(() => {});
+    supplierAPI.getAll().then(({ data }) => setSuppliers(data.suppliers || data || [])).catch(() => null);
+    productAPI.getAll().then(({ data }) => setProducts(data.products || data || [])).catch(() => null);
   }, []);
 
   useEffect(() => {
@@ -203,6 +202,7 @@ const CreateDebitNote = () => {
           date: r.returnDate ? r.returnDate.split('T')[0] : new Date().toISOString().split('T')[0],
           stateOfSupply: r.stateOfSupply || '',
           reason: r.reason || '',
+          returnReason: r.returnReason || '',
           paymentType: r.paymentType || 'Cash',
           roundOff: true,
           roundOffValue: r.roundOffValue || 0,
@@ -287,8 +287,17 @@ const CreateDebitNote = () => {
   const grandTotal = totals.total + (form.roundOff ? roundOffVal : parseFloat(form.roundOffValue) || 0);
 
   const handleSave = async () => {
-    if (!form.party.trim()) { toast.error('Supplier is required'); return; }
-    if (items.every(it => !it.productName)) { toast.error('At least one item is required'); return; }
+    const newErrors = {};
+    if (!form.party.trim()) { newErrors.party = 'Supplier is required'; }
+    if (form.phone && !validateMobile(form.phone)) { newErrors.phone = 'Invalid phone number'; }
+    if (items.every(it => !it.productName)) { newErrors.items = 'At least one item is required'; }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error('Please fix the errors');
+      return;
+    }
+    setErrors({});
     setLoading(true);
     try {
       const fd = new FormData();
@@ -301,6 +310,7 @@ const CreateDebitNote = () => {
       fd.append('returnDate', form.date);
       fd.append('stateOfSupply', form.stateOfSupply);
       fd.append('reason', form.reason);
+      fd.append('returnReason', form.returnReason);
       fd.append('paymentType', form.paymentType);
       fd.append('roundOff', form.roundOff);
       fd.append('roundOffValue', form.roundOff ? roundOffVal : parseFloat(form.roundOffValue) || 0);
@@ -414,17 +424,18 @@ const CreateDebitNote = () => {
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 </div>
-                <button className="mt-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                <button onClick={() => navigate('/suppliers')} className="mt-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
                   <Plus className="w-3 h-3" /> Add Party
                 </button>
               </div>
               <div className="w-40">
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Phone No.</label>
                 <input type="tel" ref={phoneRef} value={form.phone}
-                  onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+                  onChange={(e) => setForm(f => ({ ...f, phone: formatMobile(e.target.value) }))}
                   placeholder="Phone No."
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className={`w-full px-3 py-2.5 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${errors.phone ? 'border-red-500' : 'border-slate-200 dark:border-gray-600'}`}
                 />
+                {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
               </div>
             </div>
           </div>
@@ -462,13 +473,10 @@ const CreateDebitNote = () => {
             </div>
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">State of supply</label>
-              <select value={form.stateOfSupply}
-                onChange={(e) => setForm(f => ({ ...f, stateOfSupply: e.target.value }))}
+              <StateDropdown value={form.stateOfSupply}
+                onChange={(val) => setForm(f => ({ ...f, stateOfSupply: val }))}
                 className="w-40 px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="">Select</option>
-                {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              />
             </div>
           </div>
         </div>
@@ -611,7 +619,7 @@ const CreateDebitNote = () => {
                   <option value="Cheque">Cheque</option>
                 </select>
               </div>
-              <button className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+              <button onClick={() => navigate('/settings?tab=transaction')} className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Add Payment type
               </button>
             </div>
@@ -628,6 +636,18 @@ const CreateDebitNote = () => {
                 rows={3}
                 className="mt-2 w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
               />
+            </div>
+
+            {/* Return Reason */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Return Reason</label>
+              <select value={form.returnReason || ''}
+                onChange={(e) => setForm(f => ({ ...f, returnReason: e.target.value }))}
+                className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">Select reason</option>
+                {RETURN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
             </div>
 
             {/* Add Image */}
@@ -689,7 +709,14 @@ const CreateDebitNote = () => {
             className="px-6 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
             Cancel
           </button>
-          <button className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-gray-600 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+          <button onClick={async () => {
+            const itemsText = items.map(it => `${it.productName} x${it.quantity} = ₹${(it.amount || 0).toFixed(2)}`).join('\n');
+            const message = `Debit Note ${form.returnNumber}\nParty: ${form.party}\nDate: ${form.date}\n\nItems:\n${itemsText}\n\nTotal: ₹${grandTotal.toFixed(2)}`;
+            try {
+              await navigator.clipboard.writeText(message);
+              toast.success('Debit note details copied to clipboard');
+            } catch { toast.error('Failed to copy'); }
+          }} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-gray-600 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
             <Share2 className="w-4 h-4" /> Share
           </button>
           <button onClick={handleSave} disabled={loading}

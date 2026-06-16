@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { Info, LogIn, Users, CheckCircle, Trash2, Send } from 'lucide-react';
 import useSettings from '../../hooks/useSettings';
 import { utilityAPI } from '../../services/api';
+import { validateEmail } from '../../utils/validation';
 
 const AccountantAccess = () => {
   const { business } = useSettings();
@@ -29,6 +30,11 @@ const AccountantAccess = () => {
   const handleInvite = async (e) => {
     e.preventDefault();
     if (!inviteForm.email || !inviteForm.name) { toast.error('Please fill in all fields'); return; }
+    const emailValidation = validateEmail(inviteForm.email);
+    if (!emailValidation.valid) {
+      toast.error(emailValidation.error);
+      return;
+    }
     try {
       await utilityAPI.inviteAccountant(inviteForm);
       setInviteForm({ email: '', name: '', role: 'accountant' });

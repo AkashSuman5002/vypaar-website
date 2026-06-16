@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI } from '../services/api';
+import { saleAPI, settingAPI, BASE_URL } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import Modal from '../components/UI/Modal';
 import { toast } from 'react-toastify';
@@ -43,12 +43,24 @@ const ViewEstimate = () => {
   const handlePrint = () => {
     const printContent = document.getElementById('invoice-print-area');
     if (!printContent) return;
-    const original = document.body.innerHTML;
-    document.body.innerHTML = printContent.outerHTML;
-    document.title = `Estimate ${sale.invoiceNumber}`;
-    window.print();
-    document.body.innerHTML = original;
-    window.location.reload();
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${sale.invoiceNumber || 'Invoice'}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>${printContent.innerHTML}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
 
   const handleDownloadPDF = async () => {
@@ -108,7 +120,7 @@ const ViewEstimate = () => {
   const invoiceHeadingSize = parseInt(printPrefs.invoiceTextSize) || 14;
   const fmt = (amt) => formatCurrency(amt, currencyPref, decimalPref);
 
-  const bizLogo = settings?.logo ? `http://localhost:5000/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[210mm] mx-auto">
@@ -156,10 +168,7 @@ const ViewEstimate = () => {
                   try { await saleAPI.convertToChallan(sale._id); toast.success('Delivery Challan created'); navigate('/sales/challans'); }
                   catch { toast.error('Failed'); }
                 }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700"><Truck className="w-3.5 h-3.5" /> Convert to Challan</button>
-                <button onClick={async () => {
-                  try { await saleAPI.convertToOrder(sale._id); toast.success('Sale Order created'); navigate('/sales/orders'); }
-                  catch { toast.error('Failed'); }
-                }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700"><FileText className="w-3.5 h-3.5" /> Convert to Order</button>
+                {/* "Convert to Order" removed: no saleAPI.convertToOrder endpoint exists (only convertToReturn/Challan/Estimate/Invoice). Re-add when a sale-order conversion API is available. */}
                 <div className="h-px bg-slate-100 dark:bg-gray-700 my-1" />
                 <button onClick={() => {
                   if (!window.confirm('Cancel this estimate?')) return;
@@ -196,7 +205,15 @@ const ViewEstimate = () => {
               <div className="mt-3 space-y-1">
                 <p className="text-sm text-slate-900 dark:text-slate-100 print:text-gray-900"><span className="text-slate-500 dark:text-slate-400 print:text-gray-600">Estimate: </span><span className="font-semibold">{sale.invoiceNumber}</span></p>
                 <p className="text-sm text-slate-900 dark:text-slate-100 print:text-gray-900"><span className="text-slate-500 dark:text-slate-400 print:text-gray-600">Date: </span><span className="font-semibold">{formatDateOrTime(sale.date)}</span></p>
-                <p className="text-sm text-slate-900 dark:text-slate-100 print:text-gray-900"><span className="text-slate-500 dark:text-slate-400 print:text-gray-600">Valid Until: </span><span className="font-semibold">{formatDateOrTime(sale.dueDate || sale.date)}</span></p>
+                {sale.expiryDate && (
+                  <p className="text-sm text-slate-900 dark:text-slate-100 print:text-gray-900">
+                    <span className="text-slate-500 dark:text-slate-400 print:text-gray-600">Valid Until: </span>
+                    <span className={`font-semibold ${new Date(sale.expiryDate) < new Date() ? 'text-red-600' : ''}`}>
+                      {new Date(sale.expiryDate).toLocaleDateString('en-IN')}
+                      {new Date(sale.expiryDate) < new Date() && <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Expired</span>}
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
           </div>

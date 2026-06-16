@@ -5,6 +5,7 @@ import ReportTable from '../../components/reports/common/ReportTable';
 import ReportSummary from '../../components/reports/common/ReportSummary';
 import { reportAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
+import { toast } from 'react-toastify';
 
 const columns = [
   { key: 'itemName', label: 'Item Name' },
@@ -24,6 +25,20 @@ const ExpenseItemReport = () => {
   const handleDateChange = (type, value) => {
     setDates(prev => ({ ...prev, [type]: value }));
   };
+
+  const handleDownload = () => {
+    const table = document.querySelector('table');
+    if (!table) return toast.info('No data to export');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'expense-item-report.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Exported');
+  };
+
+  const handlePrint = () => window.print();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,7 +61,7 @@ const ExpenseItemReport = () => {
 
   return (
     <>
-      <ReportHeader title="Expense Item Report" description="View expenses broken down by individual items." />
+      <ReportHeader title="Expense Item Report" description="View expenses broken down by individual items." onDownload={handleDownload} onPrint={handlePrint} />
       <ReportFilters search={search} onSearchChange={setSearch} period={period} onPeriodChange={setPeriod} dateStart={dates.start} dateEnd={dates.end} onDateChange={handleDateChange} />
       <div className="bg-white dark:bg-[#0F172A] min-h-full p-6 space-y-5">
         <ReportTable columns={columns} data={filteredData} emptyState="No data available. Please try again after making relevant changes." />

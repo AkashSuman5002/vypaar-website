@@ -9,9 +9,10 @@ const getAuditLogs = async (req, res) => {
     if (entity) filter.entity = entity;
     if (action) filter.action = action;
     if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-        { entityName: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { entityName: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
       ];
     }
     if (dateFrom || dateTo) {

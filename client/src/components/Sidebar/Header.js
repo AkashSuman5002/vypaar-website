@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Menu, Moon, Sun, Search, Bell, User, LogOut, Settings as SettingsIcon, X, TrendingUp, ShoppingBag, BookOpen, List, BarChart3, TrendingDown, Scale, FileText, Users, Package, RefreshCw, Layers, Hash, Globe, UserCheck, AlertTriangle, ClipboardList, Info, Activity, Landmark, Percent, Receipt, Wallet, FolderOpen, ShoppingCart, Banknote, ArrowUpRight, ArrowDownRight, LayoutDashboard, ChevronRight, Clock, CheckCircle, DollarSign, CreditCard, Phone, Headphones, Building2, HelpCircle, History, Zap, UserPlus } from 'lucide-react';
+import { Menu, Moon, Sun, Search, Bell, User, LogOut, Settings as SettingsIcon, X, TrendingUp, ShoppingBag, BookOpen, List, BarChart3, TrendingDown, Scale, FileText, Users, Package, RefreshCw, ShoppingCart, LayoutDashboard, ChevronRight, Clock, CheckCircle, DollarSign, Landmark, Info, AlertTriangle, Phone, Headphones, Building2, HelpCircle, History, Zap, UserPlus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -57,7 +57,7 @@ const Header = ({ onMenuClick }) => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    themeAPI.update(dark).catch(() => {});
+    themeAPI.update(dark).catch(() => null);
   }, [dark, themeLoaded]);
 
   const removeNotification = async (id) => {
@@ -140,18 +140,18 @@ const Header = ({ onMenuClick }) => {
         ]);
         const results = [];
         if (custRes.status === 'fulfilled') {
-          (custRes.value.data?.customers || custRes.value.data || []).slice(0, 3).forEach(c => {
+          (custRes.value.data?.data || []).slice(0, 3).forEach(c => {
             results.push({ name: `Customer: ${c.name}`, path: `/customers`, icon: Users, type: 'data' });
           });
         }
         if (prodRes.status === 'fulfilled') {
-          (Array.isArray(prodRes.value.data) ? prodRes.value.data : prodRes.value.data?.products || []).slice(0, 3).forEach(p => {
+          (prodRes.value.data?.data || []).slice(0, 3).forEach(p => {
             results.push({ name: `Product: ${p.name}`, path: `/products`, icon: Package, type: 'data' });
           });
         }
         if (saleRes.status === 'fulfilled') {
           (Array.isArray(saleRes.value.data) ? saleRes.value.data : saleRes.value.data?.sales || []).slice(0, 3).forEach(s => {
-            results.push({ name: `Sale: ${s.invoiceNumber || s._id}`, path: `/sales/view/${s._id}`, icon: TrendingUp, type: 'data' });
+            results.push({ name: `Sale: ${s.invoiceNumber || s._id}`, path: `/sales/${s._id}`, icon: TrendingUp, type: 'data' });
           });
         }
         setDynamicResults(results);

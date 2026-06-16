@@ -3,6 +3,7 @@ import GSTFilterBar from '../../../components/gst/GSTFilterBar';
 import GSTTable from '../../../components/gst/GSTTable';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel } from '../../../utils/exportUtils';
 
 const columns = [
   { key: 'sac', label: 'SAC Code', width: '130px' },
@@ -36,7 +37,13 @@ const SACReport = () => {
 
   return (
     <>
-      <GSTFilterBar title="SAC Report" showNonTax={false} onDateChange={setDate} startDate={dates.start} endDate={dates.end} />
+      <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-200 dark:border-[#334155]">
+        <GSTFilterBar title="SAC Report" showNonTax={false} onDateChange={setDate} startDate={dates.start} endDate={dates.end} />
+        <div className="flex items-center gap-3 ml-4">
+          <button onClick={() => exportToExcel(data, columns, 'SAC_Report')} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Excel</button>
+          <button onClick={() => window.print()} className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70">Print</button>
+        </div>
+      </div>
       <GSTTable columns={columns} data={data} />
     </>
   );

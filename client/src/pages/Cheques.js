@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MoreHorizontal, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { toast } from 'react-toastify';
-import EmptyState from '../components/CashBank/EmptyState';
+import EmptyState from '../components/UI/EmptyState';
 import { chequeAPI } from '../services/api';
 
 const emptyForm = { date: new Date().toISOString().split('T')[0], chequeNo: '', bankName: '', customerName: '', amount: '', status: 'pending' };

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Phone, Mail, MessageSquare, Send, Paperclip, User, FileText, Headphones, CheckCircle, Loader2 } from 'lucide-react';
 import { supportAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
+import { validateMobile, validateEmail, formatMobile } from '../utils/validation';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -15,6 +17,7 @@ const itemVariants = {
 };
 
 const Support = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -26,9 +29,17 @@ const Support = () => {
   const [attachment, setAttachment] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm(prev => ({
+      ...prev,
+      [name]: name === 'phone' ? formatMobile(value) : value,
+    }));
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -37,10 +48,22 @@ const Support = () => {
       toast.error('Please fill in all required fields');
       return;
     }
+    const newErrors = {};
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+    if (form.phone.trim()) {
+      const phoneResult = validateMobile(form.phone);
+      if (!phoneResult.valid) newErrors.phone = phoneResult.error;
+    }
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
     setSubmitting(true);
     try {
       await supportAPI.create({ ...form, attachment: attachment?.name || '' });
       setSubmitted(true);
+      setErrors({});
       toast.success('Your request has been submitted!');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit request');
@@ -53,6 +76,7 @@ const Support = () => {
     setForm({ name: user?.name || '', email: user?.email || '', phone: '', subject: '', message: '' });
     setAttachment(null);
     setSubmitted(false);
+    setErrors({});
   };
 
   return (
@@ -123,10 +147,14 @@ const Support = () => {
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-5">
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-3">Quick Help</h3>
             <div className="space-y-2">
-              {['How to create an invoice?', 'How to add items?', 'How to view reports?'].map((q, i) => (
-                <button key={i} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors flex items-center gap-2">
+              {[
+                { q: 'How to create an invoice?', action: () => navigate('/sales/quick') },
+                { q: 'How to add items?', action: () => navigate('/products') },
+                { q: 'How to view reports?', action: () => navigate('/reports') },
+              ].map((item, i) => (
+                <button key={i} onClick={item.action} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors flex items-center gap-2">
                   <FileText className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                  {q}
+                  {item.q}
                 </button>
               ))}
             </div>
@@ -169,9 +197,10 @@ const Support = () => {
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input type="email" name="email" value={form.email} onChange={handleChange} required
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${errors.email ? 'border-red-500' : 'border-slate-200 dark:border-gray-700'}`}
                           placeholder="your@email.com" />
                       </div>
+                      {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
                     </div>
                   </div>
 
@@ -181,9 +210,10 @@ const Support = () => {
                       <div className="relative">
                         <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input type="tel" name="phone" value={form.phone} onChange={handleChange}
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700/50 border rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${errors.phone ? 'border-red-500' : 'border-slate-200 dark:border-gray-700'}`}
                           placeholder="+91-XXXXXXXXXX" />
                       </div>
+                      {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Subject</label>

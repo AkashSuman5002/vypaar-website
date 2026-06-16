@@ -6,11 +6,19 @@ const getGodowns = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const godowns = await Godown.find({ ...baseFilter }).sort({ name: 1 });
-    const godownsWithStock = await Promise.all(godowns.map(async (g) => {
+    const godownIds = godowns.map(g => g._id);
+
+    const counts = await Product.aggregate([
+      { $match: { ...baseFilter, warehouse: { $in: godownIds }, isActive: true } },
+      { $group: { _id: '$warehouse', count: { $sum: 1 } } },
+    ]);
+    const countMap = new Map(counts.map(c => [c._id.toString(), c.count]));
+
+    const godownsWithStock = godowns.map((g) => {
       const obj = g.toObject();
-      obj.productCount = await Product.countDocuments({ ...baseFilter, godown: g._id, isActive: true });
+      obj.productCount = countMap.get(g._id.toString()) || 0;
       return obj;
-    }));
+    });
     res.json(godownsWithStock);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -58,7 +66,7 @@ const deleteGodown = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const godown = await Godown.findOne({ _id: req.params.id, ...baseFilter });
     if (!godown) return res.status(404).json({ message: 'Godown not found' });
-    const productCount = await Product.countDocuments({ ...baseFilter, godown: godown._id, isActive: true });
+    const productCount = await Product.countDocuments({ ...baseFilter, warehouse: godown._id, isActive: true });
     if (productCount > 0) {
       return res.status(400).json({ message: `Cannot delete: ${productCount} products are assigned to this godown` });
     }

@@ -46,8 +46,11 @@ const createBackup = async () => {
   }
 };
 
+let scheduledTask = null;
+
 const startAutoBackup = () => {
-  cron.schedule('0 2 * * *', async () => {
+  stopAutoBackup();
+  scheduledTask = cron.schedule('0 2 * * *', async () => {
     console.log('[AutoBackup] Running daily backup...');
     const users = await Setting.find({ 'preferences.general.autoBackup': true }).select('user');
     if (users.length === 0) {
@@ -58,6 +61,14 @@ const startAutoBackup = () => {
     console.log('[AutoBackup] Backup completed');
   }, { timezone: 'Asia/Kolkata' });
   console.log('[AutoBackup] Scheduled daily at 2:00 AM IST');
+};
+
+const stopAutoBackup = () => {
+  if (scheduledTask) {
+    scheduledTask.stop();
+    scheduledTask = null;
+    console.log('[AutoBackup] Scheduler stopped');
+  }
 };
 
 const getBackupHistory = () => {
@@ -80,4 +91,4 @@ const downloadBackup = (filename) => {
   return filepath;
 };
 
-module.exports = { createBackup, startAutoBackup, getBackupHistory, downloadBackup };
+module.exports = { createBackup, startAutoBackup, stopAutoBackup, getBackupHistory, downloadBackup };

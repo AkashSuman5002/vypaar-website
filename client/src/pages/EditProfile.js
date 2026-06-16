@@ -5,18 +5,8 @@ import { motion } from 'framer-motion';
 import { Camera, Upload, Building2, ArrowLeft, Save } from 'lucide-react';
 import { businessAPI, settingAPI } from '../services/api';
 import useSettings from '../hooks/useSettings';
-
-const INDIAN_STATES = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-  'Andaman and Nicobar Islands', 'Chandigarh',
-  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
-  'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
-];
+import { validateMobile, validateEmail, validateGST, validatePincode, formatMobile, formatGST, formatPincode } from '../utils/validation';
+import StateDropdown from '../components/UI/StateDropdown';
 
 const BUSINESS_TYPES = [
   { value: 'retail', label: 'Retail' },
@@ -57,6 +47,8 @@ const EditProfile = () => {
     pincode: '',
     accountBooksBeginningDate: new Date().toISOString().split('T')[0],
   });
+
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (settings) {
@@ -104,10 +96,31 @@ const EditProfile = () => {
   };
 
   const handleSave = async () => {
+    const newErrors = {};
+
     if (!form.businessName.trim()) {
-      toast.error('Business name is required');
+      newErrors.businessName = 'Business name is required';
+    }
+
+    const phoneResult = validateMobile(form.phone);
+    if (!phoneResult.valid) newErrors.phone = phoneResult.error;
+
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+
+    const gstResult = validateGST(form.gstNumber);
+    if (!gstResult.valid) newErrors.gstNumber = gstResult.error;
+
+    const pincodeResult = validatePincode(form.pincode);
+    if (!pincodeResult.valid) newErrors.pincode = pincodeResult.error;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error('Please fix the errors in the form');
       return;
     }
+
+    setErrors({});
     setLoading(true);
     try {
       const fd = new FormData();
@@ -128,21 +141,40 @@ const EditProfile = () => {
     }
   };
 
-  const InputField = ({ label, field, type = 'text', placeholder, required }) => (
-    <div>
-      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        type={type}
-        value={form[field] || ''}
-        onChange={(e) => handleChange(field, e.target.value)}
-        placeholder={placeholder}
-        required={required}
-        className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-      />
-    </div>
-  );
+  const InputField = ({ label, field, type = 'text', placeholder, required }) => {
+    const fieldErrors = errors[field] || '';
+    const hasError = !!fieldErrors;
+
+    const handleChangeLocal = (e) => {
+      let value = e.target.value;
+      if (field === 'phone') value = formatMobile(value);
+      else if (field === 'gstNumber') value = formatGST(value);
+      else if (field === 'pincode') value = formatPincode(value);
+      handleChange(field, value);
+      if (errors[field]) {
+        setErrors(prev => ({ ...prev, [field]: '' }));
+      }
+    };
+
+    return (
+      <div>
+        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
+        <input
+          type={type}
+          value={form[field] || ''}
+          onChange={handleChangeLocal}
+          placeholder={placeholder}
+          required={required}
+          className={`w-full px-3 py-2.5 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors ${
+            hasError ? 'border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-gray-600'
+          }`}
+        />
+        {hasError && <p className="mt-1 text-xs text-red-500">{fieldErrors}</p>}
+      </div>
+    );
+  };
 
   const SelectField = ({ label, field, options, placeholder }) => (
     <div>
@@ -239,7 +271,10 @@ const EditProfile = () => {
             <div className="space-y-4">
               <SelectField label="Business Type" field="businessType" options={BUSINESS_TYPES} placeholder="Select Business Type" />
               <SelectField label="Business Category" field="businessCategory" options={BUSINESS_CATEGORIES} placeholder="Select Business Category" />
-              <SelectField label="State" field="state" options={INDIAN_STATES} placeholder="Select State" />
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">State</label>
+                <StateDropdown value={form.state} onChange={(value) => handleChange('state', value)} placeholder="Select State" />
+              </div>
               <InputField label="Pincode" field="pincode" placeholder="Enter Pincode" />
             </div>
           </div>

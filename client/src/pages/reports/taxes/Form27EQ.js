@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Search, Download, Printer } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
+import { exportToExcel } from '../../../utils/exportUtils';
 
 const columns = [
   { key: 'collectorName', label: 'Collector Name', width: 'w-[170px]' },
@@ -13,23 +15,32 @@ const columns = [
   { key: 'tcsAmount', label: 'TCS Amount', width: 'w-[130px]', align: 'right', render: (v) => `₹${(v||0).toLocaleString()}` },
 ];
 
+const currentYear = new Date().getFullYear();
+const fyStart = new Date().getMonth() >= 3 ? `${currentYear}-04-01` : `${currentYear - 1}-04-01`;
+const today = new Date().toISOString().split('T')[0];
+
 const Form27EQ = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState(fyStart);
+  const [dateTo, setDateTo] = useState(today);
   const filteredData = data.filter(d => !search || Object.values(d).some(v => String(v).toLowerCase().includes(search.toLowerCase())));
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const res = await reportAPI.getForm27EQ();
+        const params = {};
+        if (dateFrom) params.dateFrom = dateFrom;
+        if (dateTo) params.dateTo = dateTo;
+        const res = await reportAPI.getForm27EQ(params);
         setData(res.data.sections || []);
       } catch (err) { console.error('Failed to load Form 27EQ', err); }
       finally { setLoading(false); }
     };
     fetchData();
-  }, []);
+  }, [dateFrom, dateTo]);
 
   const totalTransaction = data.reduce((s, d) => s + (d.transactionAmount || 0), 0);
   const totalTCS = data.reduce((s, d) => s + (d.tcsAmount || 0), 0);
@@ -53,9 +64,9 @@ const Form27EQ = () => {
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 dark:text-[#64748B] pointer-events-none" />
           </div>
           <span className="text-xs text-gray-500 dark:text-[#64748B]">Between</span>
-          <input type="date" className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
           <span className="text-xs text-gray-500 dark:text-[#64748B]">To</span>
-          <input type="date" className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -65,8 +76,8 @@ const Form27EQ = () => {
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 dark:text-[#64748B] pointer-events-none" />
           </div>
-          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-[#1E293B]/70"><Download className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
-          <button className="p-1.5 border border-gray-200 dark:border-[#334155] rounded hover:bg-[#1E293B]/70"><Printer className="w-4 h-4 text-gray-500 dark:text-[#64748B]" /></button>
+          <button className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70" onClick={() => exportToExcel(filteredData, columns, 'Form_27EQ')}>Excel</button>
+          <button className="px-3 py-1.5 text-xs font-medium rounded-md bg-white dark:bg-[#1E293B] text-gray-600 dark:text-[#94A3B8] border border-gray-300 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#1E293B]/70" onClick={() => window.print()}>Print</button>
         </div>
       </div>
 

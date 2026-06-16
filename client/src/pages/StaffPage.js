@@ -8,6 +8,7 @@ import {
   Calendar, X, Loader2, Pencil, Trash2, Phone, Mail,
 } from 'lucide-react';
 import { staffAPI, saleAPI } from '../services/api';
+import { validateMobile, validateEmail, formatMobile } from '../utils/validation';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -35,6 +36,7 @@ const StaffPage = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [form, setForm] = useState({ name: '', phone: '', email: '', role: 'salesman', commissionRate: 0, notes: '' });
+  const [errors, setErrors] = useState({});
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -56,10 +58,18 @@ const StaffPage = () => {
   const resetForm = () => {
     setForm({ name: '', phone: '', email: '', role: 'salesman', commissionRate: 0, notes: '' });
     setEditing(null);
+    setErrors({});
   };
 
   const handleSave = async () => {
-    if (!form.name) { toast.error('Name is required'); return; }
+    const newErrors = {};
+    if (!form.name.trim()) newErrors.name = 'Name is required';
+    const phoneResult = validateMobile(form.phone);
+    if (!phoneResult.valid) newErrors.phone = phoneResult.error;
+    const emailResult = validateEmail(form.email);
+    if (!emailResult.valid) newErrors.email = emailResult.error;
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
     try {
       if (editing) {
         await staffAPI.update(editing._id, form);
@@ -70,6 +80,7 @@ const StaffPage = () => {
       }
       setShowModal(false);
       resetForm();
+      setErrors({});
       loadStaff();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to save staff');
@@ -280,24 +291,27 @@ const StaffPage = () => {
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Name *</label>
                   <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.name ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 focus:ring-blue-500/20'}`}
                     placeholder="Enter name"
                   />
+                  {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Phone</label>
-                    <input type="text" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    <input type="text" value={form.phone} onChange={e => setForm({ ...form, phone: formatMobile(e.target.value) })}
+                      className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 focus:ring-blue-500/20'}`}
                       placeholder="Phone number"
                     />
+                    {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
                     <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.email ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 focus:ring-blue-500/20'}`}
                       placeholder="Email"
                     />
+                    {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">

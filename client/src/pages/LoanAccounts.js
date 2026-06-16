@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { LayoutDashboard, RefreshCw, Sliders, Pencil, Trash2 } from 'lucide-react';
-import EmptyState from '../components/CashBank/EmptyState';
+import EmptyState from '../components/UI/EmptyState';
 import FeatureCard from '../components/CashBank/FeatureCard';
-import ModalDialog from '../components/CashBank/ModalDialog';
+import Modal from '../components/UI/Modal';
 import FormField from '../components/CashBank/FormField';
 import { loanAccountAPI } from '../services/api';
 
@@ -185,7 +185,7 @@ const LoanAccounts = () => {
         </div>
       )}
 
-      <ModalDialog open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }} title={editing ? 'Edit Loan Account' : 'Add Loan Account'} width="max-w-2xl">
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }} title={editing ? 'Edit Loan Account' : 'Add Loan Account'} size="lg">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-4">
             <FormField label="Account Name" required>
@@ -310,7 +310,7 @@ const LoanAccounts = () => {
             Save
           </button>
         </div>
-      </ModalDialog>
+      </Modal>
     </motion.div>
   );
 };

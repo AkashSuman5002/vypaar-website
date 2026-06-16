@@ -336,7 +336,7 @@ const ChartOfAccounts = () => {
               ><MoreVertical className="w-4 h-4" /></button>
               {menuOpen === account._id && (
                 <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
-                  <button onClick={() => { navigate(`/accounting/account-statements?account=${account._id}`); setMenuOpen(null); }}
+                  <button onClick={() => { navigate(`/account-statements?account=${account._id}`); setMenuOpen(null); }}
                     className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
                   ><Eye className="w-3.5 h-3.5" /> View Statement</button>
                   {!account.isDefault && (
@@ -404,7 +404,7 @@ const ChartOfAccounts = () => {
               ><MoreVertical className="w-4 h-4" /></button>
               {menuOpen === account._id && (
                 <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
-                  <button onClick={() => { navigate(`/accounting/account-statements?account=${account._id}`); setMenuOpen(null); }}
+                  <button onClick={() => { navigate(`/account-statements?account=${account._id}`); setMenuOpen(null); }}
                     className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
                   ><Eye className="w-3.5 h-3.5" /> View Statement</button>
                   {!account.isDefault && (

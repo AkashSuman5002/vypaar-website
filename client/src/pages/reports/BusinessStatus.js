@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Download, Printer } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { dashboardAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
 import ReportHeader from '../../components/reports/common/ReportHeader';
@@ -71,6 +73,24 @@ const BusinessStatus = () => {
   return (
     <>
       <ReportHeader title="Business Status" description="Overview of your business performance metrics." />
+      <div className="flex items-center justify-end gap-2 px-6 pb-2">
+        <button onClick={() => {
+          const table = document.querySelector('table');
+          if (!table) return toast.info('No data to export');
+          const rows = Array.from(table.querySelectorAll('tr'));
+          const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n');
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = 'business-status.csv'; a.click();
+          URL.revokeObjectURL(url);
+          toast.success('Exported');
+        }}
+        className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+        ><Download className="w-4 h-4" /> Download</button>
+        <button onClick={() => window.print()}
+        className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+        ><Printer className="w-4 h-4" /> Print</button>
+      </div>
       <ReportFilters search={search} onSearchChange={setSearch} period={period} onPeriodChange={setPeriod} dateStart={dates.start} dateEnd={dates.end} onDateChange={handleDateChange} />
       <div className="bg-white dark:bg-[#0F172A] min-h-full p-6 space-y-5">
         <div className="grid grid-cols-6 gap-3">

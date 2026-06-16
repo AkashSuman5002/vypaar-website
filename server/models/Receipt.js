@@ -15,12 +15,17 @@ const receiptSchema = new mongoose.Schema({
   bankName: { type: String, trim: true },
   chequeNo: { type: String, trim: true },
   referenceNo: { type: String, trim: true },
+  discount: { type: Number, default: 0, min: 0 },
+  status: { type: String, enum: ['pending', 'cleared', 'bounced', 'cancelled'], default: 'pending' },
+  partyName: { type: String, trim: true },
   notes: { type: String, trim: true },
   createdBy: { type: String, trim: true },
 }, { timestamps: true });
 
 receiptSchema.index({ user: 1, receiptNumber: 1 }, { unique: true });
 receiptSchema.index({ user: 1, date: -1 });
+receiptSchema.index({ business: 1, date: -1 });
 receiptSchema.index({ user: 1, customer: 1 });
+receiptSchema.index({ business: 1, customer: 1 });
 
 module.exports = mongoose.model('Receipt', receiptSchema);

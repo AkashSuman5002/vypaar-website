@@ -32,7 +32,7 @@ const SaleOrders2 = () => {
   const [pages, setPages] = useState(1);
 
   useEffect(() => {
-    customerAPI.getAll().then(({ data }) => setCustomers(data)).catch(() => {});
+    customerAPI.getAll().then(({ data }) => setCustomers(Array.isArray(data) ? data : data?.data || [])).catch(() => null);
   }, []);
 
   const loadOrders = useCallback(async () => {
