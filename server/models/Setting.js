@@ -224,6 +224,7 @@ const preferencesSchema = new mongoose.Schema({
     manufacturingDate: { type: Boolean, default: false },
     modelNumber: { type: Boolean, default: false },
     size: { type: Boolean, default: false },
+    customFieldDefs: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   accounting: {
     enableAccounting: { type: Boolean, default: true },
@@ -249,6 +250,12 @@ const preferencesSchema = new mongoose.Schema({
     service_reminder: { type: Boolean, default: true },
     sale_cancelled: { type: Boolean, default: true },
     purchase_cancelled: { type: Boolean, default: true },
+    purchase_updated: { type: Boolean, default: true },
+    purchase_deleted: { type: Boolean, default: true },
+    expense_updated: { type: Boolean, default: true },
+    expense_deleted: { type: Boolean, default: true },
+    payment_out: { type: Boolean, default: true },
+    payment_out_deleted: { type: Boolean, default: true },
     email: {
       enabled: { type: Boolean, default: false },
       smtpHost: { type: String, default: '' },

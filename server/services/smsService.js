@@ -119,12 +119,24 @@ const providerMap = {
   generic: sendViaGeneric,
 };
 
-const sendSMSNotification = async (userId, { to, message }) => {
+// Maps a canonical notification event type to its per-event preference key
+// under preferences.notifications.sms.* (see models/Setting.js).
+const SMS_EVENT_PREF_KEY = {
+  payment_received: 'paymentReceived',
+  low_stock: 'lowStock',
+};
+
+const sendSMSNotification = async (userId, { to, message }, eventType) => {
   try {
     const settings = await Setting.findOne({ user: userId });
     const smsPrefs = settings?.preferences?.notifications?.sms;
     if (!smsPrefs?.enabled) return false;
     if (!to || !message) return false;
+
+    // Per-event gating: if a specific toggle exists for this event and is
+    // disabled, suppress. Undefined keys default to enabled (no suppression).
+    const eventKey = eventType && SMS_EVENT_PREF_KEY[eventType];
+    if (eventKey && smsPrefs[eventKey] === false) return false;
 
     const provider = smsPrefs.provider || 'generic';
     const sendFn = providerMap[provider];
@@ -146,14 +158,14 @@ const sendPaymentReceivedSMS = async (userId, data) => {
   const settings = await Setting.findOne({ user: userId });
   const bizName = settings?.businessName || 'Your Business';
   const msg = `${bizName}: Payment of \u20B9${data.amount} received for invoice ${data.invoiceNumber}. Balance: \u20B9${data.remainingBalance || 0}. Thank you!`;
-  return sendSMSNotification(userId, { to: data.customerPhone, message: msg });
+  return sendSMSNotification(userId, { to: data.customerPhone, message: msg }, 'payment_received');
 };
 
 const sendLowStockSMS = async (userId, data) => {
   const settings = await Setting.findOne({ user: userId });
   const phone = settings?.phone;
   if (!phone) return false;
-  return sendSMSNotification(userId, { to: phone, message: `Low Stock: ${data.productName} - ${data.stock} units remaining (min: ${data.minStock})` });
+  return sendSMSNotification(userId, { to: phone, message: `Low Stock: ${data.productName} - ${data.stock} units remaining (min: ${data.minStock})` }, 'low_stock');
 };
 
 const sendPaymentReminderSMS = async (userId, data) => {

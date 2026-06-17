@@ -6,6 +6,7 @@ const Setting = require('../models/Setting');
 const ServiceReminder = require('../models/ServiceReminder');
 const { sendEmailNotification } = require('./emailService');
 const { sendPaymentReminderSMS } = require('./smsService');
+const { createNotification } = require('../controllers/notificationController');
 
 const checkPaymentReminders = async () => {
   try {
@@ -49,15 +50,11 @@ const checkPaymentReminders = async () => {
         const invoiceNum = sale.invoiceNumber || '';
         const dueDateStr = sale.dueDate ? new Date(sale.dueDate).toLocaleDateString() : 'N/A';
 
-        await Notification.create({
-          user: userId,
-          type: 'payment_due',
-          title: 'Payment Reminder',
-          message: `${customerName} has pending payment of ₹${balance.toFixed(2)} for invoice ${invoiceNum}. Due: ${dueDateStr}`,
-          referenceModel: 'payment-reminder',
-          referenceId: sale._id,
-          read: false,
-        });
+        await createNotification(
+          userId, 'payment_due', 'Payment Reminder',
+          `${customerName} has pending payment of ₹${balance.toFixed(2)} for invoice ${invoiceNum}. Due: ${dueDateStr}`,
+          sale._id, 'payment-reminder'
+        );
 
         const notifPrefs = userSetting.preferences?.notifications;
         const customerEmail = sale.customer?.email || sale.customerEmail;
@@ -105,15 +102,11 @@ const checkPaymentReminders = async () => {
         const billNum = purchase.billNumber || '';
         const dueDateStr = purchase.dueDate ? new Date(purchase.dueDate).toLocaleDateString() : 'N/A';
 
-        await Notification.create({
-          user: userId,
-          type: 'payment_due',
-          title: 'Payment Reminder',
-          message: `Pending payment of ₹${balance.toFixed(2)} to ${supplierName} for bill ${billNum}. Due: ${dueDateStr}`,
-          referenceModel: 'payment-reminder',
-          referenceId: purchase._id,
-          read: false,
-        });
+        await createNotification(
+          userId, 'payment_due', 'Payment Reminder',
+          `Pending payment of ₹${balance.toFixed(2)} to ${supplierName} for bill ${billNum}. Due: ${dueDateStr}`,
+          purchase._id, 'payment-reminder'
+        );
 
         const notifPrefs = userSetting.preferences?.notifications;
         const ownerEmail = userSetting.email;
@@ -175,15 +168,11 @@ const checkPaymentReminders = async () => {
 
       const itemNames = reminder.items.map(i => i.product?.name || i.productName || 'Item').join(', ');
 
-      await Notification.create({
-        user: reminder.user,
-        type: 'service_reminder',
-        title: 'Service Reminder',
-        message: `Service period for ${itemNames} (${reminder.servicePeriod} days) is due. Please follow up with your customer.`,
-        referenceModel: 'service-reminder',
-        referenceId: reminder._id,
-        read: false,
-      });
+      await createNotification(
+        reminder.user, 'service_reminder', 'Service Reminder',
+        `Service period for ${itemNames} (${reminder.servicePeriod} days) is due. Please follow up with your customer.`,
+        reminder._id, 'service-reminder'
+      );
 
       const nextDate = new Date(now.getTime() + reminder.servicePeriod * 24 * 60 * 60 * 1000);
       await ServiceReminder.findByIdAndUpdate(reminder._id, {

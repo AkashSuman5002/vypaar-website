@@ -121,9 +121,13 @@ const sendAutoMessage = async (userId, businessId, transactionType, data) => {
       : transactionType === 'credit_note' || transactionType === 'return' ? 'credit_note'
       : transactionType;
 
-    const customTemplate = settings.preferences?.transactionMessage?.messageTemplate;
-    const template = customTemplate
-      || settings.preferences?.transactionMessage?.[`${templateKey}Template`]
+    // Template precedence: per-type custom template saved by the Transaction Message tab
+    // (preferences.transactionMessage.templates[<type>]) > global messageTemplate override
+    // > hardcoded default for the type > generic invoice default.
+    const perTypeTemplate = settings.preferences?.transactionMessage?.templates?.[templateKey];
+    const globalTemplate = settings.preferences?.transactionMessage?.messageTemplate;
+    const template = perTypeTemplate
+      || globalTemplate
       || defaultTemplates[templateKey]
       || defaultTemplates.invoice;
 
@@ -159,7 +163,14 @@ const sendAutoMessage = async (userId, businessId, transactionType, data) => {
 
     const results = [];
 
-    if (msgPrefs.sendMessageToParty !== false) {
+    // Each channel is gated independently. There is no real external Vyapar API, so the
+    // "Send via Vyapar" channel is delivered through the same WhatsApp/in-app delivery path
+    // as the WhatsApp channel. We deliver at most once per recipient: if either channel is
+    // enabled (and the party should be messaged) we send via WhatsApp. Disabling WhatsApp
+    // alone (with Vyapar off) genuinely stops the send; both off sends nothing.
+    const deliverViaWhatsApp = msgPrefs.sendViaWhatsApp || msgPrefs.sendViaVyapar;
+
+    if (msgPrefs.sendMessageToParty !== false && deliverViaWhatsApp) {
       try {
         const result = await sendMessage(userId, phone, messageText);
         await logMessage(userId, businessId, {
@@ -187,11 +198,7 @@ const sendAutoMessage = async (userId, businessId, transactionType, data) => {
       }
     }
 
-    if (msgPrefs.sendViaVyapar) {
-      console.log(`[Vyapar Message] Would send to ${phone}: ${messageText}`);
-    }
-
-    if (msgPrefs.sendCopyToSelf && settings.phone) {
+    if (msgPrefs.sendCopyToSelf && deliverViaWhatsApp && settings.phone) {
       try {
         await sendMessage(userId, settings.phone, `[Copy] ${messageText}`);
         results.push({ to: settings.phone, status: 'sent', type: 'self_copy' });
@@ -213,7 +220,25 @@ const sendPaymentMessage = async (userId, businessId, paymentData) => {
     if (!msgPrefs?.sendViaWhatsApp && !msgPrefs?.sendViaVyapar) return;
     if (!msgPrefs?.sendTransactionUpdates) return;
 
-    const template = defaultTemplates.payment_in;
+    // Determine payment direction from the data already passed by callers. messagingTrigger
+    // tags outgoing payments with isPaymentOut; the explicit type/direction fields are also
+    // honoured. Everything else (e.g. sale payment_in) is treated as an incoming receipt.
+    const isPaymentOut = paymentData.isPaymentOut === true
+      || paymentData.type === 'payment_out'
+      || paymentData.type === 'payment_sent'
+      || paymentData.direction === 'out';
+    const transactionType = isPaymentOut ? 'payment_out' : 'payment_in';
+
+    // Gate on the per-type auto-message toggle: incoming -> autoMsgPaymentIn,
+    // outgoing -> autoMsgPaymentOut. Disabled (=== false) means do not send.
+    const autoToggleKey = isPaymentOut ? 'autoMsgPaymentOut' : 'autoMsgPaymentIn';
+    if (msgPrefs[autoToggleKey] === false) return;
+
+    // Per-type custom template (templates[<type>]) > global messageTemplate > hardcoded default.
+    const template = msgPrefs.templates?.[transactionType]
+      || msgPrefs.messageTemplate
+      || defaultTemplates[transactionType]
+      || defaultTemplates.payment_in;
     const vars = buildVars({
       ...paymentData,
       remainingBalance: paymentData.remainingBalance || 0,
@@ -247,7 +272,12 @@ const sendPaymentMessage = async (userId, businessId, paymentData) => {
     const sock = getSession(userId);
     if (!sock) return;
 
-    if (msgPrefs.sendMessageToParty !== false) {
+    // Independent channel gating: WhatsApp and Vyapar are gated separately, but since there
+    // is no real external Vyapar API the Vyapar channel is delivered through the same WhatsApp
+    // path. Deliver once if either channel is enabled; both off sends nothing.
+    const deliverViaWhatsApp = msgPrefs.sendViaWhatsApp || msgPrefs.sendViaVyapar;
+
+    if (msgPrefs.sendMessageToParty !== false && deliverViaWhatsApp) {
       try {
         await sendMessage(userId, phone, messageText);
         await logMessage(userId, businessId, {
@@ -257,7 +287,7 @@ const sendPaymentMessage = async (userId, businessId, paymentData) => {
           referenceType: 'Receipt',
           referenceId: paymentData.receiptId,
           referenceNumber: paymentData.receiptNumber,
-          transactionType: 'payment_in',
+          transactionType,
         });
       } catch (err) {
         await logMessage(userId, businessId, {
@@ -268,16 +298,12 @@ const sendPaymentMessage = async (userId, businessId, paymentData) => {
           referenceType: 'Receipt',
           referenceId: paymentData.receiptId,
           referenceNumber: paymentData.receiptNumber,
-          transactionType: 'payment_in',
+          transactionType,
         });
       }
     }
 
-    if (msgPrefs.sendViaVyapar) {
-      console.log(`[Vyapar Message] Would send to ${phone}: ${messageText}`);
-    }
-
-    if (msgPrefs.sendCopyToSelf && settings.phone) {
+    if (msgPrefs.sendCopyToSelf && deliverViaWhatsApp && settings.phone) {
       try { await sendMessage(userId, settings.phone, `[Copy] ${messageText}`); } catch {}
     }
   } catch (err) {

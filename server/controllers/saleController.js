@@ -11,6 +11,7 @@ const { sendAutoMessage, sendPaymentMessage } = require('../services/messageServ
 const { createNotification } = require('../controllers/notificationController');
 const { sendEmailNotification } = require('../services/emailService');
 const { sendSMSNotification } = require('../services/smsService');
+const { sendPushNotification } = require('../services/pushNotificationService');
 const Transaction = require('../models/Transaction');
 const { getBaseFilter, getSettingQuery, getCreateData } = require('../utils/queryHelper');
 const { withTransaction } = require('../utils/withTransaction');
@@ -292,9 +293,12 @@ const createSale = async (req, res) => {
       }
     }
 
-    // Apply default terms & conditions from settings if not provided
-    if (!termsConditions && setting?.preferences?.transaction?.termsAndConditions) {
-      termsConditions = setting.preferences.transaction.termsAndConditions;
+    // Apply default terms & conditions from settings if not provided.
+    // `transaction.termsAndConditions` is a Boolean toggle (whether to auto-apply
+    // default terms); the actual terms TEXT comes from the business invoiceNote.
+    // Previously the Boolean itself was assigned as the terms text (rendered "true").
+    if (!termsConditions && setting?.preferences?.transaction?.termsAndConditions && setting?.invoiceNote) {
+      termsConditions = setting.invoiceNote;
     }
 
     // Apply round off from settings if enabled
@@ -586,6 +590,19 @@ const createSale = async (req, res) => {
     // ---- External side effects: run only AFTER the transaction commits ----
     for (const alert of lowStockAlerts) {
       createNotification(req.user._id, 'low_stock', 'Low Stock Alert', alert.message, alert.productId, 'Product').catch(() => {});
+      // Web push (gated by push.enabled + push.lowStock) and owner email/SMS
+      // (gated by email.lowStock / sms.lowStock via the eventType argument).
+      sendPushNotification(req.user._id, { title: 'Low Stock Alert', body: alert.message, url: '/products' }, 'low_stock').catch(() => {});
+      if (setting?.email) {
+        sendEmailNotification(req.user._id, {
+          to: setting.email,
+          subject: 'Low Stock Alert',
+          html: `<p>${alert.message}</p>`,
+        }, 'low_stock').catch(() => {});
+      }
+      if (setting?.phone) {
+        sendSMSNotification(req.user._id, { to: setting.phone, message: alert.message }, 'low_stock').catch(() => {});
+      }
     }
 
     // Send WhatsApp auto-message
@@ -603,6 +620,12 @@ const createSale = async (req, res) => {
       `Invoice ${invoiceNumber} for Rs.${totalAmount.toFixed(2)}${customerName ? ` - ${customerName}` : ''}`,
       sale._id, 'Sale'
     ).catch(() => {});
+    // Web push for new sale (gated by push.enabled + push.newSale)
+    sendPushNotification(req.user._id, {
+      title: 'New Sale Created',
+      body: `Invoice ${invoiceNumber} for Rs.${totalAmount.toFixed(2)}${customerName ? ` - ${customerName}` : ''}`,
+      url: '/sales',
+    }, 'new_sale').catch(() => {});
 
     // Send email/SMS to customer if enabled
     if (customerPhone || customerEmail) {
@@ -1081,6 +1104,11 @@ const convertToReturn = async (req, res) => {
       remainingBalance: 0,
     }).catch(() => {});
 
+    createNotification(req.user._id, 'sale_return', 'Sales Return Created',
+      `Credit note ${creditNoteNumber} for Rs.${(original.totalAmount || 0).toFixed(2)}${original.customerName ? ` - ${original.customerName}` : ''}`,
+      creditNote._id, 'Sale'
+    ).catch(() => {});
+
     res.status(201).json(creditNote);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -1493,8 +1521,15 @@ const receivePayment = async (req, res) => {
         `Rs.${Number(amount).toFixed(2)} received for Invoice ${sale.invoiceNumber}`,
         receipt._id, 'Receipt'
       ).catch(() => {});
+      // Web push (gated by push.enabled + push.paymentReceived)
+      sendPushNotification(req.user._id, {
+        title: 'Payment Received',
+        body: `Rs.${Number(amount).toFixed(2)} received for Invoice ${sale.invoiceNumber}`,
+        url: '/sales',
+      }, 'payment_received').catch(() => {});
 
-      // Send payment received email/SMS to customer
+      // Send payment received email/SMS to customer.
+      // eventType 'payment_received' lets email.paymentReceived / sms.paymentReceived gate delivery.
       if (sale.customerEmail || sale.customerPhone) {
         const payMsg = `Payment of Rs.${Number(amount).toFixed(2)} received for Invoice ${sale.invoiceNumber}. Balance: Rs.${sale.remainingBalance.toFixed(2)}`;
         if (sale.customerEmail) {
@@ -1502,13 +1537,13 @@ const receivePayment = async (req, res) => {
             to: sale.customerEmail,
             subject: `Payment Received - Invoice ${sale.invoiceNumber}`,
             html: `<p>Dear ${sale.customerName || 'Customer'},</p><p>We have received your payment of Rs.${Number(amount).toFixed(2)}.</p><p>Invoice: ${sale.invoiceNumber}</p><p>Balance: Rs.${sale.remainingBalance.toFixed(2)}</p><p>Thank you!</p>`,
-          }).catch(() => {});
+          }, 'payment_received').catch(() => {});
         }
         if (sale.customerPhone) {
           sendSMSNotification(req.user._id, {
             to: sale.customerPhone,
             message: payMsg,
-          }).catch(() => {});
+          }, 'payment_received').catch(() => {});
         }
       }
     }

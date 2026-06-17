@@ -51,35 +51,35 @@ const ImportParties = () => {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-      <h1 className="text-xl font-bold text-slate-900 mb-6">Import Parties</h1>
+      <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC] mb-6">Import Parties</h1>
       {importResult ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-8">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">Preview Parties Data</h2>
-          <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-200 mb-6">
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-8">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-[#F8FAFC] mb-4">Preview Parties Data</h2>
+          <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200 dark:border-emerald-500/20 mb-6">
             <CheckCircle className="w-5 h-5 text-emerald-600" />
-            <span className="text-sm text-emerald-700">File "{file?.name}" uploaded. Review and confirm import.</span>
+            <span className="text-sm text-emerald-700 dark:text-emerald-300">File "{file?.name}" uploaded. Review and confirm import.</span>
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => { setImportResult(null); setFile(null); }} className="px-5 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
+            <button onClick={() => { setImportResult(null); setFile(null); }} className="px-5 py-2.5 border border-slate-200 dark:border-[#334155] text-slate-600 dark:text-[#94A3B8] text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-[#1E293B]/70 transition-colors">Cancel</button>
             <button onClick={handleImport} className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">Import Data</button>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-8 text-center">
-            <p className="text-sm text-slate-600 mb-4">Download template to prepare your data</p>
-            <div className="w-20 h-24 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-8 text-center">
+            <p className="text-sm text-slate-600 dark:text-[#94A3B8] mb-4">Download template to prepare your data</p>
+            <div className="w-20 h-24 bg-blue-100 dark:bg-blue-500/15 rounded-xl flex items-center justify-center mx-auto mb-4">
               <FileSpreadsheet className="w-10 h-10 text-blue-600" />
             </div>
             <button onClick={downloadTemplate} className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"><Download className="w-4 h-4" /> Download Template</button>
           </div>
           <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleFileDrop}
-            className={`bg-white rounded-2xl border-2 border-dashed p-8 text-center transition-all h-full flex flex-col items-center justify-center cursor-pointer ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-slate-400'}`}
+            className={`bg-white dark:bg-[#1E293B] rounded-2xl border-2 border-dashed p-8 text-center transition-all h-full flex flex-col items-center justify-center cursor-pointer ${dragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-slate-300 dark:border-[#334155] hover:border-slate-400 dark:hover:border-[#475569]'}`}
             onClick={() => fileInputRef.current?.click()}>
-            <p className="text-sm text-slate-600 mb-4">Upload your Excel file</p>
-            <div className="w-20 h-24 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4"><Upload className="w-10 h-10 text-blue-600" /></div>
-            <p className="text-sm text-slate-500">Drag and drop or <span className="text-blue-600 font-medium">Click to Browse</span></p>
-            <p className="text-xs text-slate-400 mt-1">.xls or .xlsx files only</p>
+            <p className="text-sm text-slate-600 dark:text-[#94A3B8] mb-4">Upload your Excel file</p>
+            <div className="w-20 h-24 bg-blue-100 dark:bg-blue-500/15 rounded-xl flex items-center justify-center mx-auto mb-4"><Upload className="w-10 h-10 text-blue-600" /></div>
+            <p className="text-sm text-slate-500 dark:text-[#64748B]">Drag and drop or <span className="text-blue-600 font-medium">Click to Browse</span></p>
+            <p className="text-xs text-slate-400 dark:text-[#64748B] mt-1">.xls or .xlsx files only</p>
             {uploading && <p className="text-sm text-blue-600 mt-3">Uploading...</p>}
             <input ref={fileInputRef} type="file" accept=".xls,.xlsx" onChange={handleFileSelect} className="hidden" />
           </div>

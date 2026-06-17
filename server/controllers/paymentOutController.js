@@ -100,6 +100,7 @@ const createPaymentOut = async (req, res) => {
     // Send WhatsApp payment message to supplier
     sendPaymentMessage(req.user._id, req.businessId, {
       customerName: partyName || 'Supplier',
+      supplierName: partyName || 'Supplier',
       customerPhone: '',
       invoiceNumber: reference || payment._id.toString(),
       invoiceId: payment._id,
@@ -107,6 +108,8 @@ const createPaymentOut = async (req, res) => {
       remainingBalance: 0,
       paymentMode: paymentMethod || 'cash',
       date: date || new Date(),
+      // Marks this as an outgoing payment so messageService gates on autoMsgPaymentOut.
+      isPaymentOut: true,
     }).catch(() => {});
 
     createNotification(req.user._id, 'payment_out', 'Payment Sent',

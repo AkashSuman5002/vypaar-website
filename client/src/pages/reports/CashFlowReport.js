@@ -8,6 +8,7 @@ import EmptyState from '../../components/reports/common/EmptyState';
 import { transactionAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
 import { toast } from 'react-toastify';
+import { exportToCSV } from '../../utils/exportUtils';
 
 const KPI = ({ icon: Icon, label, value, color, bg }) => (
   <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-4 flex items-center gap-3 flex-1 min-w-[160px]">
@@ -32,14 +33,8 @@ const CashFlowReport = () => {
   const [cashBalance, setCashBalance] = useState(0);
 
   const handleDownload = () => {
-    const table = document.querySelector('table');
-    if (!table) return toast.info('No data to export');
-    const rows = Array.from(table.querySelectorAll('tr'));
-    const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => `"${c.textContent.trim()}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'cash-flow-report.csv'; a.click();
-    URL.revokeObjectURL(url);
+    if (!filteredData.length) return toast.info('No data to export');
+    exportToCSV(filteredData, columns, 'cash-flow-report');
     toast.success('Exported');
   };
 

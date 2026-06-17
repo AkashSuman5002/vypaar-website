@@ -158,7 +158,9 @@ export const gstFilingAPI = {
 };
 
 export const pushNotificationAPI = {
+  getVapidPublicKey: () => API.get('/notifications/push/vapid-public-key'),
   subscribe: (data) => API.post('/notifications/push/subscribe', data),
+  unsubscribe: () => API.post('/notifications/push/unsubscribe'),
 };
 
 export const paymentOutAPI = {

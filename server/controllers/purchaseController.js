@@ -10,6 +10,7 @@ const { recordStockMovement } = require('./stockController');
 const { getBaseFilter, getCreateData, getSettingQuery } = require('../utils/queryHelper');
 const { createNotification } = require('../controllers/notificationController');
 const { sendAutoMessage } = require('../services/messageService');
+const { sendPushNotification } = require('../services/pushNotificationService');
 
 const getPurchases = async (req, res) => {
   try {
@@ -46,8 +47,10 @@ const createPurchase = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const {
       supplier, supplierName, billNumber, date, dueDate, items,
-      totalAmount, paidAmount, paymentStatus, paymentMethod, notes, isInterState,
+      paidAmount, paymentStatus, paymentMethod, notes, isInterState,
     } = req.body;
+    // totalAmount is reassigned later (TCS/TDS, rounding), so it must be mutable.
+    let totalAmount = req.body.totalAmount;
 
     const setting = await Setting.findOne(getSettingQuery(req));
     const calcTaxOnMRP = setting?.preferences?.item?.calculateTaxOnMRP === true;
@@ -107,9 +110,15 @@ const createPurchase = async (req, res) => {
 
     const requireHSN = setting?.preferences?.taxes?.hsnSac === true;
 
-    for (const item of processedItems) {
-      if (requireHSN && !item.hsn && prod?.hsn) {
-        item.hsn = prod.hsn;
+    if (requireHSN) {
+      const hsnProductIds = processedItems.filter(item => item.product).map(item => item.product);
+      const hsnProducts = await Product.find({ _id: { $in: hsnProductIds }, user: req.user._id });
+      const hsnProductMap = new Map(hsnProducts.map(p => [p._id.toString(), p]));
+      for (const item of processedItems) {
+        const prod = item.product ? hsnProductMap.get(item.product.toString()) : undefined;
+        if (!item.hsn && prod?.hsn) {
+          item.hsn = prod.hsn;
+        }
       }
     }
 
@@ -392,6 +401,12 @@ const createPurchase = async (req, res) => {
       `Purchase from ${supplierName || 'supplier'} for Rs.${purchase.totalAmount?.toFixed(2) || '0'}`,
       purchase._id, 'Purchase'
     ).catch(() => {});
+    // Web push for new purchase (gated by push.enabled + push.newPurchase)
+    sendPushNotification(req.user._id, {
+      title: 'New Purchase Created',
+      body: `Purchase from ${supplierName || 'supplier'} for Rs.${purchase.totalAmount?.toFixed(2) || '0'}`,
+      url: '/purchases',
+    }, 'new_purchase').catch(() => {});
 
     sendAutoMessage(req.user._id, req.businessId, 'purchase', {
       supplierName,

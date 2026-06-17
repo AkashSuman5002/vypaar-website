@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import { Camera, Upload, Building2, ArrowLeft, Save } from 'lucide-react';
-import { businessAPI, settingAPI } from '../services/api';
+import { businessAPI, settingAPI, BASE_URL } from '../services/api';
 import useSettings from '../hooks/useSettings';
 import { validateMobile, validateEmail, validateGST, validatePincode, formatMobile, formatGST, formatPincode } from '../utils/validation';
 import StateDropdown from '../components/UI/StateDropdown';
@@ -50,6 +50,16 @@ const EditProfile = () => {
 
   const [errors, setErrors] = useState({});
 
+  // Saved logo/signature are stored as relative paths like "/uploads/abc.png".
+  // They are served by the API server (BASE_URL), not the client origin, so they
+  // must be resolved against BASE_URL. Freshly-picked files are data:/blob: URLs
+  // (from FileReader) and must be left as-is.
+  const mediaUrl = (val) => {
+    if (!val) return null;
+    if (/^(https?:|data:|blob:)/i.test(val)) return val;
+    return `${BASE_URL}/${String(val).replace(/^\//, '')}`;
+  };
+
   useEffect(() => {
     if (settings) {
       setForm({
@@ -66,8 +76,8 @@ const EditProfile = () => {
           ? new Date(settings.accountBooksBeginningDate).toISOString().split('T')[0]
           : new Date().toISOString().split('T')[0],
       });
-      if (settings.logo) setLogoPreview(settings.logo);
-      if (settings.signature) setSignaturePreview(settings.signature);
+      if (settings.logo) setLogoPreview(mediaUrl(settings.logo));
+      if (settings.signature) setSignaturePreview(mediaUrl(settings.signature));
     }
   }, [settings]);
 

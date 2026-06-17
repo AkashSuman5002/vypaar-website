@@ -17,6 +17,8 @@ const { startRecurringService } = require('./services/recurringService');
 const { startAutoBackup } = require('./services/backupService');
 const { startPaymentReminder } = require('./services/paymentReminderService');
 const { startServiceReminderCheck } = require('./services/serviceReminderScheduler');
+// Required once at startup so its VAPID keypair init (env or ephemeral) runs before any push send.
+require('./services/pushNotificationService');
 
 // Fail fast on missing critical config; warn loudly if not running in production mode
 // (so production safety doesn't silently depend on remembering to set NODE_ENV).
@@ -94,7 +96,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = /jpeg|jpg|png|gif|webp/;
     const extOk = allowed.test(path.extname(file.originalname).toLowerCase());
@@ -121,7 +123,8 @@ app.use('/api/suppliers', require('./routes/supplierRoutes'));
 app.use('/api/party-groups', require('./routes/partyGroupRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
-app.use('/api/reports', require('./routes/reportRoutes'));
+// '/api/reports' removed: dead duplicate of '/api/accounting/reports/*' (sales|purchases|profit).
+// The controllers (getSalesReport/getPurchaseReport/getProfitReport) remain mounted via accountingRoutes.
 app.use('/api/adv-reports', require('./routes/advReportRoutes'));
 app.use('/api/ledger', require('./routes/ledgerRoutes'));
 app.use('/api/accounting', require('./routes/accountingRoutes'));
@@ -136,7 +139,8 @@ app.use('/api/purchase-orders', require('./routes/purchaseOrderRoutes'));
 const purchaseReturnRoutes = require('./routes/purchaseReturnRoutes');
 app.use('/api/purchase-returns', (req, res, next) => {
   if (req.method === 'POST' || req.method === 'PUT') {
-    upload.any()(req, res, () => {
+    upload.any()(req, res, (err) => {
+      if (err) return next(err);
       purchaseReturnRoutes(req, res, next);
     });
   } else {
@@ -170,7 +174,8 @@ app.use('/api/currencies', require('./routes/currencyRoutes'));
 const businessRoutes = require('./routes/businessRoutes');
 app.use('/api/business', (req, res, next) => {
   if (req.method === 'POST' || req.method === 'PUT') {
-    upload.any()(req, res, () => {
+    upload.any()(req, res, (err) => {
+      if (err) return next(err);
       businessRoutes(req, res, next);
     });
   } else {
@@ -182,7 +187,8 @@ app.use('/api/business', (req, res, next) => {
 const settingRoutes = require('./routes/settingRoutes');
 app.use('/api/settings', (req, res, next) => {
   if (req.method === 'PUT') {
-    upload.single('logo')(req, res, () => {
+    upload.single('logo')(req, res, (err) => {
+      if (err) return next(err);
       settingRoutes(req, res, next);
     });
   } else {

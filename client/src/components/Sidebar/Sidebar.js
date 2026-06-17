@@ -17,6 +17,7 @@ import usePermissions from '../../hooks/usePermissions';
 const partiesSubLinks = [
   { to: '/customers', label: 'Customers', icon: Users },
   { to: '/suppliers', label: 'Suppliers', icon: Users },
+  { to: '/party-groups', label: 'Party Groups', icon: Layers },
   { to: '/parties/details', label: 'Party Details', icon: Users },
   { to: '/parties/whatsapp', label: 'WhatsApp Connect', icon: MessageCircle },
   { to: '/parties/network', label: 'Vyapar Network', icon: Network },
@@ -239,7 +240,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
   const inputRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [partiesOpen, setPartiesOpen] = useState(location.pathname.startsWith('/parties'));
+  const [partiesOpen, setPartiesOpen] = useState(location.pathname.startsWith('/parties') || location.pathname.startsWith('/party-groups'));
   const [salesOpen, setSalesOpen] = useState(location.pathname.startsWith('/sales'));
   const [purchasesOpen, setPurchasesOpen] = useState(location.pathname.startsWith('/purchases'));
   const [cashBankOpen, setCashBankOpen] = useState(location.pathname.startsWith('/cash-bank'));
@@ -249,7 +250,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
   const [userManagementOpen, setUserManagementOpen] = useState(location.pathname.startsWith('/user-management') || location.pathname.startsWith('/staff'));
 
   useEffect(() => {
-    setPartiesOpen(location.pathname.startsWith('/parties'));
+    setPartiesOpen(location.pathname.startsWith('/parties') || location.pathname.startsWith('/party-groups'));
     setSalesOpen(location.pathname.startsWith('/sales'));
     setPurchasesOpen(location.pathname.startsWith('/purchases'));
     setCashBankOpen(location.pathname.startsWith('/cash-bank'));

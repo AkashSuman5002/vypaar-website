@@ -2,8 +2,11 @@ const PurchaseReturn = require('../models/PurchaseReturn');
 const Product = require('../models/Product');
 const Supplier = require('../models/Supplier');
 const StockMovement = require('../models/StockMovement');
+const Account = require('../models/Account');
+const JournalEntry = require('../models/JournalEntry');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { sendAutoMessage } = require('../services/messageService');
+const { createNotification } = require('./notificationController');
 const { withTransaction } = require('../utils/withTransaction');
 
 const getPurchaseReturns = async (req, res) => {
@@ -131,6 +134,46 @@ const createPurchaseReturn = async (req, res) => {
       // NOTE: if created.supplier is not set we cannot safely identify the supplier
       // (supplierName is free text and not a reliable key), so the balance is left untouched.
 
+      // Post a journal entry that REVERSES the original purchase posting.
+      // Original purchase: Dr Purchase (5002) / Cr Payable (2001).
+      // Purchase return (debit note): Dr Payable (2001) / Cr Purchase (5002).
+      if (created.totalAmount > 0) {
+        try {
+          const payable = await Account.findOne({ ...baseFilter, code: '2001' });
+          const purchaseAccount = await Account.findOne({ ...baseFilter, code: '5002' });
+          if (payable && purchaseAccount) {
+            const lines = [
+              { account: payable._id, accountName: payable.name, accountType: payable.type, debit: created.totalAmount, credit: 0 },
+              { account: purchaseAccount._id, accountName: purchaseAccount.name, accountType: purchaseAccount.type, debit: 0, credit: created.totalAmount },
+            ];
+            await JournalEntry.create([getCreateData(req, {
+              entryNumber: `JE-PRET-${returnNumber || created._id}`,
+              entryDate: created.returnDate || new Date(),
+              referenceType: 'PurchaseReturn',
+              referenceId: created._id,
+              lines,
+              totalDebit: created.totalAmount,
+              totalCredit: created.totalAmount,
+              narration: `Purchase return ${returnNumber || ''} - ${supplierName || ''}`,
+              isPosted: true,
+              postedAt: new Date(),
+            })], { session });
+            const accIds = lines.map(l => l.account);
+            const accounts = await Account.find({ _id: { $in: accIds }, user: req.user._id });
+            const accMap = new Map(accounts.map(a => [a._id.toString(), a]));
+            const balanceOps = lines.map(line => {
+              const acc = accMap.get(line.account.toString());
+              if (!acc) return null;
+              const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
+              return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+            }).filter(Boolean);
+            if (balanceOps.length > 0) await Account.bulkWrite(balanceOps, { session });
+          }
+        } catch (jeErr) {
+          console.error('Failed to create journal entry for purchase return:', jeErr.message);
+        }
+      }
+
       return created;
     });
 
@@ -142,6 +185,11 @@ const createPurchaseReturn = async (req, res) => {
       totalAmount: ret.totalAmount,
       remainingBalance: 0,
     }).catch(() => {});
+
+    createNotification(req.user._id, 'purchase_return', 'Purchase Return Created',
+      `Return ${returnNumber || String(ret._id)} for Rs.${(ret.totalAmount || 0).toFixed(2)}${supplierName ? ` - ${supplierName}` : ''}`,
+      ret._id, 'PurchaseReturn'
+    ).catch(() => {});
 
     res.status(201).json(ret);
   } catch (error) {
@@ -227,7 +275,64 @@ const updatePurchaseReturn = async (req, res) => {
         if (adjustMovements.length > 0) await StockMovement.insertMany(adjustMovements, { session });
       }
 
-      return await PurchaseReturn.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, filtered, { new: true, session });
+      const result = await PurchaseReturn.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, filtered, { new: true, session });
+
+      // Keep the double-entry ledger consistent: reverse the existing return JE and
+      // re-post a fresh one reflecting the updated total (mirrors purchase return create).
+      const newTotal = result.totalAmount || 0;
+      if (newTotal !== (ret.totalAmount || 0)) {
+        try {
+          const existingJe = await JournalEntry.findOne({ referenceType: 'PurchaseReturn', referenceId: ret._id, user: req.user._id });
+          if (existingJe) {
+            const revAccIds = existingJe.lines.filter(l => l.account).map(l => l.account);
+            const revAccounts = await Account.find({ _id: { $in: revAccIds }, user: req.user._id });
+            const revAccMap = new Map(revAccounts.map(a => [a._id.toString(), a]));
+            const revOps = existingJe.lines.filter(l => l.account).map(line => {
+              const acc = revAccMap.get(line.account.toString());
+              if (!acc) return null;
+              const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
+              return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: -change } } } };
+            }).filter(Boolean);
+            if (revOps.length > 0) await Account.bulkWrite(revOps, { session });
+            await JournalEntry.findOneAndDelete({ _id: existingJe._id, user: req.user._id }, { session });
+          }
+          if (newTotal > 0) {
+            const payable = await Account.findOne({ ...baseFilter, code: '2001' });
+            const purchaseAccount = await Account.findOne({ ...baseFilter, code: '5002' });
+            if (payable && purchaseAccount) {
+              const lines = [
+                { account: payable._id, accountName: payable.name, accountType: payable.type, debit: newTotal, credit: 0 },
+                { account: purchaseAccount._id, accountName: purchaseAccount.name, accountType: purchaseAccount.type, debit: 0, credit: newTotal },
+              ];
+              await JournalEntry.create([getCreateData(req, {
+                entryNumber: `JE-PRET-${result.returnNumber || result._id}`,
+                entryDate: result.returnDate || new Date(),
+                referenceType: 'PurchaseReturn',
+                referenceId: result._id,
+                lines,
+                totalDebit: newTotal,
+                totalCredit: newTotal,
+                narration: `Purchase return updated ${result.returnNumber || ''} - ${result.supplierName || ''}`,
+                isPosted: true,
+                postedAt: new Date(),
+              })], { session });
+              const accounts = await Account.find({ _id: { $in: lines.map(l => l.account) }, user: req.user._id });
+              const accMap = new Map(accounts.map(a => [a._id.toString(), a]));
+              const balanceOps = lines.map(line => {
+                const acc = accMap.get(line.account.toString());
+                if (!acc) return null;
+                const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
+                return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+              }).filter(Boolean);
+              if (balanceOps.length > 0) await Account.bulkWrite(balanceOps, { session });
+            }
+          }
+        } catch (jeErr) {
+          console.error('Failed to update journal entry for purchase return:', jeErr.message);
+        }
+      }
+
+      return result;
     });
 
     res.json(updated);
@@ -268,6 +373,26 @@ const deletePurchaseReturn = async (req, res) => {
         await Supplier.findByIdAndUpdate(ret.supplier, { $inc: { openingBalance: ret.totalAmount } }, { session });
       }
       // NOTE: if ret.supplier is not set, nothing was decremented at creation, so nothing to reverse.
+
+      // Reverse the journal entry created for this purchase return, if any.
+      try {
+        const journalEntry = await JournalEntry.findOne({ referenceType: 'PurchaseReturn', referenceId: ret._id, user: req.user._id });
+        if (journalEntry) {
+          const delAccIds = journalEntry.lines.filter(l => l.account).map(l => l.account);
+          const delAccounts = await Account.find({ _id: { $in: delAccIds }, user: req.user._id });
+          const delAccMap = new Map(delAccounts.map(a => [a._id.toString(), a]));
+          const delReverseOps = journalEntry.lines.filter(l => l.account).map(line => {
+            const acc = delAccMap.get(line.account.toString());
+            if (!acc) return null;
+            const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
+            return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: -change } } } };
+          }).filter(Boolean);
+          if (delReverseOps.length > 0) await Account.bulkWrite(delReverseOps, { session });
+          await JournalEntry.findOneAndDelete({ _id: journalEntry._id, user: req.user._id }, { session });
+        }
+      } catch (jeErr) {
+        console.error('Failed to reverse journal entry on purchase return delete:', jeErr.message);
+      }
 
       await PurchaseReturn.findOneAndDelete({ _id: req.params.id, ...baseFilter }, { session });
     });

@@ -1,5 +1,6 @@
 const Notification = require('../models/Notification');
 const Setting = require('../models/Setting');
+const pushNotificationService = require('../services/pushNotificationService');
 
 const getNotifications = async (req, res) => {
   try {
@@ -68,4 +69,34 @@ const createNotification = async (userId, type, title, message, referenceId, ref
   }
 };
 
-module.exports = { getNotifications, markAsRead, markAllAsRead, deleteNotification, getUnreadCount, createNotification };
+const getVapidPublicKey = async (req, res) => {
+  try {
+    res.json({ publicKey: pushNotificationService.getVapidPublicKey() });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const subscribePush = async (req, res) => {
+  try {
+    const subscription = req.body;
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ message: 'Invalid subscription' });
+    }
+    pushNotificationService.saveSubscription(req.user._id, subscription);
+    res.status(201).json({ message: 'Subscribed to push notifications' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const unsubscribePush = async (req, res) => {
+  try {
+    pushNotificationService.removeSubscription(req.user._id);
+    res.json({ message: 'Unsubscribed from push notifications' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getNotifications, markAsRead, markAllAsRead, deleteNotification, getUnreadCount, createNotification, getVapidPublicKey, subscribePush, unsubscribePush };

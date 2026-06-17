@@ -12,7 +12,7 @@ const ImportItems = () => {
   if (showHistory) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative">
-        <button onClick={() => setShowHistory(false)} className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 transition-colors mb-4">
+        <button onClick={() => setShowHistory(false)} className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-[#64748B] hover:text-slate-900 dark:hover:text-[#F8FAFC] transition-colors mb-4">
           <ArrowRight className="w-4 h-4 rotate-180" /> Back to Import
         </button>
         <ImportHistory />
@@ -23,7 +23,7 @@ const ImportItems = () => {
   if (activeWizard) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative">
-        <button onClick={() => setActiveWizard(null)} className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 transition-colors mb-4">
+        <button onClick={() => setActiveWizard(null)} className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-[#64748B] hover:text-slate-900 dark:hover:text-[#F8FAFC] transition-colors mb-4">
           <ArrowRight className="w-4 h-4 rotate-180" /> Back to Import Methods
         </button>
         {activeWizard === 'excel' ? <ExcelImportWizard onComplete={() => setActiveWizard(null)} /> : <VyaparBackupImportWizard onComplete={() => setActiveWizard(null)} />}
@@ -35,25 +35,25 @@ const ImportItems = () => {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Import Items</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Migrate your business data into this application.</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">Import Items</h1>
+          <p className="text-sm text-slate-400 dark:text-[#64748B] mt-0.5">Migrate your business data into this application.</p>
         </div>
-        <button onClick={() => setShowHistory(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all shadow-sm">
+        <button onClick={() => setShowHistory(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-[#334155] text-slate-600 dark:text-[#94A3B8] text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-[#1E293B]/70 transition-all shadow-sm">
           <History className="w-4 h-4" /> Import History
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <motion.div whileHover={{ y: -2 }} className="group bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden transition-all hover:shadow-lg hover:border-blue-200">
+        <motion.div whileHover={{ y: -2 }} className="group bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200/80 dark:border-[#334155] shadow-soft overflow-hidden transition-all hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-500/30">
           <div className="p-8">
-            <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mb-5">
+            <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center mb-5">
               <FileSpreadsheet className="w-7 h-7 text-blue-600" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Import From Excel</h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Upload Excel files exported from Vyapar. Supports Parties, Items, Sales, Purchases, Expenses, and Stock data.</p>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-[#F8FAFC] mb-2">Import From Excel</h3>
+            <p className="text-sm text-slate-500 dark:text-[#64748B] mb-6 leading-relaxed">Upload Excel files exported from Vyapar. Supports Parties, Items, Sales, Purchases, Expenses, and Stock data.</p>
             <ul className="space-y-2 mb-6">
               {['Parties.xlsx', 'Items.xlsx', 'Sales.xlsx', 'Purchases.xlsx', 'Expenses.xlsx', 'Stock.xlsx'].map((f) => (
-                <li key={f} className="flex items-center gap-2.5 text-sm text-slate-600">
+                <li key={f} className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-[#94A3B8]">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                   {f}
                 </li>
@@ -65,16 +65,16 @@ const ImportItems = () => {
           </div>
         </motion.div>
 
-        <motion.div whileHover={{ y: -2 }} className="group bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden transition-all hover:shadow-lg hover:border-emerald-200">
+        <motion.div whileHover={{ y: -2 }} className="group bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200/80 dark:border-[#334155] shadow-soft overflow-hidden transition-all hover:shadow-lg hover:border-emerald-200 dark:hover:border-emerald-500/30">
           <div className="p-8">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-5">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center mb-5">
               <Database className="w-7 h-7 text-emerald-600" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Import From Vyapar Backup</h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Import directly from Vyapar backup files. Supports .backup, .zip, .db, and .sqlite formats.</p>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-[#F8FAFC] mb-2">Import From Vyapar Backup</h3>
+            <p className="text-sm text-slate-500 dark:text-[#64748B] mb-6 leading-relaxed">Import directly from Vyapar backup files. Supports .backup, .zip, .db, and .sqlite formats.</p>
             <ul className="space-y-2 mb-6">
               {['Auto-detect Vyapar version', 'Scan all data tables', 'Transform to app schema', 'Preserve relationships', 'Import history tracking'].map((f) => (
-                <li key={f} className="flex items-center gap-2.5 text-sm text-slate-600">
+                <li key={f} className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-[#94A3B8]">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   {f}
                 </li>

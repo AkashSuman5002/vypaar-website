@@ -95,64 +95,64 @@ const SetupMyBusiness = () => {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-slate-900">Set Up My Business</h1>
-        <p className="text-sm text-slate-400 mt-0.5">Enter your business details to configure your invoice format and settings.</p>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">Set Up My Business</h1>
+        <p className="text-sm text-slate-400 dark:text-[#64748B] mt-0.5">Enter your business details to configure your invoice format and settings.</p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-6">
-          <h2 className="text-base font-bold text-slate-900 mb-6 flex items-center gap-2">
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-6">
+          <h2 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] mb-6 flex items-center gap-2">
             <Building2 className="w-5 h-5 text-blue-600" /> Enter Business Details
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex items-center gap-4 mb-2">
-              <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-300 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : <Building2 className="w-6 h-6 text-slate-400" />}
+              <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-[#0F172A] flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-300 dark:border-[#334155] cursor-pointer" onClick={() => fileRef.current?.click()}>
+                {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : <Building2 className="w-6 h-6 text-slate-400 dark:text-[#64748B]" />}
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-700">Company Logo</p>
+                <p className="text-sm font-medium text-slate-700 dark:text-[#E2E8F0]">Company Logo</p>
                 <button type="button" onClick={() => fileRef.current?.click()} className="text-xs text-blue-600 hover:underline">Upload Logo</button>
               </div>
               <input ref={fileRef} type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Company Name *</label>
-                <input type="text" value={form.businessName} onChange={handleChange('businessName')} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Company Name" required />
+                <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Company Name *</label>
+                <input type="text" value={form.businessName} onChange={handleChange('businessName')} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Company Name" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number *</label>
-                <input type="tel" value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: formatMobile(e.target.value) }))} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.phone ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}`} placeholder="Phone Number" required />
+                <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Phone Number *</label>
+                <input type="tel" value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: formatMobile(e.target.value) }))} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.phone ? 'border-red-500 focus:border-red-500' : 'border-slate-200 dark:border-[#334155] focus:border-blue-500'}`} placeholder="Phone Number" required />
                 {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Owner Name</label>
-                <input type="text" value={form.ownerName} onChange={handleChange('ownerName')} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Owner Name" />
+                <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Owner Name</label>
+                <input type="text" value={form.ownerName} onChange={handleChange('ownerName')} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Owner Name" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input type="email" value={form.email} onChange={handleChange('email')} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.email ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}`} placeholder="Email" />
+                <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Email</label>
+                <input type="email" value={form.email} onChange={handleChange('email')} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.email ? 'border-red-500 focus:border-red-500' : 'border-slate-200 dark:border-[#334155] focus:border-blue-500'}`} placeholder="Email" />
                 {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Business Category *</label>
-              <select value={form.category} onChange={handleChange('category')} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm">
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Business Category *</label>
+              <select value={form.category} onChange={handleChange('category')} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm">
                 {BUSINESS_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">GST Number</label>
-              <input type="text" value={form.gstNumber} onChange={(e) => setForm(prev => ({ ...prev, gstNumber: formatGST(e.target.value) }))} maxLength={15} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.gstNumber ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}`} placeholder="GST Number" />
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">GST Number</label>
+              <input type="text" value={form.gstNumber} onChange={(e) => setForm(prev => ({ ...prev, gstNumber: formatGST(e.target.value) }))} maxLength={15} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm ${errors.gstNumber ? 'border-red-500 focus:border-red-500' : 'border-slate-200 dark:border-[#334155] focus:border-blue-500'}`} placeholder="GST Number" />
               {errors.gstNumber && <p className="text-red-500 text-xs mt-1">{errors.gstNumber}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-              <textarea value={form.address} onChange={handleChange('address')} rows={2} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm resize-none" placeholder="Business Address" />
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Address</label>
+              <textarea value={form.address} onChange={handleChange('address')} rows={2} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm resize-none" placeholder="Business Address" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">State</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">State</label>
               <StateDropdown value={form.state} onChange={handleChange('state')} />
             </div>
             <div className="flex justify-end gap-3 pt-2">
@@ -162,28 +162,28 @@ const SetupMyBusiness = () => {
             </div>
           </form>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-6">
-          <h2 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-6">
+          <h2 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] mb-4 flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-600" /> Sample Tax Invoice
           </h2>
-          <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/50 text-xs">
+          <div className="border border-slate-200 dark:border-[#334155] rounded-xl p-5 bg-slate-50/50 dark:bg-[#0F172A]/40 text-xs">
             <div className="text-center mb-3">
               {logoPreview && <img src={logoPreview} alt="Logo" className="w-12 h-12 rounded-lg mx-auto mb-2 object-cover" />}
-              <h3 className="text-base font-bold text-slate-900">{form.businessName || 'Your Company'}</h3>
-              <p className="text-slate-500">Phone: {form.phone || 'XXXXX XXXXX'}</p>
-              {form.gstNumber && <p className="text-slate-500">GSTIN: {form.gstNumber}</p>}
+              <h3 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC]">{form.businessName || 'Your Company'}</h3>
+              <p className="text-slate-500 dark:text-[#64748B]">Phone: {form.phone || 'XXXXX XXXXX'}</p>
+              {form.gstNumber && <p className="text-slate-500 dark:text-[#64748B]">GSTIN: {form.gstNumber}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3 mb-3">
-              <div><p className="font-semibold text-slate-700">Bill To:</p><p className="text-slate-500">Sample Party</p></div>
-              <div className="text-right"><p className="font-semibold text-slate-700">Invoice:</p><p className="text-slate-500">No: 001 | {new Date().toLocaleDateString('en-IN')}</p></div>
+              <div><p className="font-semibold text-slate-700 dark:text-[#E2E8F0]">Bill To:</p><p className="text-slate-500 dark:text-[#64748B]">Sample Party</p></div>
+              <div className="text-right"><p className="font-semibold text-slate-700 dark:text-[#E2E8F0]">Invoice:</p><p className="text-slate-500 dark:text-[#64748B]">No: 001 | {new Date().toLocaleDateString('en-IN')}</p></div>
             </div>
             <table className="w-full border-collapse">
-              <thead><tr className="bg-slate-200"><th className="p-1.5 text-left">#</th><th className="p-1.5 text-left">Item</th><th className="p-1.5 text-right">Qty</th><th className="p-1.5 text-right">Amount</th></tr></thead>
+              <thead><tr className="bg-slate-200 dark:bg-[#334155]"><th className="p-1.5 text-left">#</th><th className="p-1.5 text-left">Item</th><th className="p-1.5 text-right">Qty</th><th className="p-1.5 text-right">Amount</th></tr></thead>
               <tbody><tr className="border-b"><td className="p-1.5">1</td><td className="p-1.5">Sample Item</td><td className="p-1.5 text-right">1</td><td className="p-1.5 text-right">₹400.00</td></tr></tbody>
             </table>
-            <div className="text-right mt-2 font-semibold text-slate-700">Total: ₹400.00</div>
-            <div className="mt-3 pt-3 border-t text-slate-500">Thanks for doing business with us!</div>
-            <div className="mt-4 text-right text-slate-500">For {form.businessName || 'My Company'}:<div className="mt-6 border-t border-slate-300 w-24 ml-auto pt-1">Authorized Signatory</div></div>
+            <div className="text-right mt-2 font-semibold text-slate-700 dark:text-[#E2E8F0]">Total: ₹400.00</div>
+            <div className="mt-3 pt-3 border-t text-slate-500 dark:text-[#64748B]">Thanks for doing business with us!</div>
+            <div className="mt-4 text-right text-slate-500 dark:text-[#64748B]">For {form.businessName || 'My Company'}:<div className="mt-6 border-t border-slate-300 dark:border-[#334155] w-24 ml-auto pt-1">Authorized Signatory</div></div>
           </div>
         </div>
       </div>

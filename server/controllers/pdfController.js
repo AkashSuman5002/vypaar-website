@@ -13,14 +13,33 @@ const hexToRgb = (hex) => {
 
 const formatAmount = (amount, printPrefs, currency) => {
   const val = Number(amount) || 0;
-  const decimals = parseInt(printPrefs.amountDecimalPlaces) || parseInt(printPrefs._generalDecimalPlaces) || 2;
+  const decimals = printPrefs.showAmountDecimal === false
+    ? 0
+    : parseInt(printPrefs.amountDecimalPlaces) || parseInt(printPrefs._generalDecimalPlaces) || 2;
   if (printPrefs.printAmountWithGrouping === false) {
     return `${currency || '₹'}${val.toFixed(decimals)}`;
   }
   return `${currency || '₹'}${val.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 };
 
+// Distinct accent/style per thermal theme so the choice has a real visual effect.
+const thermalThemeStyles = {
+  thermalTheme1: { accent: '#000000', bold: true, line: 'solid' },
+  thermalTheme2: { accent: '#1a5276', bold: false, line: 'dashed' },
+  thermalTheme3: { accent: '#000000', bold: false, line: 'dotted' },
+  thermalTheme4: { accent: '#1B4332', bold: true, line: 'dashed' },
+};
+
+const getThermalThemeStyle = (printPrefs) => {
+  if (printPrefs.thermalTheme2) return thermalThemeStyles.thermalTheme2;
+  if (printPrefs.thermalTheme3) return thermalThemeStyles.thermalTheme3;
+  if (printPrefs.thermalTheme4) return thermalThemeStyles.thermalTheme4;
+  return thermalThemeStyles.thermalTheme1;
+};
+
 const getThemeColor = (printPrefs) => {
+  const isThermal = (printPrefs.printerType === 'thermal') || (printPrefs.makeThermalDefault && !printPrefs.printerType);
+  if (isThermal) return getThermalThemeStyle(printPrefs).accent;
   if (printPrefs.accentColor) return printPrefs.accentColor;
   if (printPrefs.gstTheme) return '#7C3AED';
   if (printPrefs.tallyTheme) return '#2563EB';
@@ -48,14 +67,96 @@ const numberToWords = (num) => {
   return result + ' Only';
 };
 
-const getThermalPageSize = (thermalPageSize) => {
+const getThermalPageSize = (thermalPageSize, thermalCustomChars) => {
+  if (thermalPageSize === 'custom') {
+    // ~5pt per character column; matches the client preview's char->width mapping.
+    const chars = parseInt(thermalCustomChars) || 48;
+    return [Math.max(120, chars * 5), 500];
+  }
   const sizeMap = {
     '2inch': [200, 500],
     '3inch': [250, 500],
     '4inch': [300, 500],
-    'custom': [250, 500],
   };
   return sizeMap[thermalPageSize] || [250, 500];
+};
+
+// Number of monospace character columns for a thermal paper size.
+const getThermalCharWidth = (printPrefs) => {
+  if (printPrefs.thermalPageSize === 'custom') return parseInt(printPrefs.thermalCustomChars) || 48;
+  const map = { '2inch': 32, '3inch': 42, '4inch': 56 };
+  return map[printPrefs.thermalPageSize] || 42;
+};
+
+// ESC/POS control sequences. No-ops on plain paper but real on a thermal printer stream.
+const ESC_POS = {
+  cutPaper: Buffer.from([0x1d, 0x56, 0x00]),            // GS V 0  -> full cut
+  openDrawer: Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]), // ESC p 0 25 250 -> kick drawer
+  bold: (on) => Buffer.from([0x1b, 0x45, on ? 0x01 : 0x00]), // ESC E n
+};
+
+// Build a plain monospace (Text Printing) thermal receipt with optional ESC/POS controls.
+const buildThermalTextReceipt = (sale, settings, printPrefs, currency) => {
+  const width = getThermalCharWidth(printPrefs);
+  const useStyling = printPrefs.useTextStyling === true;
+  const parts = [];
+  const line = (s = '') => parts.push(Buffer.from(s + '\n', 'utf8'));
+  const center = (s) => line(s.length >= width ? s : ' '.repeat(Math.floor((width - s.length) / 2)) + s);
+  const sep = (ch = '-') => line(ch.repeat(width));
+  const lr = (l, r) => {
+    const space = Math.max(1, width - l.length - r.length);
+    return line(l + ' '.repeat(space) + r);
+  };
+  const bold = (on) => { if (useStyling) parts.push(ESC_POS.bold(on)); };
+
+  bold(true);
+  if (printPrefs.showCompanyName !== false) center(settings?.businessName || 'Your Business');
+  bold(false);
+  if (printPrefs.showAddress !== false && settings?.address) center(settings.address);
+  if (printPrefs.showPhone !== false && settings?.phone) center(`Ph.No.: ${settings.phone}`);
+  if (printPrefs.showEmail !== false && settings?.email) center(settings.email);
+  const bizGst = settings?.preferences?.general?.gstin || settings?.gstNumber || '';
+  if (printPrefs.showGSTIN !== false && bizGst) center(`GST: ${bizGst}`);
+  sep('=');
+  bold(true);
+  center('TAX INVOICE');
+  bold(false);
+  sep();
+  line(`Invoice: ${sale.invoiceNumber}`);
+  line(`Date: ${new Date(sale.date).toLocaleDateString('en-IN')}`);
+  line(`Customer: ${sale.customerName || 'Walk-in'}`);
+  sep();
+
+  const showSNo = printPrefs.showItemSNo !== false;
+  const showHSN = printPrefs.showItemHSN !== false;
+  const showUOM = printPrefs.showItemUOM !== false;
+  bold(true);
+  lr(`${showSNo ? '# ' : ''}Item`, 'Qty   Amount');
+  bold(false);
+  sale.items.forEach((item, idx) => {
+    let name = `${showSNo ? (idx + 1) + ' ' : ''}${item.productName}`;
+    if (showHSN && item.hsn) name += ` (${item.hsn})`;
+    line(name);
+    const qty = `${item.quantity}${showUOM && item.unit ? item.unit : ''}`;
+    lr('  ', `${qty}  ${formatAmount(item.amount, printPrefs, currency)}`);
+  });
+  sep();
+  bold(true);
+  lr('Total', formatAmount(sale.totalAmount, printPrefs, currency));
+  bold(false);
+  if (printPrefs.receivedAmount !== false) lr('Received', formatAmount(sale.paidAmount || 0, printPrefs, currency));
+  if (printPrefs.balanceAmount !== false) lr('Balance', formatAmount(sale.remainingBalance || 0, printPrefs, currency));
+  sep('=');
+  center('Thank you for your business!');
+
+  const extraLines = parseInt(printPrefs.extraLinesAtEnd) || 0;
+  for (let i = 0; i < extraLines; i++) line('');
+
+  // Trailing ESC/POS device controls.
+  if (printPrefs.autoCutPaper === true) parts.push(ESC_POS.cutPaper);
+  if (printPrefs.openCashDrawer === true) parts.push(ESC_POS.openDrawer);
+
+  return Buffer.concat(parts);
 };
 
 const generateInvoicePDF = async (req, res) => {
@@ -76,12 +177,13 @@ const generateInvoicePDF = async (req, res) => {
     const topMargin = parseInt(printPrefs.topPDFMargin) || 40;
     const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 20;
     const invoiceTextSize = parseInt(printPrefs.invoiceTextSize) || 14;
-    const printerType = printPrefs.printerType || 'regular';
-    const decimals = parseInt(printPrefs.amountDecimalPlaces) || parseInt(printPrefs._generalDecimalPlaces) || 2;
+    // makeThermalDefault: when set and no explicit printerType chosen, default to thermal layout.
+    const printerType = printPrefs.printerType || (printPrefs.makeThermalDefault ? 'thermal' : 'regular');
+    const decimals = printPrefs.showAmountDecimal === false ? 0 : (parseInt(printPrefs.amountDecimalPlaces) || parseInt(printPrefs._generalDecimalPlaces) || 2);
 
     let pageWidth, pageHeight;
     if (printerType === 'thermal') {
-      const thermalSize = getThermalPageSize(printPrefs.thermalPageSize);
+      const thermalSize = getThermalPageSize(printPrefs.thermalPageSize, printPrefs.thermalCustomChars);
       pageWidth = thermalSize[0];
       pageHeight = thermalSize[1];
     } else {
@@ -93,6 +195,17 @@ const generateInvoicePDF = async (req, res) => {
     const marginLeft = printerType === 'thermal' ? 15 : 40;
     const marginRight = printerType === 'thermal' ? 15 : 40;
     const contentWidth = pageWidth - marginLeft - marginRight;
+
+    // Text Printing on a thermal printer: emit a raw monospace receipt with ESC/POS
+    // device controls instead of a styled PDF (which is the Graphics Printing path below).
+    const currencyEarly = settings?.preferences?.general?.businessCurrency || settings?.currency || '₹';
+    if (printerType === 'thermal' && printPrefs.printingType === 'Text Printing') {
+      const receipt = buildThermalTextReceipt(sale, settings, printPrefs, currencyEarly);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      const safeName = (sale.invoiceNumber || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}.txt"`);
+      return res.send(receipt);
+    }
 
     const doc = new PDFDocument({
       margin: topMargin,
@@ -119,6 +232,8 @@ const generateInvoicePDF = async (req, res) => {
     const showEmail = isThermal ? printPrefs.showEmail !== false : true;
     const showPhone = isThermal ? printPrefs.showPhone !== false : true;
     const showGSTIN = isThermal ? printPrefs.showGSTIN !== false : true;
+    const thermalStyle = getThermalThemeStyle(printPrefs);
+    const emphasizeThermal = isThermal && (printPrefs.useTextStyling === true || thermalStyle.bold);
     const showItemSNo = isThermal ? printPrefs.showItemSNo !== false : printPrefs.showItemSNo !== false;
     const showItemHSN = isThermal ? printPrefs.showItemHSN !== false : printPrefs.showItemHSN !== false;
     const showItemUOM = isThermal ? printPrefs.showItemUOM !== false : printPrefs.showItemUOM !== false;
@@ -233,8 +348,9 @@ const generateInvoicePDF = async (req, res) => {
     if (isThermal) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor(accentColor);
       const colW = contentWidth;
-      doc.text('#', marginLeft, tableTop, { width: 15 });
-      doc.text('Item Name(HSN)', marginLeft + 15, tableTop, { width: colW - 80 });
+      const nameX = showItemSNo ? marginLeft + 15 : marginLeft;
+      if (showItemSNo) doc.text('#', marginLeft, tableTop, { width: 15 });
+      doc.text(showItemHSN ? 'Item Name(HSN)' : 'Item Name', nameX, tableTop, { width: colW - 80 });
       doc.text('Qty', marginLeft + colW - 65, tableTop, { width: 25, align: 'right' });
       if (showItemMRP) doc.text('MRP', marginLeft + colW - 40, tableTop, { width: 25, align: 'right' });
       doc.text('Price', marginLeft + colW - 15, tableTop, { width: 25, align: 'right' });
@@ -268,9 +384,12 @@ const generateInvoicePDF = async (req, res) => {
         y = topMargin;
       }
       if (isThermal) {
-        const name = item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '') + ((showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '');
+        const snoPrefix = showItemSNo ? `${idx + 1}. ` : '';
+        const hsnSuffix = (showItemHSN && item.hsn) ? ` (${item.hsn})` : '';
+        const name = snoPrefix + item.productName + hsnSuffix + (item.gstRate ? ` (${item.gstRate}%)` : '') + ((showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '');
+        const qtyText = String(item.quantity) + (showItemUOM && item.unit ? ` ${item.unit}` : '');
         doc.fillColor('#000000').text(name, marginLeft, y, { width: contentWidth - 80 });
-        doc.text(String(item.quantity), marginLeft + contentWidth - 65, y, { width: 25, align: 'right' });
+        doc.text(qtyText, marginLeft + contentWidth - 65, y, { width: 25, align: 'right' });
         if (showItemMRP) doc.text(formatAmount(item.rate, printPrefs, currency), marginLeft + contentWidth - 40, y, { width: 25, align: 'right' });
         if (showAmount) {
           doc.text(formatAmount(item.rate, printPrefs, currency), marginLeft + contentWidth - 15, y, { width: 25, align: 'right' });
@@ -298,10 +417,13 @@ const generateInvoicePDF = async (req, res) => {
         }
         doc.fontSize(8);
       } else {
-        const name = item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '');
+        const snoPrefix = showItemSNo ? `${idx + 1}. ` : '';
+        const hsnSuffix = (showItemHSN && item.hsn) ? ` HSN:${item.hsn}` : '';
+        const name = snoPrefix + item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '') + hsnSuffix;
         const serialInfo = (showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '';
         doc.fillColor('#000000').text(name + serialInfo, marginLeft, y, { width: 120 });
-        doc.text(String(item.quantity), (hasTax ? marginLeft + 210 : marginLeft + 180), y, { width: 70, align: 'right' });
+        const qtyText = String(item.quantity) + (showItemUOM && item.unit ? ` ${item.unit}` : '');
+        doc.text(qtyText, (hasTax ? marginLeft + 210 : marginLeft + 180), y, { width: 70, align: 'right' });
         if (showAmount) {
           doc.text(formatAmount(item.rate, printPrefs, currency), (hasTax ? marginLeft + 275 : marginLeft + 280), y, { width: 60, align: 'right' });
           if (item.discountType && item.discountType !== 'none' && item.discountAmount) {
@@ -361,7 +483,7 @@ const generateInvoicePDF = async (req, res) => {
 
       doc.moveTo(marginLeft, y).lineTo(pageWidth - marginRight, y).dash(3, { space: 3 }).stroke().undash();
       y += 6;
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(accentColor);
+      doc.font(emphasizeThermal ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor(accentColor);
       doc.text('Total', marginLeft, y, { width: contentWidth / 2 });
       doc.text(formatAmount(sale.totalAmount, printPrefs, currency), marginLeft, y, { width: contentWidth, align: 'right' });
       y += 14;
@@ -556,12 +678,12 @@ const generatePurchasePDF = async (req, res) => {
     const topMargin = parseInt(printPrefs.topPDFMargin) || 40;
     const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 20;
     const invoiceTextSize = parseInt(printPrefs.invoiceTextSize) || 14;
-    const printerType = printPrefs.printerType || 'regular';
-    const decimals = parseInt(printPrefs.amountDecimalPlaces) || parseInt(printPrefs._generalDecimalPlaces) || 2;
+    const printerType = printPrefs.printerType || (printPrefs.makeThermalDefault ? 'thermal' : 'regular');
+    const decimals = printPrefs.showAmountDecimal === false ? 0 : (parseInt(printPrefs.amountDecimalPlaces) || parseInt(printPrefs._generalDecimalPlaces) || 2);
 
     let pageWidth, pageHeight;
     if (printerType === 'thermal') {
-      const thermalSize = getThermalPageSize(printPrefs.thermalPageSize);
+      const thermalSize = getThermalPageSize(printPrefs.thermalPageSize, printPrefs.thermalCustomChars);
       pageWidth = thermalSize[0];
       pageHeight = thermalSize[1];
     } else {
@@ -663,8 +785,8 @@ const generatePurchasePDF = async (req, res) => {
 
     if (isThermal) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor(accentColor);
-      doc.text('#', marginLeft, tableTop, { width: 15 });
-      doc.text('Product', marginLeft + 15, tableTop, { width: contentWidth - 65 });
+      if (showItemSNo) doc.text('#', marginLeft, tableTop, { width: 15 });
+      doc.text('Product', (showItemSNo ? marginLeft + 15 : marginLeft), tableTop, { width: contentWidth - 65 });
       doc.text('Qty', marginLeft + contentWidth - 50, tableTop, { width: 20, align: 'right' });
       doc.text('Amount', marginLeft + contentWidth - 25, tableTop, { width: 25, align: 'right' });
       tableTop += 14;
@@ -689,10 +811,10 @@ const generatePurchasePDF = async (req, res) => {
 
     doc.font('Helvetica').fontSize(isThermal ? 8 : 9);
     let y = tableTop;
-    (purchase.items || []).forEach((item) => {
+    (purchase.items || []).forEach((item, idx) => {
       if (y > pageHeight - 100) { doc.addPage(); y = topMargin; }
       if (isThermal) {
-        const thermalName = item.productName + ((showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '');
+        const thermalName = (showItemSNo ? `${idx + 1}. ` : '') + item.productName + ((showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '');
         doc.fillColor('#000000').text(thermalName, marginLeft, y, { width: contentWidth - 50 });
         doc.text(String(item.quantity), marginLeft + contentWidth - 50, y, { width: 20, align: 'right' });
         doc.text(formatAmount(item.amount, printPrefs, currency), marginLeft + contentWidth - 25, y, { width: 25, align: 'right' });

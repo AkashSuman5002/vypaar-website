@@ -220,6 +220,7 @@ const defaultPrefs = {
     manufacturingDate: false,
     modelNumber: false,
     size: false,
+    customFieldDefs: [],
   },
   accounting: {
     enableAccounting: true,

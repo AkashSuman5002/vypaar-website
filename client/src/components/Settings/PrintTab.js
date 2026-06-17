@@ -30,8 +30,8 @@ const themeColors = {
 };
 
 const SectionHeader = ({ title }) => (
-  <div className="py-3 border-b border-gray-200">
-    <h3 className="text-sm font-bold text-[#1F2937]">{title}</h3>
+  <div className="py-3 border-b border-gray-200 dark:border-gray-700">
+    <h3 className="text-sm font-bold text-[#1F2937] dark:text-slate-200">{title}</h3>
   </div>
 );
 
@@ -39,24 +39,24 @@ const CheckboxRow = ({ label, checked, onChange, info }) => (
   <div className="flex items-center justify-between py-2.5">
     <div className="flex items-center gap-3">
       <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
-        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
-      <span className="text-sm text-[#1F2937]">{label}</span>
+        className="w-4 h-4 text-blue-600 border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded focus:ring-blue-500 cursor-pointer" />
+      <span className="text-sm text-[#1F2937] dark:text-slate-200">{label}</span>
     </div>
-    {info && <span className="text-xs text-gray-400 cursor-help" title={info}>ⓘ</span>}
+    {info && <span className="text-xs text-gray-400 dark:text-gray-500 cursor-help" title={info}>ⓘ</span>}
   </div>
 );
 
 const InputRow = ({ label, value, onChange, placeholder, type = 'text', suffix, info }) => (
   <div className="flex items-center justify-between py-2.5">
     <div className="flex items-center gap-2">
-      <span className="text-sm text-[#1F2937]">{label}</span>
-      {info && <span className="text-xs text-gray-400 cursor-help" title={info}>ⓘ</span>}
+      <span className="text-sm text-[#1F2937] dark:text-slate-200">{label}</span>
+      {info && <span className="text-xs text-gray-400 dark:text-gray-500 cursor-help" title={info}>ⓘ</span>}
     </div>
     <div className="flex items-center gap-2">
       <input type={type} value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white text-[#1F2937] text-center" />
-      {suffix && <span className="text-xs text-gray-400">{suffix}</span>}
+        className="w-20 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200 text-center" />
+      {suffix && <span className="text-xs text-gray-400 dark:text-gray-500">{suffix}</span>}
     </div>
   </div>
 );
@@ -64,11 +64,11 @@ const InputRow = ({ label, value, onChange, placeholder, type = 'text', suffix, 
 const SelectRow = ({ label, value, onChange, options, info }) => (
   <div className="flex items-center justify-between py-2.5">
     <div className="flex items-center gap-2">
-      <span className="text-sm text-[#1F2937]">{label}</span>
-      {info && <span className="text-xs text-gray-400 cursor-help" title={info}>ⓘ</span>}
+      <span className="text-sm text-[#1F2937] dark:text-slate-200">{label}</span>
+      {info && <span className="text-xs text-gray-400 dark:text-gray-500 cursor-help" title={info}>ⓘ</span>}
     </div>
     <select value={value} onChange={e => onChange(e.target.value)}
-      className="w-40 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]">
+      className="w-40 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200">
       {options.map(opt => (
         <option key={typeof opt === 'string' ? opt : opt.value} value={typeof opt === 'string' ? opt : opt.value}>
           {typeof opt === 'string' ? opt : opt.label}
@@ -587,11 +587,11 @@ const PrintTab = () => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 h-full flex flex-col overflow-hidden">
-      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
         {['regular', 'thermal'].map(type => (
           <button key={type} onClick={() => update('printerType', type)}
             className={`px-4 py-2 text-sm font-medium rounded-md transition-all capitalize ${
-              settings.printerType === type ? 'bg-white text-[#1F2937] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              settings.printerType === type ? 'bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}>
             {type} Printer
           </button>
@@ -603,14 +603,14 @@ const PrintTab = () => {
 
           {isThermal && (
             <>
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Print Company Info / Header" />
                 <div className="px-5 py-2">
                   <CheckboxRow label="Company Name" checked={settings.showCompanyName} onChange={v => update('showCompanyName', v)} />
                   {settings.showCompanyName && (
                     <div className="ml-7 mb-2">
                       <input type="text" value={businessSettings?.businessName || ''} readOnly
-                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-gray-50 text-[#1F2937]" />
+                        className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-700/60 text-[#1F2937] dark:text-slate-200" />
                     </div>
                   )}
                   <CheckboxRow label="Company Logo" checked={settings.showCompanyLogo} onChange={v => update('showCompanyLogo', v)}
@@ -622,35 +622,35 @@ const PrintTab = () => {
                   {settings.showAddress && (
                     <div className="ml-7 mb-2">
                       <input type="text" value={businessSettings?.address || ''} readOnly
-                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-gray-50 text-[#1F2937]" />
+                        className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-700/60 text-[#1F2937] dark:text-slate-200" />
                     </div>
                   )}
                   <CheckboxRow label="Email" checked={settings.showEmail} onChange={v => update('showEmail', v)} />
                   {settings.showEmail && (
                     <div className="ml-7 mb-2">
                       <input type="text" value={businessSettings?.email || ''} readOnly
-                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-gray-50 text-[#1F2937]" />
+                        className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-700/60 text-[#1F2937] dark:text-slate-200" />
                     </div>
                   )}
                   <CheckboxRow label="Phone Number" checked={settings.showPhone} onChange={v => update('showPhone', v)} />
                   {settings.showPhone && (
                     <div className="ml-7 mb-2">
                       <input type="text" value={businessSettings?.phone || ''} readOnly
-                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-gray-50 text-[#1F2937]" />
+                        className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-700/60 text-[#1F2937] dark:text-slate-200" />
                     </div>
                   )}
                   <CheckboxRow label="GSTIN on Sale" checked={settings.showGSTIN} onChange={v => update('showGSTIN', v)} />
                   {settings.showGSTIN && (
                     <div className="ml-7 mb-2">
                       <input type="text" value={businessSettings?.gstNumber || ''} readOnly
-                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-gray-50 text-[#1F2937]" />
+                        className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-700/60 text-[#1F2937] dark:text-slate-200" />
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-200">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
                   <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Change Layout</span>
                 </div>
                 <div className="px-5 py-4">
@@ -658,7 +658,7 @@ const PrintTab = () => {
                     {/* Theme 1: Name, Qty, Price, Amount - with per-item Disc/Tax/Final */}
                     <button onClick={() => selectThermalTheme('thermalTheme1')}
                       className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                        settings.thermalTheme1 ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        settings.thermalTheme1 ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}>
                       <div className="w-20 h-28 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                         <div className="text-center font-bold text-[6px] mb-0.5" style={{ color: '#000000' }}>Header</div>
@@ -683,7 +683,7 @@ const PrintTab = () => {
                     {/* Theme 2: Name, Qty, Price, Amount - compact, Sub Total / Disc breakdown */}
                     <button onClick={() => selectThermalTheme('thermalTheme2')}
                       className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                        settings.thermalTheme2 ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        settings.thermalTheme2 ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}>
                       <div className="w-20 h-28 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                         <div className="text-center font-bold text-[6px] mb-0.5" style={{ color: '#1a5276' }}>Header</div>
@@ -707,7 +707,7 @@ const PrintTab = () => {
                     {/* Theme 3: Item Name(HSN), Qty, MRP, Price, Amount - Date on left, Inv on right */}
                     <button onClick={() => selectThermalTheme('thermalTheme3')}
                       className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                        settings.thermalTheme3 ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        settings.thermalTheme3 ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}>
                       <div className="w-20 h-28 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                         <div className="text-center font-bold text-[6px] mb-0.5" style={{ color: '#000000' }}>Header</div>
@@ -731,7 +731,7 @@ const PrintTab = () => {
                     {/* Theme 4: Item Name(HSN), Qty, MRP, Price, Amount - Inv on left, Date on right */}
                     <button onClick={() => selectThermalTheme('thermalTheme4')}
                       className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                        settings.thermalTheme4 ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        settings.thermalTheme4 ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}>
                       <div className="w-20 h-28 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                         <div className="text-center font-bold text-[6px] mb-0.5" style={{ color: '#1B4332' }}>Header</div>
@@ -757,23 +757,22 @@ const PrintTab = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="px-5 py-2">
                   <div className="flex items-center justify-between py-2.5">
                     <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={settings.makeThermalDefault} disabled
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
-                      <span className="text-sm text-[#1F2937]">Make Thermal Printer Default</span>
+                      <input type="checkbox" checked={!!settings.makeThermalDefault} onChange={e => update('makeThermalDefault', e.target.checked)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
+                      <span className="text-sm text-[#1F2937] dark:text-slate-200">Make Thermal Printer Default</span>
                     </div>
-                    <span className="text-xs text-gray-400">(Requires printer API)</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="px-5 py-2">
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Page Size</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Page Size</span>
                     <div className="flex items-center gap-0">
                       {[
                         { key: '2inch', label: '2 Inch', sub: '58mm' },
@@ -787,7 +786,7 @@ const PrintTab = () => {
                           } ${
                             settings.thermalPageSize === size.key
                               ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                              : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-slate-200 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                           }`}>
                           <div className="text-xs font-medium">{size.label}</div>
                           <div className="text-[9px] opacity-75">{size.sub}</div>
@@ -795,58 +794,56 @@ const PrintTab = () => {
                       ))}
                       {settings.thermalPageSize === 'custom' && (
                         <input type="number" value={settings.thermalCustomChars} onChange={e => update('thermalCustomChars', e.target.value)}
-                          className="w-16 ml-2 px-2 py-1 text-sm border border-gray-200 rounded-md text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          className="w-16 ml-2 px-2 py-1 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200 text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
                       )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="px-5 py-2">
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Printing Type</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Printing Type</span>
                     <div className="flex items-center gap-2">
-                      <select value={settings.printingType} disabled
-                        className="w-40 px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white text-[#1F2937] opacity-50 cursor-not-allowed">
-                        <option>Text Printing</option>
-                        <option>Image Printing</option>
+                      <select value={settings.printingType || 'Image Printing'} onChange={e => update('printingType', e.target.value)}
+                        className="w-40 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="Text Printing">Text Printing</option>
+                        <option value="Image Printing">Graphics Printing</option>
                       </select>
-                      <span className="text-xs text-gray-400">(Requires printer API)</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between py-2.5">
                     <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={settings.useTextStyling} disabled
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
-                      <span className="text-sm text-[#1F2937]">Use Text Styling(Bold)</span>
+                      <input type="checkbox" checked={!!settings.useTextStyling} onChange={e => update('useTextStyling', e.target.checked)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
+                      <span className="text-sm text-[#1F2937] dark:text-slate-200">Use Text Styling(Bold)</span>
                     </div>
-                    <span className="text-xs text-gray-400">(Requires printer API)</span>
                   </div>
                   <div className="flex items-center justify-between py-2.5">
                     <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={settings.autoCutPaper} disabled
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
-                      <span className="text-sm text-[#1F2937]">Auto Cut Paper After Printing</span>
+                      <input type="checkbox" checked={!!settings.autoCutPaper} onChange={e => update('autoCutPaper', e.target.checked)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
+                      <span className="text-sm text-[#1F2937] dark:text-slate-200">Auto Cut Paper After Printing</span>
                     </div>
-                    <span className="text-xs text-gray-400">(Requires printer API)</span>
+                    <span className="text-xs text-gray-400">(Text Printing only)</span>
                   </div>
                   <div className="flex items-center justify-between py-2.5">
                     <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={settings.openCashDrawer} disabled
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-not-allowed opacity-50" />
-                      <span className="text-sm text-[#1F2937]">Open Cash Drawer After Printing</span>
+                      <input type="checkbox" checked={!!settings.openCashDrawer} onChange={e => update('openCashDrawer', e.target.checked)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
+                      <span className="text-sm text-[#1F2937] dark:text-slate-200">Open Cash Drawer After Printing</span>
                     </div>
-                    <span className="text-xs text-gray-400">(Requires printer API)</span>
+                    <span className="text-xs text-gray-400">(Text Printing only)</span>
                   </div>
                   <InputRow label="Extra lines at the end" value={settings.extraLinesAtEnd} onChange={v => update('extraLinesAtEnd', v)} placeholder="0" type="number" />
                   <div className="flex items-center justify-between py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-[#1F2937]">Number of copies</span>
+                      <span className="text-sm text-[#1F2937] dark:text-slate-200">Number of copies</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <input type="number" value={settings.numberOfCopies} onChange={e => update('numberOfCopies', e.target.value)} placeholder="1" min="1" max="10"
-                        className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white text-[#1F2937] text-center focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+                        className="w-20 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200 text-center focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
                     </div>
                   </div>
                 </div>
@@ -856,7 +853,7 @@ const PrintTab = () => {
 
           {!isThermal && (
             <>
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Print Settings" />
                 <div className="px-5 py-2">
                   <CheckboxRow label="Balance Amount" checked={settings.balanceAmount} onChange={v => update('balanceAmount', v)} />
@@ -871,9 +868,9 @@ const PrintTab = () => {
                   <CheckboxRow label="Party Address/Billing" checked={settings.showPartyAddress !== false} onChange={v => update('showPartyAddress', v)} />
                   <CheckboxRow label="Transport Details" checked={settings.showTransportDetails !== false} onChange={v => update('showTransportDetails', v)} />
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Amount in Words</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Amount in Words</span>
                     <select value={settings.amountInWordsFormat} onChange={e => update('amountInWordsFormat', e.target.value)}
-                      className="w-32 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]">
+                      className="w-32 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200">
                       <option value="Indian">Indian</option>
                       <option value="International">International</option>
                     </select>
@@ -881,7 +878,7 @@ const PrintTab = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Footer Settings" />
                 <div className="px-5 py-2">
                   <CheckboxRow label="Print Description" checked={settings.printDescription} onChange={v => update('printDescription', v)} />
@@ -892,25 +889,25 @@ const PrintTab = () => {
                   <CheckboxRow label="Payment Mode" checked={settings.paymentMode} onChange={v => update('paymentMode', v)} />
                   <CheckboxRow label="Acknowledgement" checked={settings.acknowledgement} onChange={v => update('acknowledgement', v)} />
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Additional Field 1 Label</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Additional Field 1 Label</span>
                     <input type="text" value={settings.additionalField1Label || 'Additional Field 1'} onChange={e => update('additionalField1Label', e.target.value)}
-                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200" />
                   </div>
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Additional Field 2 Label</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Additional Field 2 Label</span>
                     <input type="text" value={settings.additionalField2Label || 'Additional Field 2'} onChange={e => update('additionalField2Label', e.target.value)}
-                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200" />
                   </div>
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Custom Footer Text</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Custom Footer Text</span>
                     <input type="text" value={settings.footerSettings || ''} onChange={e => update('footerSettings', e.target.value)}
                       placeholder="e.g. Thank you for your business!"
-                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white text-[#1F2937]" />
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Page Setup" />
                 <div className="px-5 py-2">
                   <SelectRow label="Paper Size" value={settings.paperSize} onChange={v => update('paperSize', v)} options={['A4', 'A5', 'Letter', 'Legal']} />
@@ -922,15 +919,15 @@ const PrintTab = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-200">
-                  <span className="text-sm font-semibold text-[#1F2937]">Theme Selection</span>
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <span className="text-sm font-semibold text-[#1F2937] dark:text-slate-200">Theme Selection</span>
                 </div>
                 <div className="px-5 py-4 grid grid-cols-2 gap-3">
                   {/* Tally Theme: Portrait, clean header, blue accent */}
                   <button onClick={() => selectRegularTheme('tallyTheme')}
                     className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                      settings.tallyTheme ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                      settings.tallyTheme ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500/50'
                     }`}>
                     <div className="w-24 h-32 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                       <div className="text-center font-bold text-[6px] text-blue-600 border-b border-blue-200 pb-0.5 mb-0.5">INVOICE</div>
@@ -951,7 +948,7 @@ const PrintTab = () => {
                   {/* Landscape Theme 1: Wider header, green accent, landscape feel */}
                   <button onClick={() => selectRegularTheme('landscapeTheme1')}
                     className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                      settings.landscapeTheme1 ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                      settings.landscapeTheme1 ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500/50'
                     }`}>
                     <div className="w-24 h-32 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                       <div className="flex justify-between items-center border-b border-green-200 pb-0.5 mb-0.5">
@@ -974,7 +971,7 @@ const PrintTab = () => {
                   {/* Landscape Theme 2: Landscape header, amber accent, horizontal layout */}
                   <button onClick={() => selectRegularTheme('landscapeTheme2')}
                     className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                      settings.landscapeTheme2 ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                      settings.landscapeTheme2 ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500/50'
                     }`}>
                     <div className="w-24 h-32 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                       <div className="bg-amber-50 p-0.5 rounded mb-0.5">
@@ -1000,7 +997,7 @@ const PrintTab = () => {
                   {/* GST Theme: Purple accent, GST-focused with tax breakdown */}
                   <button onClick={() => selectRegularTheme('gstTheme')}
                     className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                      settings.gstTheme ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                      settings.gstTheme ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500/50'
                     }`}>
                     <div className="w-24 h-32 border border-gray-200 rounded bg-white p-1.5 flex flex-col text-[5px] leading-tight overflow-hidden">
                       <div className="text-center font-bold text-[6px] text-purple-700 border-b border-purple-200 pb-0.5 mb-0.5">TAX INVOICE</div>
@@ -1020,9 +1017,9 @@ const PrintTab = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-200">
-                  <span className="text-sm font-semibold text-[#1F2937]">Color Customizer</span>
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <span className="text-sm font-semibold text-[#1F2937] dark:text-slate-200">Color Customizer</span>
                 </div>
                 <div className="px-5 py-4 grid grid-cols-6 gap-3">
                   {['#2563EB', '#059669', '#D97706', '#7C3AED', '#DC2626', '#0891B2', '#4F46E5', '#65A30D'].map(color => (
@@ -1038,7 +1035,7 @@ const PrintTab = () => {
 
           {isThermal && (
             <>
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Item table" />
                 <div className="px-5 py-2">
                   <CheckboxRow label="S.No" checked={settings.showItemSNo} onChange={v => update('showItemSNo', v)} />
@@ -1049,7 +1046,7 @@ const PrintTab = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Additional Item Details" />
                 <div className="px-5 py-2">
                   <CheckboxRow label="Batch No." checked={settings.showBatchNo} onChange={v => update('showBatchNo', v)} />
@@ -1061,7 +1058,7 @@ const PrintTab = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Totals & Taxes" />
                 <div className="px-5 py-2">
                   <CheckboxRow label="Total Item Quantity" checked={settings.showTotalItemQty} onChange={v => update('showTotalItemQty', v)} />
@@ -1073,9 +1070,9 @@ const PrintTab = () => {
                   <CheckboxRow label="You Saved" checked={settings.youSaved} onChange={v => update('youSaved', v)} />
                   <CheckboxRow label="Print Amount with Grouping" checked={settings.printAmountWithGrouping} onChange={v => update('printAmountWithGrouping', v)} />
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Amount in Words</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Amount in Words</span>
                     <select value={settings.amountInWordsFormat} onChange={e => update('amountInWordsFormat', e.target.value)}
-                      className="w-32 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]">
+                      className="w-32 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200">
                       <option value="Indian">Indian</option>
                       <option value="International">International</option>
                     </select>
@@ -1083,25 +1080,25 @@ const PrintTab = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Footer" />
                 <div className="px-5 py-2">
                   <CheckboxRow label="Print Description" checked={settings.printDescription} onChange={v => update('printDescription', v)} />
                   <CheckboxRow label="Print Terms and Conditions" checked={settings.termsConditions} onChange={v => update('termsConditions', v)} />
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Additional Field 1 Label</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Additional Field 1 Label</span>
                     <input type="text" value={settings.additionalField1Label || 'Additional Field 1'} onChange={e => update('additionalField1Label', e.target.value)}
-                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200" />
                   </div>
                   <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-[#1F2937]">Additional Field 2 Label</span>
+                    <span className="text-sm text-[#1F2937] dark:text-slate-200">Additional Field 2 Label</span>
                     <input type="text" value={settings.additionalField2Label || 'Additional Field 2'} onChange={e => update('additionalField2Label', e.target.value)}
-                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[#1F2937]" />
+                      className="w-48 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <SectionHeader title="Vyapar Printer Setup" />
                 <div className="px-5 py-3 space-y-2">
                   {[
@@ -1123,9 +1120,9 @@ const PrintTab = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-              <span className="text-sm font-medium text-[#1F2937]">Live Invoice Preview</span>
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
+              <span className="text-sm font-medium text-[#1F2937] dark:text-slate-200">Live Invoice Preview</span>
             </div>
             <div className="p-6 flex justify-center">
               {isThermal ? renderThermalPreview() : renderRegularPreview()}

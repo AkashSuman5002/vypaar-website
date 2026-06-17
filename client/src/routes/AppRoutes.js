@@ -219,6 +219,7 @@ const AppRoutes = () => {
         <Route path="/cash-bank/cheques" element={<Cheques />} />
         <Route path="/cash-bank/loans" element={<LoanAccounts />} />
         <Route path="/party-transfer" element={<PartyToPartyTransfer />} />
+        <Route path="/party-groups" element={<PartyGroups />} />
         <Route path="/godowns" element={<Godowns />} />
         <Route path="/godown-transfer" element={<GodownTransfer />} />
         <Route path="/stock-reconciliation" element={<StockReconciliation />} />

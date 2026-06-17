@@ -305,7 +305,7 @@ const getProfitLoss = async (req, res) => {
       return res.json({ revenue: 0, expenses: 0, netProfit: 0, revenueItems: [], expenseItems: [] });
     }
     const baseFilter = getBaseFilter(req);
-    const result = await calcProfitLoss(baseFilter, req.query);
+    const result = await calcProfitLoss(baseFilter, req.query, req.user._id);
     res.json(result);
   } catch (err) {
     res.status(500).json({ message: err.message });

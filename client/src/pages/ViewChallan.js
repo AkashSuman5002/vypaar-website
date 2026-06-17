@@ -75,7 +75,10 @@ const ViewChallan = () => {
   const prefs = settings?.preferences || {};
   const printPrefs = prefs.print || {};
   const currencyPref = prefs.general?.businessCurrency || 'INR';
-  const decimalPref = parseInt(prefs.general?.amountDecimalPlaces || '0');
+  const decimalPref = printPrefs.showAmountDecimal === false ? 0 : parseInt(prefs.general?.amountDecimalPlaces || '0');
+  const showSNo = printPrefs.showItemSNo !== false;
+  const showHSN = printPrefs.showItemHSN === true;
+  const showUOM = printPrefs.showItemUOM === true;
   const showAmtOnDC = prefs.general?.printAmountOnDC !== false;
   const goodsReturnOnDC = prefs.general?.goodsReturnOnDC;
   const showTime = prefs.transaction?.addTimeOnTransactions;
@@ -198,8 +201,10 @@ const ViewChallan = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-y border-gray-200 dark:border-gray-700 print:border-gray-300 bg-gray-50 dark:bg-gray-700/50">
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider w-8">#</th>
+                  {showSNo && <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider w-8">#</th>}
                   <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider">Product</th>
+                  {showHSN && <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider w-20">HSN</th>}
+                  {showUOM && <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider w-16">UOM</th>}
                   <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider w-14">Qty</th>
                   {showAmtOnDC && <><th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider w-20">Rate</th>
                   <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 print:text-gray-600 uppercase tracking-wider w-16">GST%</th>
@@ -212,8 +217,10 @@ const ViewChallan = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700 print:divide-gray-300">
                 {sale.items.map((item, idx) => (
                   <tr key={idx} className={`${idx % 2 === 0 ? '' : 'bg-gray-50/30 dark:bg-gray-700/20'} print:${idx % 2 === 0 ? '' : 'bg-gray-50'}`}>
-                    <td className="px-3 py-3 text-slate-500 dark:text-slate-400 print:text-gray-600 text-center">{idx + 1}</td>
+                    {showSNo && <td className="px-3 py-3 text-slate-500 dark:text-slate-400 print:text-gray-600 text-center">{idx + 1}</td>}
                     <td className="px-3 py-3"><span className="font-medium text-slate-900 dark:text-slate-100 print:text-gray-900 text-sm">{item.productName}</span></td>
+                    {showHSN && <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400 print:text-gray-600">{item.hsn || '-'}</td>}
+                    {showUOM && <td className="px-3 py-3 text-right text-xs text-slate-500 dark:text-slate-400 print:text-gray-600">{item.unit || '-'}</td>}
                     <td className="px-3 py-3 text-right text-slate-700 dark:text-slate-300 print:text-gray-800">{item.quantity}</td>
                     {showAmtOnDC && <><td className="px-3 py-3 text-right text-slate-700 dark:text-slate-300 print:text-gray-800 font-medium">{fmt(item.rate)}</td>
                     <td className="px-3 py-3 text-right text-blue-600 dark:text-blue-400 print:text-blue-700 font-medium">{item.gstRate ? `${item.gstRate}%` : '-'}</td>

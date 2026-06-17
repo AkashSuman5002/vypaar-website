@@ -3,6 +3,13 @@ const Setting = require('../models/Setting');
 
 let transporter = null;
 
+// Maps a canonical notification event type to its per-event preference key
+// under preferences.notifications.email.* (see models/Setting.js).
+const EMAIL_EVENT_PREF_KEY = {
+  payment_received: 'paymentReceived',
+  low_stock: 'lowStock',
+};
+
 const initEmailTransport = async (userId) => {
   const settings = await Setting.findOne({ user: userId });
   const emailPrefs = settings?.preferences?.notifications?.email || {};
@@ -17,11 +24,16 @@ const initEmailTransport = async (userId) => {
   return transporter;
 };
 
-const sendEmailNotification = async (userId, { to, subject, html, text }) => {
+const sendEmailNotification = async (userId, { to, subject, html, text }, eventType) => {
   try {
     const settings = await Setting.findOne({ user: userId });
     const emailPrefs = settings?.preferences?.notifications?.email;
     if (!emailPrefs?.enabled) return;
+
+    // Per-event gating: if a specific toggle exists for this event and is
+    // disabled, suppress. Undefined keys default to enabled (no suppression).
+    const eventKey = eventType && EMAIL_EVENT_PREF_KEY[eventType];
+    if (eventKey && emailPrefs[eventKey] === false) return;
 
     if (!transporter) {
       await initEmailTransport(userId);
@@ -46,7 +58,7 @@ const sendPaymentReceivedEmail = async (userId, data) => {
     to: data.customerEmail,
     subject: `Payment Received - ${bizName}`,
     html: `<h2>Payment Received</h2><p>Dear ${data.customerName},</p><p>We have received your payment of ₹${data.amount}.</p><p>Invoice: ${data.invoiceNumber}</p><p>Balance: ₹${data.remainingBalance || 0}</p><p>Thank you,<br/>${bizName}</p>`,
-  });
+  }, 'payment_received');
 };
 
 const sendLowStockEmail = async (userId, data) => {
@@ -57,7 +69,18 @@ const sendLowStockEmail = async (userId, data) => {
     to: email,
     subject: `Low Stock Alert - ${data.productName}`,
     html: `<h2>Low Stock Alert</h2><p>Product: ${data.productName}</p><p>Current Stock: ${data.stock}</p><p>Minimum Stock: ${data.minStock}</p>`,
+  }, 'low_stock');
+};
+
+const sendPasswordResetEmail = async (userId, { to, resetUrl }) => {
+  const settings = await Setting.findOne({ user: userId });
+  const bizName = settings?.businessName || 'Vyapar';
+  await sendEmailNotification(userId, {
+    to,
+    subject: `Password Reset Request - ${bizName}`,
+    html: `<h2>Password Reset</h2><p>We received a request to reset your password.</p><p>Click the link below to set a new password. This link expires in 1 hour.</p><p><a href="${resetUrl}">Reset your password</a></p><p>If you did not request this, you can safely ignore this email.</p><p>${bizName}</p>`,
+    text: `Reset your password using this link (expires in 1 hour): ${resetUrl}`,
   });
 };
 
-module.exports = { sendEmailNotification, sendPaymentReceivedEmail, sendLowStockEmail };
+module.exports = { sendEmailNotification, sendPaymentReceivedEmail, sendLowStockEmail, sendPasswordResetEmail };

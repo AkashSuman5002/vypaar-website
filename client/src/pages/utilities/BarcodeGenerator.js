@@ -74,90 +74,90 @@ const BarcodeGenerator = () => {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">Barcode Generator <Info className="w-5 h-5 text-slate-400" /></h1>
-        <div className="flex items-center gap-3 text-sm text-slate-600">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC] flex items-center gap-2">Barcode Generator <Info className="w-5 h-5 text-slate-400 dark:text-[#64748B]" /></h1>
+        <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-[#94A3B8]">
           <Printer className="w-4 h-4" /> Label Printer | Size 2 Labels (50x25mm)
-          <button onClick={() => navigate('/settings?tab=print')} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"><Settings2 className="w-4 h-4 text-slate-500" /></button>
+          <button onClick={() => navigate('/settings?tab=print')} className="p-2 rounded-lg border border-slate-200 dark:border-[#334155] hover:bg-slate-50 dark:hover:bg-[#1E293B]/70 transition-colors"><Settings2 className="w-4 h-4 text-slate-500 dark:text-[#64748B]" /></button>
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-soft p-6">
-          <h2 className="text-base font-bold text-slate-900 mb-5">Enter item details to add for barcode</h2>
+        <div className="lg:col-span-2 bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-6">
+          <h2 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] mb-5">Enter item details to add for barcode</h2>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Item Name *</label>
-              <select value={selectedItemId} onChange={(e) => { setSelectedItemId(e.target.value); const p = products.find(x => x._id === e.target.value); setItemCode(p?.sku || ''); }} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm">
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Item Name *</label>
+              <select value={selectedItemId} onChange={(e) => { setSelectedItemId(e.target.value); const p = products.find(x => x._id === e.target.value); setItemCode(p?.sku || ''); }} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm">
                 <option value="">Enter Item Name</option>
                 {products.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Item Code *</label>
-              <input type="text" value={itemCode} onChange={(e) => setItemCode(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Enter Item Code" />
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Item Code *</label>
+              <input type="text" value={itemCode} onChange={(e) => setItemCode(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Enter Item Code" />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">No of Labels *</label>
-              <input type="number" value={noOfLabels} onChange={(e) => setNoOfLabels(e.target.value)} min="1" className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">No of Labels *</label>
+              <input type="number" value={noOfLabels} onChange={(e) => setNoOfLabels(e.target.value)} min="1" className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Header</label>
-              <input type="text" value={header} onChange={(e) => setHeader(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Enter Header" />
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Header</label>
+              <input type="text" value={header} onChange={(e) => setHeader(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Enter Header" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Line 1</label>
-              <input type="text" value={line1} onChange={(e) => setLine1(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Enter Line 1" />
+              <label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Line 1</label>
+              <input type="text" value={line1} onChange={(e) => setLine1(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Enter Line 1" />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4 mb-6">
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">Line 2</label><input type="text" value={line2} onChange={(e) => setLine2(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Line 2" /></div>
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">Line 3</label><input type="text" value={line3} onChange={(e) => setLine3(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Line 3" /></div>
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">Line 4</label><input type="text" value={line4} onChange={(e) => setLine4(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Line 4" /></div>
+            <div><label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Line 2</label><input type="text" value={line2} onChange={(e) => setLine2(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Line 2" /></div>
+            <div><label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Line 3</label><input type="text" value={line3} onChange={(e) => setLine3(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Line 3" /></div>
+            <div><label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1">Line 4</label><input type="text" value={line4} onChange={(e) => setLine4(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" placeholder="Line 4" /></div>
           </div>
           <button onClick={handleAddItem} className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"><Plus className="w-4 h-4" /> Add for Barcode</button>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-6">
-          <h3 className="text-sm font-bold text-slate-900 mb-4 text-center">Preview</h3>
-          <div className="border border-slate-200 rounded-xl p-6 bg-slate-50/50 flex flex-col items-center">
-            <p className="text-xs font-semibold text-slate-700 mb-2">{header || 'Header'}</p>
-            <div className="w-40 h-12 bg-slate-200 rounded flex items-center justify-center mb-2 overflow-hidden">
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-6">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC] mb-4 text-center">Preview</h3>
+          <div className="border border-slate-200 dark:border-[#334155] rounded-xl p-6 bg-slate-50/50 dark:bg-[#0F172A]/40 flex flex-col items-center">
+            <p className="text-xs font-semibold text-slate-700 dark:text-[#E2E8F0] mb-2">{header || 'Header'}</p>
+            <div className="w-40 h-12 bg-slate-200 dark:bg-[#334155] rounded flex items-center justify-center mb-2 overflow-hidden">
               <svg viewBox="0 0 120 40" className="w-full h-full">
                 {Array.from({ length: 40 }, (_, i) => <rect key={i} x={i * 3} y={0} width={i % 3 === 0 ? 2 : 1} height={40} fill="#1e293b" />)}
               </svg>
             </div>
-            <p className="text-[10px] text-slate-500 mb-1">{itemCode || selectedItem?.sku || 'Item Code'}</p>
-            {line1 && <p className="text-[10px] text-slate-500">{line1}</p>}
-            {line2 && <p className="text-[10px] text-slate-500">{line2}</p>}
-            {line3 && <p className="text-[10px] text-slate-500">{line3}</p>}
-            {line4 && <p className="text-[10px] text-slate-500">{line4}</p>}
+            <p className="text-[10px] text-slate-500 dark:text-[#64748B] mb-1">{itemCode || selectedItem?.sku || 'Item Code'}</p>
+            {line1 && <p className="text-[10px] text-slate-500 dark:text-[#64748B]">{line1}</p>}
+            {line2 && <p className="text-[10px] text-slate-500 dark:text-[#64748B]">{line2}</p>}
+            {line3 && <p className="text-[10px] text-slate-500 dark:text-[#64748B]">{line3}</p>}
+            {line4 && <p className="text-[10px] text-slate-500 dark:text-[#64748B]">{line4}</p>}
           </div>
         </div>
       </div>
-      <div className="mt-6 bg-white rounded-2xl border border-slate-200 shadow-soft overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200"><h3 className="text-base font-bold text-slate-900">Item Details</h3></div>
+      <div className="mt-6 bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-[#334155]"><h3 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC]">Item Details</h3></div>
         <table className="w-full">
-          <thead><tr className="bg-slate-50 border-b border-slate-200">
-            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 w-10"><input type="checkbox" className="rounded border-slate-300" /></th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Item Name</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Labels</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Header</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Line 1</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Line 2</th>
+          <thead><tr className="bg-slate-50 dark:bg-[#111827] border-b border-slate-200 dark:border-[#334155]">
+            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B] w-10"><input type="checkbox" className="rounded border-slate-300 dark:border-[#334155]" /></th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Item Name</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Labels</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Header</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Line 1</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Line 2</th>
             <th className="px-4 py-3 w-10"></th>
           </tr></thead>
           <tbody>
             {barcodeItems.length === 0 ? (
-              <tr><td colSpan="7" className="px-6 py-16 text-center text-sm text-slate-400">Added items for Barcode generation will appear here.</td></tr>
+              <tr><td colSpan="7" className="px-6 py-16 text-center text-sm text-slate-400 dark:text-[#64748B]">Added items for Barcode generation will appear here.</td></tr>
             ) : barcodeItems.map((item) => (
-              <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                <td className="px-4 py-3"><input type="checkbox" className="rounded border-slate-300" /></td>
-                <td className="px-4 py-3 text-sm font-medium text-slate-900">{item.itemName}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{item.noOfLabels}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{item.header || '---'}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{item.line1 || '---'}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{item.line2 || '---'}</td>
-                <td className="px-4 py-3"><button onClick={() => handleRemoveItem(item.id)} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button></td>
+              <tr key={item.id} className="border-b border-slate-100 dark:border-[#334155] hover:bg-slate-50/50 dark:hover:bg-[#1E293B]/70 transition-colors">
+                <td className="px-4 py-3"><input type="checkbox" className="rounded border-slate-300 dark:border-[#334155]" /></td>
+                <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-[#F8FAFC]">{item.itemName}</td>
+                <td className="px-4 py-3 text-sm text-slate-500 dark:text-[#64748B]">{item.noOfLabels}</td>
+                <td className="px-4 py-3 text-sm text-slate-500 dark:text-[#64748B]">{item.header || '---'}</td>
+                <td className="px-4 py-3 text-sm text-slate-500 dark:text-[#64748B]">{item.line1 || '---'}</td>
+                <td className="px-4 py-3 text-sm text-slate-500 dark:text-[#64748B]">{item.line2 || '---'}</td>
+                <td className="px-4 py-3"><button onClick={() => handleRemoveItem(item.id)} className="p-1 text-slate-400 dark:text-[#64748B] hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button></td>
               </tr>
             ))}
           </tbody>
@@ -181,7 +181,7 @@ const BarcodeGenerator = () => {
               previewWindow.document.write(`<html><head><title>Barcode Preview</title></head><body style="padding:20px"><h2>Barcode Label Preview</h2><p>${barcodeItems.length} item(s), ${barcodeItems.reduce((s,i) => s + (parseInt(i.noOfLabels)||1), 0)} total labels</p><div>${itemsHtml}</div></body></html>`);
               previewWindow.document.close();
             }}
-            className="px-5 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">Preview</button>
+            className="px-5 py-2.5 border border-slate-200 dark:border-[#334155] text-slate-600 dark:text-[#94A3B8] text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-[#1E293B]/70 transition-colors">Preview</button>
         <button onClick={handleGenerate} disabled={submitting || barcodeItems.length === 0} className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 inline-flex items-center gap-2">
           {submitting ? 'Generating...' : 'Generate'}
         </button>

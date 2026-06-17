@@ -91,7 +91,7 @@ const TransactionTab = () => {
           </SettingsSection>
         </div>
       </div>
-      <div className="flex justify-end sticky bottom-0 bg-[#F5F6FA] py-3">
+      <div className="flex justify-end sticky bottom-0 bg-[#F5F6FA] dark:bg-gray-900 py-3">
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm">
           <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Transaction Settings'}

@@ -168,6 +168,7 @@ const CreateSale = () => {
   const transportEnabled = getPref('transaction', 'transportationDetails');
   const eWayBillEnabled = getPref('transaction', 'eWayBillNo');
   const poEnabled = getPref('transaction', 'customerPODetails');
+  const poDateEnabled = getPref('transaction', 'poDate');
   const validityDaysPref = getPref('transaction', 'estimateValidityDays') || 15;
   const dueDatesEnabled = getPref('transaction', 'dueDatesPaymentTerms');
   const showProfit = getPref('transaction', 'showProfitWhileCreatingInvoice');
@@ -523,6 +524,7 @@ const CreateSale = () => {
 
   const handleSubmit = async (action = 'save') => {
     if (isEdit && !await requirePasscode('update this document')) return;
+    if (blockNewParties && !form.customer) return toast.error('Creating new parties is disabled. Please select an existing customer.');
     if (form.items.some(i => !i.productName || i.quantity <= 0 || i.rate <= 0)) return toast.error('Please fill all item fields');
     setSubmitting(true);
     try {
@@ -632,10 +634,23 @@ const CreateSale = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Customer <span className="text-red-500">*</span></label>
-            <select value={form.customer} onChange={(e) => handleCustomerSelect(e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
-              <option value="">Search by Name/Phone</option>
-              {customers.map(c => <option key={c._id} value={c._id}>{billingNamePref === 'Trading' ? (c.tradeName || c.name) : c.name}{c.phone ? ` (${c.phone})` : ''}{managePartyStatus && c.status === 'inactive' ? ' (Inactive)' : ''}</option>)}
-            </select>
+            <div className="flex gap-2">
+              <select value={form.customer} onChange={(e) => handleCustomerSelect(e.target.value)} className="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
+                <option value="">Search by Name/Phone</option>
+                {customers.map(c => <option key={c._id} value={c._id}>{billingNamePref === 'Trading' ? (c.tradeName || c.name) : c.name}{c.phone ? ` (${c.phone})` : ''}{managePartyStatus && c.status === 'inactive' ? ' (Inactive)' : ''}</option>)}
+              </select>
+              <button type="button" onClick={() => setShowNewCustomer(v => !v)} disabled={blockNewParties} title={blockNewParties ? 'Creating new parties is disabled in settings' : 'Add new customer'} className="px-3 py-2.5 text-sm font-medium text-blue-600 border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"><Plus className="w-4 h-4" /> New</button>
+            </div>
+            {showNewCustomer && !blockNewParties && (
+              <div className="mt-2 p-3 border border-slate-200 rounded-lg bg-slate-50/50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input value={newCustomer.name} onChange={(e) => setNewCustomer(prev => ({ ...prev, name: e.target.value }))} placeholder="Customer name *" className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                <input value={newCustomer.phone} onChange={(e) => setNewCustomer(prev => ({ ...prev, phone: formatMobile(e.target.value) }))} placeholder="Phone" className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                <div className="sm:col-span-2 flex justify-end gap-2">
+                  <button type="button" onClick={() => setShowNewCustomer(false)} className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+                  <button type="button" onClick={handleCreateCustomer} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">Save Customer</button>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Phone No.</label>
@@ -844,7 +859,7 @@ const CreateSale = () => {
       </div>
 
       {/* Additional Charges, Transport, Due Date */}
-      {(additionalChargesEnabled || transportEnabled || dueDatesEnabled) && (
+      {(additionalChargesEnabled || transportEnabled || eWayBillEnabled || dueDatesEnabled) && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-3 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {additionalChargesEnabled && (
@@ -883,16 +898,24 @@ const CreateSale = () => {
                 </div>
               </>
             )}
+            {eWayBillEnabled && (
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">E-Way Bill No.</label>
+                <input value={form.eWayBill || ''} onChange={(e) => handleFieldChange('eWayBill', e.target.value)} placeholder="E-Way Bill No." className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+              </div>
+            )}
             {poEnabled && (
               <>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">PO Number</label>
                   <input value={form.poNumber || ''} onChange={(e) => handleFieldChange('poNumber', e.target.value)} placeholder="Customer PO Number" className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">PO Date</label>
-                  <input type="date" value={form.poDate || ''} onChange={(e) => handleFieldChange('poDate', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
-                </div>
+                {poDateEnabled && (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">PO Date</label>
+                    <input type="date" value={form.poDate || ''} onChange={(e) => handleFieldChange('poDate', e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+                  </div>
+                )}
               </>
             )}
             {(docType === 'estimate' || docType === 'quotation') && (

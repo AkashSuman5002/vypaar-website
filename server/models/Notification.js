@@ -9,6 +9,11 @@ const notificationSchema = new mongoose.Schema({
       'low_stock', 'purchase_return', 'sale_return', 'expense_created',
       'service_reminder', 'party_added', 'bank_transaction',
       'sale_cancelled', 'purchase_cancelled', 'sale_updated',
+      // Previously emitted by controllers but missing from the enum, which made
+      // Mongoose silently reject (throw) these notifications. Now accepted.
+      'purchase_updated', 'purchase_deleted',
+      'expense_updated', 'expense_deleted',
+      'payment_out', 'payment_out_deleted',
     ],
     required: true,
   },

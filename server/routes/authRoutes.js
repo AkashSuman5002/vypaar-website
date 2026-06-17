@@ -10,6 +10,7 @@ const { JWT_SECRET } = require('../middleware/auth');
 const { authMiddleware } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimit');
 const { csrfProtection } = require('../middleware/csrf');
+const { sendPasswordResetEmail } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -169,6 +170,16 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
     user.passwordResetToken = crypto.createHash('sha256').update(rawToken).digest('hex');
     user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
     await user.save();
+
+    const clientUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const resetUrl = `${clientUrl}/reset-password?token=${rawToken}`;
+    try {
+      await sendPasswordResetEmail(user._id, { to: user.email, resetUrl });
+    } catch (mailErr) {
+      // Email is best-effort; sendEmailNotification already swallows SMTP errors,
+      // but guard here too. Do not leak failure to the client (avoid account enumeration).
+      console.error('[Auth] Failed to send password reset email:', mailErr.message);
+    }
 
     res.json({ message: 'If that account exists, a reset link has been generated.' });
   } catch (error) {

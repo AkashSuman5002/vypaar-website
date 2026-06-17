@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { serviceReminderAPI } from '../../services/api';
 import { defaultPrefs, loadSettings, saveCategory } from '../../hooks/useSettings';
+import ToggleSwitch from './ToggleSwitch';
+import SettingsSection from './SettingsSection';
 import {
   Bell, Search, ChevronRight, Plus, Trash2,
   Clock, MessageSquare, Package, Wrench,
-  Info, ArrowLeft, Eye, Check,
+  Info, ArrowLeft, Eye, Check, Save,
 } from 'lucide-react';
 
 const STEP_ENABLE = 0;
@@ -19,9 +21,13 @@ const ServiceRemindersTab = () => {
   const [reminders, setReminders] = useState([]);
   const [loadingReminders, setLoadingReminders] = useState(true);
   const [selectedItems, setSelectedItems] = useState([]);
+  const [prefs, setPrefs] = useState(defaultPrefs.serviceReminders);
 
   useEffect(() => {
     loadSettings().then(data => {
+      if (data?.preferences?.serviceReminders) {
+        setPrefs({ ...defaultPrefs.serviceReminders, ...data.preferences.serviceReminders });
+      }
       const val = data?.preferences?.serviceReminders?.enableReminders;
       if (val) {
         setEnabled(true);
@@ -107,6 +113,7 @@ const ServiceRemindersTab = () => {
         <AnimatePresence mode="wait">
           {step === STEP_SELECT_ITEMS && (
             <motion.div key="select" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="h-full">
+              <ReminderSettings prefs={prefs} setPrefs={setPrefs} />
               <SelectItemsScreen onNext={handleItemsSelected} />
             </motion.div>
           )}
@@ -169,6 +176,52 @@ const EnableScreen = ({ onEnable }) => (
     </button>
   </div>
 );
+
+const ReminderSettings = ({ prefs, setPrefs }) => {
+  const [saving, setSaving] = useState(false);
+
+  const update = (key, value) => setPrefs(prev => ({ ...prev, [key]: value }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveCategory('serviceReminders', {
+        reminderInterval: prefs.reminderInterval,
+        autoFollowUp: prefs.autoFollowUp,
+      });
+      toast.success('Reminder settings saved');
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-6 pb-0">
+      <SettingsSection title="Reminder Settings">
+        <div className="flex items-center justify-between py-2.5">
+          <div>
+            <span className="text-sm text-[#1F2937]">Reminder interval (days)</span>
+            <p className="text-xs text-gray-400 mt-0.5">How many days before the due date to send payment reminders.</p>
+          </div>
+          <input type="number" min="1" value={prefs.reminderInterval}
+            onChange={e => update('reminderInterval', e.target.value)}
+            className="w-24 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+        </div>
+        <ToggleSwitch label="Automatic follow-up reminders"
+          description="Send follow-up reminders via WhatsApp for overdue payments."
+          checked={!!prefs.autoFollowUp} onChange={v => update('autoFollowUp', v)} />
+        <div className="flex justify-end py-2.5">
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm">
+            <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
+      </SettingsSection>
+    </div>
+  );
+};
 
 const SelectItemsScreen = ({ onNext }) => {
   const [items, setItems] = useState([]);
