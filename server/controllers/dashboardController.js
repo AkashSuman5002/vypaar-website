@@ -29,8 +29,11 @@ const getDashboardData = async (req, res) => {
     const totalPurchases = allPurchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
     const totalExpenses = allExpenses.reduce((sum, e) => sum + (e.totalAmount || e.amount || 0), 0);
 
-    const products = await Product.find(baseFilter).select('costPrice stock price').lean();
+    const products = await Product.find(baseFilter).select('costPrice stock price type').lean();
     const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
+    // Services are not stockable, so they must never contribute to inventory/stock metrics.
+    const stockProducts = products.filter(p => p.type !== 'service');
 
     let totalCOGS = 0;
     allSales.forEach((s) => {
@@ -89,7 +92,7 @@ const getDashboardData = async (req, res) => {
     const currentMonthProfit = currentMonthNetSales - currentMonthCOGS - currentMonthExpenses;
     const prevMonthProfit = prevMonthNetSales - prevMonthCOGS - prevMonthExpenses;
 
-    const lowStockProducts = products.filter(p => (p.stock || 0) <= (p.minStock || 0)).map(p => ({ name: p.name, stock: p.stock, minStock: p.minStock }));
+    const lowStockProducts = stockProducts.filter(p => (p.stock || 0) <= (p.minStock || 0)).map(p => ({ name: p.name, stock: p.stock, minStock: p.minStock }));
 
     const pendingDuesTotal = allSales.reduce((sum, s) => sum + (s.remainingBalance || 0), 0);
     const pendingInvoices = allSales.filter((s) => (s.remainingBalance || 0) > 0).length;
@@ -138,8 +141,8 @@ const getDashboardData = async (req, res) => {
       count: data.count,
     })).sort((a, b) => a._id - b._id);
 
-    const inventoryValue = products.reduce((s, p) => s + (p.stock || 0) * (p.costPrice || 0), 0);
-    const inventoryValueAtPrice = products.reduce((s, p) => s + (p.stock || 0) * (p.price || 0), 0);
+    const inventoryValue = stockProducts.reduce((s, p) => s + (p.stock || 0) * (p.costPrice || 0), 0);
+    const inventoryValueAtPrice = stockProducts.reduce((s, p) => s + (p.stock || 0) * (p.price || 0), 0);
 
     const recentActivity = allSales
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))

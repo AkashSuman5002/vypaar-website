@@ -6,6 +6,7 @@ import Modal from '../components/UI/Modal';
 import Badge from '../components/UI/Badge';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
+import { shareDocumentToWhatsApp } from '../utils/shareUtils';
 import { motion } from 'framer-motion';
 import { Printer, ArrowLeft, Share2, Download, Banknote, Building2, Phone, Mail, MapPin, BadgePercent, Landmark, QrCode, Edit3, Copy, RotateCcw, Truck, MessageSquare, Trash2, FileText, ChevronDown } from 'lucide-react';
 
@@ -191,12 +192,14 @@ const ViewSale = () => {
             <Download className="w-4 h-4" /> PDF
           </button>
           <button onClick={async () => {
-            const msg = `*Invoice ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}\nStatus: ${sale.paymentStatus}`;
+            const phone = sale.customerPhone || sale.customer?.phone;
+            if (!phone) return toast.error('No customer phone number on this invoice');
+            const caption = `*Invoice ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}\nStatus: ${sale.paymentStatus}`;
             try {
-              await whatsappAPI.send({ phone: sale.customerPhone || sale.customer?.phone, message: msg });
-              toast.success('WhatsApp message sent');
-            } catch {
-              window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+              await shareDocumentToWhatsApp({ type: sale.type || 'invoice', id: sale._id, phone, caption, fileName: `Invoice-${sale.invoiceNumber}` });
+              toast.success('Invoice PDF sent on WhatsApp');
+            } catch (err) {
+              toast.error(err?.response?.data?.message || 'Connect WhatsApp in Settings to send the PDF');
             }
           }} className="inline-flex items-center gap-1.5 px-3 py-2 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-sm font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors">
             <MessageSquare className="w-4 h-4" /> WhatsApp

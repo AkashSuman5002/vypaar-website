@@ -28,7 +28,7 @@ const getGodowns = async (req, res) => {
 const createGodown = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const { name, code, address, city, state, phone, email, managerName, capacity, notes } = req.body;
+    const { name, code, address, city, state, phone, email, managerName, capacity, notes, items } = req.body;
     if (!name) return res.status(400).json({ message: 'Godown name is required' });
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const existing = await Godown.findOne({ ...baseFilter, name: new RegExp(`^${escaped}$`, 'i') });
@@ -36,6 +36,20 @@ const createGodown = async (req, res) => {
     const godown = await Godown.create({
       ...getCreateData(req, { name, code, address, city, state, phone, email, managerName, capacity, notes }),
     });
+
+    // Assign selected products to this new godown (sets each product's warehouse reference)
+    if (Array.isArray(items) && items.length > 0) {
+      const productIds = items
+        .map((i) => (i && typeof i === 'object' ? i.product : i))
+        .filter(Boolean);
+      if (productIds.length > 0) {
+        await Product.updateMany(
+          { ...baseFilter, _id: { $in: productIds } },
+          { $set: { warehouse: godown._id } }
+        );
+      }
+    }
+
     res.status(201).json(godown);
   } catch (error) {
     res.status(500).json({ message: error.message });

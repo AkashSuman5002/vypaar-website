@@ -1,8 +1,28 @@
-const { startSession, disconnectSession, getConnectionStatus } = require('../services/whatsappService');
+const QRCode = require('qrcode');
+const { startSession, disconnectSession, getConnectionStatus, sendDocument: waSendDocument } = require('../services/whatsappService');
 const { sendManualMessage, defaultTemplates } = require('../services/messageService');
 const WhatsAppMessage = require('../models/WhatsAppMessage');
 const Setting = require('../models/Setting');
 const { getBaseFilter } = require('../utils/queryHelper');
+const { renderPdfToBuffer } = require('../utils/renderPdfBuffer');
+const { generateInvoicePDF, generatePurchasePDF } = require('./pdfController');
+const { generateReceiptPDF } = require('./receiptController');
+
+// Map a document type to the PDF generator that renders it (all sale-like docs are
+// Sale records handled by generateInvoicePDF). Used to attach a real PDF to WhatsApp.
+const PDF_HANDLERS = {
+  sale: { handler: generateInvoicePDF, name: 'Invoice' },
+  invoice: { handler: generateInvoicePDF, name: 'Invoice' },
+  estimate: { handler: generateInvoicePDF, name: 'Estimate' },
+  quotation: { handler: generateInvoicePDF, name: 'Quotation' },
+  order: { handler: generateInvoicePDF, name: 'Order' },
+  challan: { handler: generateInvoicePDF, name: 'Challan' },
+  proforma: { handler: generateInvoicePDF, name: 'Proforma' },
+  credit_note: { handler: generateInvoicePDF, name: 'CreditNote' },
+  return: { handler: generateInvoicePDF, name: 'Return' },
+  purchase: { handler: generatePurchasePDF, name: 'Purchase' },
+  receipt: { handler: generateReceiptPDF, name: 'Receipt' },
+};
 
 const qrListeners = new Map();
 const latestQR = new Map();
@@ -21,13 +41,22 @@ const connect = async (req, res) => {
     const userId = req.user._id.toString();
     console.log(`[WhatsApp] Connect request from user ${userId}`);
 
-    const onQR = (qr) => {
+    const onQR = async (qr) => {
       console.log(`[WhatsApp] QR callback fired for user ${userId}`);
-      latestQR.set(userId, qr);
+      let dataUrl;
+      try {
+        // Render the QR to an image data URL on the server so the raw WhatsApp pairing
+        // string is never sent to a third-party QR service from the browser.
+        dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 300 });
+      } catch (e) {
+        console.error(`[WhatsApp] QR encode failed for user ${userId}:`, e.message);
+        return;
+      }
+      latestQR.set(userId, dataUrl);
       const listeners = qrListeners.get(userId);
       if (listeners) {
         console.log(`[WhatsApp] Sending QR to ${listeners.size} listeners`);
-        listeners.forEach(cb => cb({ type: 'qr', data: qr }));
+        listeners.forEach(cb => cb({ type: 'qr', data: dataUrl }));
       } else {
         console.log(`[WhatsApp] No listeners for user ${userId}, QR cached`);
       }
@@ -113,6 +142,40 @@ const send = async (req, res) => {
   }
 };
 
+// Send a document (PDF) to a WhatsApp number. Generates the PDF server-side using the
+// same templates as the download/print, then sends it via the connected WhatsApp session.
+const sendDocument = async (req, res) => {
+  try {
+    const { phone, type, id, caption, fileName } = req.body;
+    if (!phone || !id) {
+      return res.status(400).json({ message: 'Phone number and document id are required' });
+    }
+    const entry = PDF_HANDLERS[type] || PDF_HANDLERS.sale;
+    const pdfReq = { user: req.user, businessId: req.businessId, params: { id }, query: {} };
+    const buffer = await renderPdfToBuffer(entry.handler, pdfReq);
+    const safeName = (fileName || `${entry.name}-${id}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const finalName = safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+
+    await waSendDocument(req.user._id, phone, buffer, finalName, 'application/pdf', caption || '');
+
+    // Best-effort delivery log; never fail the send because logging failed.
+    try {
+      await WhatsAppMessage.create({
+        user: req.user._id,
+        business: req.businessId,
+        phone,
+        message: caption || finalName,
+        transactionType: type || 'document',
+        status: 'sent',
+      });
+    } catch (e) { /* logging is non-critical */ }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const getMessages = async (req, res) => {
   try {
     const { page = 1, limit = 50, status, type } = req.query;
@@ -176,6 +239,6 @@ const saveTemplates = async (req, res) => {
 };
 
 module.exports = {
-  getStatus, connect, disconnect, qrStream, send,
+  getStatus, connect, disconnect, qrStream, send, sendDocument,
   getMessages, getMessageStats, getTemplates, saveTemplates,
 };

@@ -46,45 +46,55 @@ const createProduct = async (req, res) => {
     if (prefs.item.enableItem === false) {
       return res.status(400).json({ message: 'Item creation is disabled in settings' });
     }
-    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp } = req.body;
+    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp, openingStock } = req.body;
     const type = itemType === 'Service' ? 'service' : 'product';
-    if (prefs.item.batchTracking === true && !batchNo) {
-      return res.status(400).json({ message: 'Batch tracking is enabled. Batch number is required' });
+    // A service must never carry inventory: force inventory-related values regardless of request.
+    const inventoryFields = type === 'service'
+      ? { stock: 0, minStock: 0, openingStock: 0, batchTracking: false, serialNumberTracking: false, batches: [], serialNumbers: [] }
+      : { stock, minStock, openingStock };
+    // Inventory-only required-field checks do not apply to services.
+    if (type !== 'service') {
+      if (prefs.item.batchTracking === true && !batchNo) {
+        return res.status(400).json({ message: 'Batch tracking is enabled. Batch number is required' });
+      }
+      if (prefs.item.serialNumberTracking === true && !serialNo) {
+        return res.status(400).json({ message: 'Serial number tracking is enabled. Serial number is required' });
+      }
+      if (prefs.item.expiryDate === true && !expiryDate) {
+        return res.status(400).json({ message: 'Expiry date tracking is enabled. Expiry date is required' });
+      }
+      if (prefs.item.manufacturingDate === true && !mfgDate) {
+        return res.status(400).json({ message: 'Manufacturing date is required' });
+      }
+      if (prefs.item.modelNumber === true && !modelNo) {
+        return res.status(400).json({ message: 'Model number is required' });
+      }
+      if (prefs.item.size === true && !size) {
+        return res.status(400).json({ message: 'Size is required' });
+      }
+      if (prefs.general.enableGodown === true && !warehouse) {
+        const Godown = require('../models/Godown');
+        const godownCount = await Godown.countDocuments({ user: req.user._id, business: req.businessId, isActive: true });
+        if (godownCount > 0) {
+          return res.status(400).json({ message: 'Godown/Warehouse assignment is required' });
+        }
+      }
     }
-    if (prefs.item.serialNumberTracking === true && !serialNo) {
-      return res.status(400).json({ message: 'Serial number tracking is enabled. Serial number is required' });
-    }
-    if (prefs.item.expiryDate === true && !expiryDate) {
-      return res.status(400).json({ message: 'Expiry date tracking is enabled. Expiry date is required' });
-    }
-    if (prefs.item.manufacturingDate === true && !mfgDate) {
-      return res.status(400).json({ message: 'Manufacturing date is required' });
-    }
-    if (prefs.item.modelNumber === true && !modelNo) {
-      return res.status(400).json({ message: 'Model number is required' });
-    }
-    if (prefs.item.size === true && !size) {
-      return res.status(400).json({ message: 'Size is required' });
-    }
+    // Category & HSN/SAC apply to both products and services.
     if (prefs.item.itemCategory === true && !category) {
       return res.status(400).json({ message: 'Item category is required' });
     }
     if (prefs.taxes.hsnSac === true && !hsn) {
       return res.status(400).json({ message: 'HSN/SAC code is required' });
     }
-    if (prefs.general.enableGodown === true && !warehouse) {
-      const Godown = require('../models/Godown');
-      const godownCount = await Godown.countDocuments({ user: req.user._id, business: req.businessId, isActive: true });
-      if (godownCount > 0) {
-        return res.status(400).json({ message: 'Godown/Warehouse assignment is required' });
-      }
-    }
     const product = await Product.create({
       ...getCreateData(req),
-      name, type, category, price, costPrice, stock, unit, gstRate,
-      sku, brand, hsn, description, image, supplier, warehouse,
+      name, type, category, price, costPrice, unit, gstRate,
+      sku, brand, hsn, description, image, supplier,
+      warehouse: warehouse || undefined,
       storageLocation, modelNo, size, serialNo, batchNo,
-      expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp,
+      expiryDate, mfgDate, cgst, sgst, igst, barcode, mrp,
+      ...inventoryFields,
     });
     res.status(201).json(product);
   } catch (error) {
@@ -98,7 +108,7 @@ const updateProduct = async (req, res) => {
     const product = await Product.findOne({ ...baseFilter, _id: req.params.id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
     const prefs = await getSettings(req);
-    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp } = req.body;
+    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp, openingStock } = req.body;
     const type = itemType !== undefined ? (itemType === 'Service' ? 'service' : 'product') : product.type;
     const merged = {
       name: name !== undefined ? name : product.name,
@@ -115,7 +125,7 @@ const updateProduct = async (req, res) => {
       description: description !== undefined ? description : product.description,
       image: image !== undefined ? image : product.image,
       supplier: supplier !== undefined ? supplier : product.supplier,
-      warehouse: warehouse !== undefined ? warehouse : product.warehouse,
+      warehouse: warehouse !== undefined ? (warehouse || undefined) : product.warehouse,
       storageLocation: storageLocation !== undefined ? storageLocation : product.storageLocation,
       modelNo: modelNo !== undefined ? modelNo : product.modelNo,
       size: size !== undefined ? size : product.size,
@@ -130,36 +140,54 @@ const updateProduct = async (req, res) => {
       barcode: barcode !== undefined ? barcode : product.barcode,
       mrp: mrp !== undefined ? mrp : product.mrp,
     };
-    if (prefs.item.batchTracking === true && !merged.batchNo) {
-      return res.status(400).json({ message: 'Batch tracking is enabled. Batch number is required' });
+    // A service must never carry inventory: force inventory-related fields,
+    // so switching an item to Service also clears its existing inventory.
+    if (type === 'service') {
+      merged.stock = 0;
+      merged.minStock = 0;
+      merged.openingStock = 0;
+      merged.batchTracking = false;
+      merged.serialNumberTracking = false;
+      merged.batches = [];
+      merged.serialNumbers = [];
+      merged.warehouse = undefined;
+    } else if (openingStock !== undefined) {
+      merged.openingStock = openingStock;
     }
-    if (prefs.item.serialNumberTracking === true && !merged.serialNo) {
-      return res.status(400).json({ message: 'Serial number tracking is enabled. Serial number is required' });
+    // Inventory-only required-field checks do not apply to services.
+    if (type !== 'service') {
+      if (prefs.item.batchTracking === true && !merged.batchNo) {
+        return res.status(400).json({ message: 'Batch tracking is enabled. Batch number is required' });
+      }
+      if (prefs.item.serialNumberTracking === true && !merged.serialNo) {
+        return res.status(400).json({ message: 'Serial number tracking is enabled. Serial number is required' });
+      }
+      if (prefs.item.expiryDate === true && !merged.expiryDate) {
+        return res.status(400).json({ message: 'Expiry date tracking is enabled. Expiry date is required' });
+      }
+      if (prefs.item.manufacturingDate === true && !merged.mfgDate) {
+        return res.status(400).json({ message: 'Manufacturing date is required' });
+      }
+      if (prefs.item.modelNumber === true && !merged.modelNo) {
+        return res.status(400).json({ message: 'Model number is required' });
+      }
+      if (prefs.item.size === true && !merged.size) {
+        return res.status(400).json({ message: 'Size is required' });
+      }
+      if (prefs.general.enableGodown === true && !merged.warehouse) {
+        const Godown = require('../models/Godown');
+        const godownCount = await Godown.countDocuments({ user: req.user._id, business: req.businessId, isActive: true });
+        if (godownCount > 0) {
+          return res.status(400).json({ message: 'Godown/Warehouse assignment is required' });
+        }
+      }
     }
-    if (prefs.item.expiryDate === true && !merged.expiryDate) {
-      return res.status(400).json({ message: 'Expiry date tracking is enabled. Expiry date is required' });
-    }
-    if (prefs.item.manufacturingDate === true && !merged.mfgDate) {
-      return res.status(400).json({ message: 'Manufacturing date is required' });
-    }
-    if (prefs.item.modelNumber === true && !merged.modelNo) {
-      return res.status(400).json({ message: 'Model number is required' });
-    }
-    if (prefs.item.size === true && !merged.size) {
-      return res.status(400).json({ message: 'Size is required' });
-    }
+    // Category & HSN/SAC apply to both products and services.
     if (prefs.item.itemCategory === true && !merged.category) {
       return res.status(400).json({ message: 'Item category is required' });
     }
     if (prefs.taxes.hsnSac === true && !merged.hsn) {
       return res.status(400).json({ message: 'HSN/SAC code is required' });
-    }
-    if (prefs.general.enableGodown === true && !merged.warehouse) {
-      const Godown = require('../models/Godown');
-      const godownCount = await Godown.countDocuments({ user: req.user._id, business: req.businessId, isActive: true });
-      if (godownCount > 0) {
-        return res.status(400).json({ message: 'Godown/Warehouse assignment is required' });
-      }
     }
     const updated = await Product.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, merged, { new: true });
     res.json(updated);

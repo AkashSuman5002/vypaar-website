@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { purchaseAPI, supplierAPI, productAPI, fetchCsrfToken } from '../services/api';
 import { formatCurrency, formatDate } from '../utils/format';
-import { generateShareContent, shareToWhatsApp } from '../utils/shareUtils';
+import { generateShareContent, shareToWhatsApp, shareDocumentToWhatsApp } from '../utils/shareUtils';
 import {
   Plus, Search, Download, Printer, Share2, Eye, Pencil, Trash2, Copy,
   X, ChevronDown, ChevronLeft, ChevronRight, Filter, Calendar, Building2,
@@ -428,11 +428,18 @@ const PurchaseBills = () => {
                           className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-purple-600 transition-colors" title="Duplicate"><Copy className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handlePrint()}
                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-blue-600 transition-colors" title="Print"><Printer className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => {
-                            const { message } = generateShareContent('purchase', bill);
-                            shareToWhatsApp(message);
+                        <button onClick={async () => {
+                            const phone = bill.supplierPhone || bill.supplier?.phone;
+                            if (!phone) return toast.error('No phone number for this party');
+                            const caption = `*Bill ${bill.billNumber || bill.invoiceNo || ''}*\nAmount: ${formatCurrency(bill.totalAmount || bill.amount)}`;
+                            try {
+                              await shareDocumentToWhatsApp({ type: 'purchase', id: bill._id, phone, caption, fileName: `Bill-${bill.billNumber || bill.invoiceNo || bill._id}` });
+                              toast.success('PDF sent on WhatsApp');
+                            } catch (err) {
+                              toast.error(err?.response?.data?.message || 'Connect WhatsApp in Settings to send the PDF');
+                            }
                           }}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-emerald-600 transition-colors" title="Share"><Share2 className="w-3.5 h-3.5" /></button>
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-emerald-600 transition-colors" title="Share on WhatsApp"><Share2 className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handleDelete(bill._id)}
                           className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>

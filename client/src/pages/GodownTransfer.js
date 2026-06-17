@@ -62,10 +62,13 @@ const GodownTransfer = () => {
   const searchProducts = useCallback(async (q) => {
     if (!q || q.length < 1) { setProductDropdown([]); return; }
     try {
-      const { data } = await productAPI.getAll({ search: q, limit: 20 });
+      const params = { search: q, limit: 20 };
+      // Only offer products that currently belong to the selected source godown
+      if (form.fromGodown) params.warehouse = form.fromGodown;
+      const { data } = await productAPI.getAll(params);
       setProductDropdown(data?.data || []);
     } catch { setProductDropdown([]); }
-  }, []);
+  }, [form.fromGodown]);
 
   useEffect(() => { searchProducts(itemSearch); }, [itemSearch, searchProducts]);
 
@@ -86,12 +89,7 @@ const GodownTransfer = () => {
     const q = Math.max(1, parseInt(qty) || 1);
     setForm(prev => {
       const items = [...prev.items];
-      if (q > items[idx].maxStock) {
-        toast.warn(`Max available: ${items[idx].maxStock}`);
-        items[idx].quantity = items[idx].maxStock;
-      } else {
-        items[idx].quantity = q;
-      }
+      items[idx].quantity = q;
       return { ...prev, items };
     });
   };

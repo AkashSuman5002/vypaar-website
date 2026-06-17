@@ -192,32 +192,45 @@ const Products = () => {
     setShowModal(true);
   };
 
+  const isService = form.itemType === 'Service';
+
   const handleInputChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
     if (field === 'gstRate') {
       const rate = parseFloat(value) || 0;
       setForm(prev => ({ ...prev, gstRate: rate, cgst: rate / 2, sgst: rate / 2, igst: rate }));
     }
+    // Switching to Service: leave the Stock tab (it will be hidden for services)
+    if (field === 'itemType' && value === 'Service') {
+      setActiveTab('pricing');
+    }
   };
 
   const handleSave = async (action = 'save') => {
     if (!form.name.trim()) { toast.error('Item name is required'); return; }
-    if (lowStockDialogEnabled && form.trackInventory && (parseInt(form.currentStock) || 0) < (parseInt(form.minStock) || 5)) {
+    if (!isService && lowStockDialogEnabled && form.trackInventory && (parseInt(form.currentStock) || 0) < (parseInt(form.minStock) || 5)) {
       toast.warning(`Low stock alert: ${form.name} has only ${form.currentStock || 0} units (min: ${form.minStock || 5})`);
     }
     const payload = {
       name: form.name, itemType: form.itemType, sku: form.sku, category: form.category,
       brand: form.brand, unit: form.unit, hsn: form.hsn, description: form.description,
       price: parseFloat(form.sellingPrice) || 0, costPrice: parseFloat(form.purchasePrice) || 0,
-      stock: parseInt(form.currentStock) || 0, minStock: parseInt(form.minStock) || 5,
+      stock: isService ? 0 : parseInt(form.currentStock) || 0,
+      minStock: isService ? 0 : parseInt(form.minStock) || 5,
       gstRate: parseFloat(form.gstRate) || 0, image: images[0] || '',
-      supplier: form.supplier, warehouse: form.warehouse, storageLocation: form.storageLocation,
-      modelNo: form.modelNo, size: form.size, serialNo: form.serialNo,
-      batchNo: form.batchNo, expiryDate: form.expiryDate, mfgDate: form.mfgDate,
+      supplier: form.supplier,
+      warehouse: isService ? '' : form.warehouse,
+      storageLocation: isService ? '' : form.storageLocation,
+      modelNo: form.modelNo, size: form.size,
+      serialNo: isService ? '' : form.serialNo,
+      batchNo: isService ? '' : form.batchNo,
+      expiryDate: isService ? '' : form.expiryDate,
+      mfgDate: isService ? '' : form.mfgDate,
       mrp: parseFloat(form.mrp) || 0,
       discountType: form.discountType, discountValue: parseFloat(form.discountValue) || 0,
-      openingStock: parseInt(form.openingStock) || 0, barcode: form.barcode,
+      openingStock: isService ? 0 : parseInt(form.openingStock) || 0, barcode: form.barcode,
       taxIncluded: form.taxIncluded,
+      trackInventory: isService ? false : form.trackInventory,
     };
     try {
       if (editingItem) {
@@ -371,18 +384,22 @@ const Products = () => {
         )}
         {stockEnabled && (
         <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              (product.stock || 0) === 0 ? 'bg-red-500' :
-              (product.stock || 0) <= (product.minStock || 5) ? 'bg-amber-500' : 'bg-emerald-500'
-            }`} />
-            <span className={`text-sm font-semibold ${
-              (product.stock || 0) === 0 ? 'text-red-600 dark:text-red-400' :
-              (product.stock || 0) <= (product.minStock || 5) ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'
-            }`}>
-              {product.stock || 0}
-            </span>
-          </div>
+          {product.type === 'service' ? (
+            <span className="text-sm text-slate-400 dark:text-slate-500">—</span>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                (product.stock || 0) === 0 ? 'bg-red-500' :
+                (product.stock || 0) <= (product.minStock || 5) ? 'bg-amber-500' : 'bg-emerald-500'
+              }`} />
+              <span className={`text-sm font-semibold ${
+                (product.stock || 0) === 0 ? 'text-red-600 dark:text-red-400' :
+                (product.stock || 0) <= (product.minStock || 5) ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'
+              }`}>
+                {product.stock || 0}
+              </span>
+            </div>
+          )}
         </td>
         )}
         <td className="px-4 py-3">
@@ -406,7 +423,11 @@ const Products = () => {
           </td>
         )}
         <td className="px-4 py-3">
-          <Badge variant={stockStatus.variant}>{stockStatus.label}</Badge>
+          {product.type === 'service' ? (
+            <Badge variant="service">Service</Badge>
+          ) : (
+            <Badge variant={stockStatus.variant}>{stockStatus.label}</Badge>
+          )}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -624,10 +645,16 @@ const Products = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <StockHealthBar stock={product.stock || 0} minStock={product.minStock || 5} />
+                    {product.type !== 'service' && (
+                      <StockHealthBar stock={product.stock || 0} minStock={product.minStock || 5} />
+                    )}
                     <div className="flex items-center justify-between">
                       <Badge variant="default">GST {(product.gstRate || 0)}%</Badge>
-                      <Badge variant={stockStatus.variant}>{stockStatus.label}</Badge>
+                      {product.type === 'service' ? (
+                        <Badge variant="service">Service</Badge>
+                      ) : (
+                        <Badge variant={stockStatus.variant}>{stockStatus.label}</Badge>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -814,7 +841,7 @@ const Products = () => {
                     <div className={`col-span-12 ${itemCategoryEnabled ? 'sm:col-span-6' : 'sm:col-span-12'}`}>
                       <div className="flex gap-2">
                         <input type="text" value={form.sku} onChange={e => handleInputChange('sku', e.target.value)}
-                          placeholder="Item Code"
+                          placeholder={isService ? 'Service Code' : 'Item Code'}
                           className="flex-1 px-3 py-2.5 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                         />
                         <button onClick={() => {
@@ -889,7 +916,7 @@ const Products = () => {
                       Pricing
                       {activeTab === 'pricing' && <span className="absolute -bottom-px left-0 right-0 h-0.5 bg-red-500" />}
                     </button>
-                    {stockEnabled && (
+                    {stockEnabled && !isService && (
                       <button onClick={() => setActiveTab('stock')}
                         className={`pb-2 text-sm font-semibold transition-colors relative ${activeTab === 'stock' ? 'text-red-500' : 'text-slate-500 hover:text-slate-700'}`}
                       >
@@ -1014,7 +1041,7 @@ const Products = () => {
                     </div>
                   )}
 
-                  {activeTab === 'stock' && stockEnabled && (
+                  {activeTab === 'stock' && stockEnabled && !isService && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 rounded-lg">
                         <div>

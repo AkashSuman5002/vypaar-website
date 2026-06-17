@@ -224,6 +224,9 @@ const createPurchase = async (req, res) => {
           ? purchaseProductMap.get(item.product.toString())
           : nameProductMap.get(item.productName);
 
+        // Services never affect stock: skip stock increment, movement, batch & serial ops.
+        if (prod && prod.type === 'service') continue;
+
         if (prod) {
           purchaseStockOps.push({
             updateOne: {
@@ -290,6 +293,8 @@ const createPurchase = async (req, res) => {
         if (item.product && item.rate > 0) {
           try {
             const prod = purchaseProductMap.get(item.product.toString()) || await Product.findById(item.product);
+            // Services never affect stock, so skip weighted-average cost recompute.
+            if (prod && prod.type === 'service') continue;
             if (prod) {
               const totalCost = (prod.stock * (prod.costPrice || 0)) + (item.quantity * item.rate);
               const totalQty = prod.stock + item.quantity;
@@ -328,7 +333,10 @@ const createPurchase = async (req, res) => {
           { account: payable._id, accountName: payable.name, accountType: payable.type, debit: 0, credit: totalAmount - (paidAmount || 0) },
         ];
         if (paidAmount > 0) {
-          const cash = await Account.findOne({ ...baseFilter, code: '1001' });
+          // Respect payment mode: cash leaves the cash account, everything else the bank account.
+          const payCode = paymentMethod === 'cash' ? '1001' : '1002';
+          let cash = await Account.findOne({ ...baseFilter, code: payCode });
+          if (!cash) cash = await Account.findOne({ ...baseFilter, code: '1001' });
           if (cash) {
             lines[1].credit = totalAmount - paidAmount;
             lines.push({ account: cash._id, accountName: cash.name, accountType: cash.type, debit: 0, credit: paidAmount });
@@ -438,15 +446,31 @@ const updatePurchase = async (req, res) => {
       setFields.paymentDate = new Date();
     }
 
+    // Load products referenced by the existing and incoming items so we can skip
+    // services (type === 'service') from any stock adjustment.
+    let updateServiceIds = new Set();
+    if (!isPaymentOnly) {
+      const updateProductIds = [
+        ...purchase.items.filter(item => item.product).map(item => item.product),
+        ...((body.items || []).filter(item => item && item.product).map(item => item.product)),
+      ];
+      if (updateProductIds.length > 0) {
+        const updateProducts = await Product.find({ _id: { $in: updateProductIds }, user: req.user._id }).select('type');
+        updateServiceIds = new Set(updateProducts.filter(p => p.type === 'service').map(p => p._id.toString()));
+      }
+    }
+
     const updated = await withTransaction(async (session) => {
       if (!isPaymentOnly) {
-        // Restore old stock (only when items may have changed)
-        const updateRestoreOps = purchase.items.filter(item => item.product).map(item => ({
-          updateOne: {
-            filter: { _id: item.product, user: req.user._id },
-            update: { $inc: { stock: -item.quantity } }
-          }
-        }));
+        // Restore old stock (only when items may have changed); skip services.
+        const updateRestoreOps = purchase.items
+          .filter(item => item.product && !updateServiceIds.has(item.product.toString()))
+          .map(item => ({
+            updateOne: {
+              filter: { _id: item.product, user: req.user._id },
+              update: { $inc: { stock: -item.quantity } }
+            }
+          }));
         if (updateRestoreOps.length > 0) await Product.bulkWrite(updateRestoreOps, { session });
       }
 
@@ -457,13 +481,15 @@ const updatePurchase = async (req, res) => {
       );
 
       if (!isPaymentOnly) {
-        // Apply new stock
-        const updateApplyOps = updated.items.filter(item => item.product).map(item => ({
-          updateOne: {
-            filter: { _id: item.product, user: req.user._id },
-            update: { $inc: { stock: item.quantity } }
-          }
-        }));
+        // Apply new stock; skip services.
+        const updateApplyOps = updated.items
+          .filter(item => item.product && !updateServiceIds.has(item.product.toString()))
+          .map(item => ({
+            updateOne: {
+              filter: { _id: item.product, user: req.user._id },
+              update: { $inc: { stock: item.quantity } }
+            }
+          }));
         if (updateApplyOps.length > 0) await Product.bulkWrite(updateApplyOps, { session });
       }
 
@@ -506,14 +532,24 @@ const deletePurchase = async (req, res) => {
       }
     }
 
+    // Load referenced products so we can skip services (type === 'service') from stock reversal.
+    const deleteProductIds = purchase.items.filter(item => item.product).map(item => item.product);
+    let deleteServiceIds = new Set();
+    if (deleteProductIds.length > 0) {
+      const deleteProducts = await Product.find({ _id: { $in: deleteProductIds }, user: req.user._id }).select('type');
+      deleteServiceIds = new Set(deleteProducts.filter(p => p.type === 'service').map(p => p._id.toString()));
+    }
+
     await withTransaction(async (session) => {
-      // Delete purchase: reverse the stock addition that happened during creation
-      const deletePOps = purchase.items.filter(item => item.product).map(item => ({
-        updateOne: {
-          filter: { _id: item.product, user: req.user._id },
-          update: { $inc: { stock: -item.quantity } }
-        }
-      }));
+      // Delete purchase: reverse the stock addition that happened during creation; skip services.
+      const deletePOps = purchase.items
+        .filter(item => item.product && !deleteServiceIds.has(item.product.toString()))
+        .map(item => ({
+          updateOne: {
+            filter: { _id: item.product, user: req.user._id },
+            update: { $inc: { stock: -item.quantity } }
+          }
+        }));
       if (deletePOps.length > 0) await Product.bulkWrite(deletePOps, { session });
 
       // Reverse supplier opening balance for the unpaid portion added at creation

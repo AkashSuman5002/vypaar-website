@@ -4,6 +4,7 @@ import { saleAPI, settingAPI, BASE_URL } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
+import { shareDocumentToWhatsApp } from '../utils/shareUtils';
 import { motion } from 'framer-motion';
 import { Printer, ArrowLeft, Download, Phone, Mail, MapPin, BadgePercent, Landmark, QrCode, Edit3, Copy, MessageSquare, Trash2, FileText, ChevronDown, Truck } from 'lucide-react';
 
@@ -118,9 +119,16 @@ const ViewChallan = () => {
           <button onClick={handleDownloadPDF} className="inline-flex items-center gap-1.5 px-3 py-2 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
             <Download className="w-4 h-4" /> PDF
           </button>
-          {showAmtOnDC && <button onClick={() => {
-            const msg = `*Delivery Challan ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+          {showAmtOnDC && <button onClick={async () => {
+            const phone = sale.customerPhone || sale.customer?.phone;
+            if (!phone) return toast.error('No customer phone number on this document');
+            const caption = `*Delivery Challan ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}`;
+            try {
+              await shareDocumentToWhatsApp({ type: 'challan', id: sale._id, phone, caption, fileName: `Challan-${sale.invoiceNumber}` });
+              toast.success('PDF sent on WhatsApp');
+            } catch (err) {
+              toast.error(err?.response?.data?.message || 'Connect WhatsApp in Settings to send the PDF');
+            }
           }} className="inline-flex items-center gap-1.5 px-3 py-2 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-sm font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors">
             <MessageSquare className="w-4 h-4" /> WhatsApp
           </button>}

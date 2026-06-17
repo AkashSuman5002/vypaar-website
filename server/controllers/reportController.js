@@ -1619,7 +1619,8 @@ const getItemDetail = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const { search } = req.query;
-    const filter = { ...baseFilter, isActive: true };
+    // Services are not stockable; exclude them from this stock/inventory report.
+    const filter = { ...baseFilter, isActive: true, type: { $ne: 'service' } };
     if (search) filter.name = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
     const products = await Product.find(filter).sort({ name: 1 }).lean();
     const entries = products.map(p => ({
@@ -1803,7 +1804,8 @@ const getLoanSummary = async (req, res) => {
 const getStockAging = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const products = await Product.find({ ...baseFilter }).lean();
+    // Services are not stockable; exclude them from this stock/inventory report.
+    const products = await Product.find({ ...baseFilter, type: { $ne: 'service' } }).lean();
     const productIds = products.map(p => p._id);
     const movements = await StockMovement.find({
       ...baseFilter,
@@ -1845,8 +1847,10 @@ const getStockAging = async (req, res) => {
 const getLowStockReport = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
+    // Services are not stockable; exclude them from this low-stock report.
     const products = await Product.find({
       ...baseFilter,
+      type: { $ne: 'service' },
       $expr: { $and: [{ $gt: ['$minStock', 0] }, { $lte: ['$stock', '$minStock'] }] },
     }).sort({ stock: 1 }).lean();
     const totalShortage = products.reduce((s, p) => s + Math.max(0, (p.minStock || 0) - (p.stock || 0)), 0);

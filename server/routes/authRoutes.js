@@ -92,27 +92,36 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    let business = await Business.findOne({ owner: user._id }).sort({ createdAt: -1 });
-    if (!business) {
-      business = await Business.create({
-        name: user.name + "'s Business",
-        email: user.email,
-        owner: user._id,
-        isActive: true,
-      });
-      await Branch.create({ name: 'Main Branch', business: business._id, isActive: true });
-      await Role.create({ name: 'Admin', business: business._id, permissions: ['*'], isDefault: true });
+    // Resolve the user's business. A MEMBER (non-owner staff) is assigned to the owner's
+    // business via user.business — never auto-create one for them (that produced an empty
+    // "junk" business and broke their data access). Only an owner with no business gets one.
+    let business = null;
+    if (user.business) {
+      business = await Business.findById(user.business);
+    } else {
+      business = await Business.findOne({ owner: user._id }).sort({ createdAt: -1 });
+      if (!business) {
+        business = await Business.create({
+          name: user.name + "'s Business",
+          email: user.email,
+          owner: user._id,
+          isActive: true,
+        });
+        await Branch.create({ name: 'Main Branch', business: business._id, isActive: true });
+        await Role.create({ name: 'Admin', business: business._id, permissions: ['*'], isDefault: true });
+      }
     }
 
+    const fallbackBusinessName = business ? business.name : (user.name + "'s Business");
     let setting = await Setting.findOne({ user: user._id });
     if (!setting) {
       setting = await Setting.create({
         user: user._id,
-        businessName: business.name,
+        businessName: fallbackBusinessName,
         email: user.email,
       });
-    } else if (!setting.businessName && business.name) {
-      setting.businessName = business.name;
+    } else if (!setting.businessName && fallbackBusinessName) {
+      setting.businessName = fallbackBusinessName;
       await setting.save();
     }
 
@@ -211,7 +220,10 @@ router.post('/logout', authMiddleware, csrfProtection, (req, res) => {
   res.json({ message: 'Logged out successfully' });
 });
 
-router.get('/csrf-token', authMiddleware, (req, res) => {
+// Public: a CSRF token is a random double-submit value (not tied to a user) and must be
+// obtainable before login. Gating it behind authMiddleware caused the pre-login CSRF fetch
+// to 401, which the client interceptor turned into an infinite redirect-to-/login loop.
+router.get('/csrf-token', (req, res) => {
   const token = crypto.randomBytes(32).toString('hex');
   res.cookie('vyapar-csrf', token, {
     httpOnly: true,

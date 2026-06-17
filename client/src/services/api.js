@@ -24,11 +24,22 @@ API.interceptors.request.use((req) => {
 API.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    const status = error.response?.status;
+    const url = error.config?.url || '';
+    // The bootstrap auth calls (csrf-token, refresh) are handled gracefully by AuthContext
+    // with .catch(); a 401 on them must NOT trigger a hard redirect (that caused a reload loop).
+    const isBootstrapAuthCall = url.includes('/auth/csrf-token') || url.includes('/auth/refresh');
+    // Only log out on 401 (invalid/expired auth). A 403 means "authenticated but not
+    // permitted" — e.g. a limited-permission staff user hitting a restricted endpoint —
+    // which must NOT log them out, or staff get bounced straight back to /login.
+    if (status === 401 && !isBootstrapAuthCall) {
       localStorage.removeItem('user');
       localStorage.removeItem('activeBusiness');
       sessionStorage.removeItem('vyapar_csrf_token');
-      window.location.href = '/login';
+      // Avoid redirect loops when we're already on the login page.
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -434,6 +445,7 @@ export const whatsappAPI = {
     return `${API.defaults.baseURL}/whatsapp/qr?token=${encodeURIComponent(token)}`;
   },
   send: (data) => API.post('/whatsapp/send', data),
+  sendDocument: (data) => API.post('/whatsapp/send-document', data),
   getMessages: (params) => API.get('/whatsapp/messages', { params }),
   getMessageStats: () => API.get('/whatsapp/messages/stats'),
   getTemplates: () => API.get('/whatsapp/templates'),

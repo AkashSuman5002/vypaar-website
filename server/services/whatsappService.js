@@ -93,18 +93,26 @@ const startSession = async (userId, onQR, onStatus) => {
         const shouldReconnect = reason !== BA.DisconnectReason.loggedOut;
         console.log(`[WhatsApp] Connection closed for user ${uid}, reason: ${reason}, reconnect: ${shouldReconnect}`);
 
-        await WhatsAppSession.findOneAndUpdate(
-          { user: uid },
-          { status: 'disconnected', lastDisconnected: new Date(), failReason: String(reason || '') }
-        );
-
         sessions.delete(uid);
-        const cb = statusCallbacks.get(uid);
-        if (cb) cb('disconnected');
 
         if (shouldReconnect) {
+          // Transient close — Baileys sends status 515 ("restart required") right after
+          // the QR is scanned, then reconnects with the saved creds and emits 'open'.
+          // Do NOT notify the client of a disconnect here, or the browser tears down the
+          // QR stream and never receives the subsequent 'connected' event.
+          await WhatsAppSession.findOneAndUpdate(
+            { user: uid },
+            { status: 'qr_pending' }
+          ).catch(() => {});
           setTimeout(() => startSession(uid, onQR, onStatus), 3000);
         } else {
+          // Genuine logout — tell the client and clean up the auth state.
+          await WhatsAppSession.findOneAndUpdate(
+            { user: uid },
+            { status: 'disconnected', lastDisconnected: new Date(), failReason: String(reason || '') }
+          );
+          const cb = statusCallbacks.get(uid);
+          if (cb) cb('disconnected');
           qrCallbacks.delete(uid);
           statusCallbacks.delete(uid);
           const dir = getSessionDir(uid);
@@ -139,15 +147,30 @@ const startSession = async (userId, onQR, onStatus) => {
 
 const getSession = (userId) => sessions.get(String(userId)) || null;
 
+// Normalise a phone number into the canonical WhatsApp JID and confirm the number is
+// actually registered on WhatsApp. A bare 10-digit number has no country code, which
+// produces an undeliverable JID — WhatsApp silently drops it and the send looks like it
+// "succeeded". Prepending the country code and verifying via onWhatsApp avoids that.
+const resolveJid = async (sock, phone) => {
+  let number = String(phone).replace(/[^0-9]/g, '');
+  number = number.replace(/^0+/, ''); // strip leading 0 / 00 prefixes
+  // Default country code (India) for local 10-digit mobile numbers.
+  if (number.length === 10) number = '91' + number;
+  if (!number) throw new Error('Invalid phone number');
+
+  const results = await sock.onWhatsApp(number);
+  const match = results && results[0];
+  if (!match || !match.exists) {
+    throw new Error(`${phone} is not registered on WhatsApp`);
+  }
+  return match.jid;
+};
+
 const sendMessage = async (userId, phone, text) => {
   const sock = sessions.get(String(userId));
   if (!sock) throw new Error('WhatsApp not connected');
 
-  let jid = phone.replace(/[^0-9]/g, '');
-  if (!jid.endsWith('@s.whatsapp.net')) {
-    jid = jid + '@s.whatsapp.net';
-  }
-
+  const jid = await resolveJid(sock, phone);
   const result = await sock.sendMessage(jid, { text });
   return result;
 };
@@ -156,11 +179,7 @@ const sendDocument = async (userId, phone, buffer, fileName, mimetype, caption) 
   const sock = sessions.get(String(userId));
   if (!sock) throw new Error('WhatsApp not connected');
 
-  let jid = phone.replace(/[^0-9]/g, '');
-  if (!jid.endsWith('@s.whatsapp.net')) {
-    jid = jid + '@s.whatsapp.net';
-  }
-
+  const jid = await resolveJid(sock, phone);
   const result = await sock.sendMessage(jid, {
     document: buffer,
     fileName,

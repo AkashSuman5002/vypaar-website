@@ -26,6 +26,11 @@ const Godowns = () => {
   const emptyForm = { name: '', code: '', address: '', city: '', state: '', phone: '', email: '', managerName: '', capacity: 0, notes: '' };
   const [form, setForm] = useState(emptyForm);
 
+  // Item picker for the create-godown modal (assign products to the new godown)
+  const [formItems, setFormItems] = useState([]);
+  const [formItemSearch, setFormItemSearch] = useState('');
+  const [formItemDropdown, setFormItemDropdown] = useState([]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -67,12 +72,12 @@ const Godowns = () => {
         await godownAPI.update(editing._id, form);
         toast.success('Godown updated');
       } else {
-        await godownAPI.create(form);
-        toast.success('Godown created');
+        await godownAPI.create({ ...form, items: formItems.map(i => ({ product: i.product })) });
+        toast.success(formItems.length ? `Godown created with ${formItems.length} item(s)` : 'Godown created');
       }
       setShowModal(false);
       setEditing(null);
-      setForm(emptyForm);
+      resetGodownForm();
       loadData();
     } catch (err) { toast.error(err.response?.data?.message || 'Failed to save godown'); }
   };
@@ -95,6 +100,32 @@ const Godowns = () => {
   }, []);
 
   useEffect(() => { handleAddProductSearch(productSearch); }, [productSearch, handleAddProductSearch]);
+
+  const searchFormItems = useCallback(async (q) => {
+    if (!q || q.length < 1) { setFormItemDropdown([]); return; }
+    try {
+      const { data } = await productAPI.getAll({ search: q, limit: 20 });
+      setFormItemDropdown(data?.data || []);
+    } catch { setFormItemDropdown([]); }
+  }, []);
+
+  useEffect(() => { searchFormItems(formItemSearch); }, [formItemSearch, searchFormItems]);
+
+  const addFormItem = (p) => {
+    if (formItems.find(i => i.product === p._id)) { toast.warn('Item already added'); return; }
+    setFormItems(prev => [...prev, { product: p._id, productName: p.name, sku: p.sku || '', unit: p.unit || 'pcs' }]);
+    setFormItemSearch('');
+    setFormItemDropdown([]);
+  };
+
+  const removeFormItem = (id) => setFormItems(prev => prev.filter(i => i.product !== id));
+
+  const resetGodownForm = () => {
+    setForm(emptyForm);
+    setFormItems([]);
+    setFormItemSearch('');
+    setFormItemDropdown([]);
+  };
 
   const assignProductToGodown = async (product) => {
     setAddingProductId(product._id);
@@ -139,7 +170,7 @@ const Godowns = () => {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Godowns</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage warehouses and view items in each godown</p>
         </div>
-        <button onClick={() => { setShowModal(true); setForm(emptyForm); setEditing(null); }}
+        <button onClick={() => { resetGodownForm(); setEditing(null); setShowModal(true); }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           <Plus size={18} /> Add Godown
         </button>
@@ -217,7 +248,7 @@ const Godowns = () => {
                           className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10">
                           {expandedGodown === g._id ? 'Hide' : 'Items'}
                         </button>
-                        <button onClick={() => { setEditing(g); setForm({ ...emptyForm, ...g }); setShowModal(true); }}
+                        <button onClick={() => { setEditing(g); setForm({ ...emptyForm, ...g }); setFormItems([]); setFormItemSearch(''); setFormItemDropdown([]); setShowModal(true); }}
                           className="p-1 text-gray-400 hover:text-blue-600"><Pencil size={16} /></button>
                         <button onClick={() => handleDelete(g._id)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
                       </div>
@@ -288,7 +319,7 @@ const Godowns = () => {
               className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
                 <h3 className="text-lg font-semibold">{editing ? 'Edit Godown' : 'Add Godown'}</h3>
-                <button onClick={() => { setShowModal(false); setEditing(null); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><X size={18} /></button>
+                <button onClick={() => { setShowModal(false); setEditing(null); resetGodownForm(); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"><X size={18} /></button>
               </div>
               <div className="p-4 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
@@ -339,9 +370,43 @@ const Godowns = () => {
                   <label className="block text-sm font-medium mb-1">Notes</label>
                   <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
                 </div>
+
+                {!editing && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Items in this Godown</label>
+                    <div className="relative">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input type="text" value={formItemSearch} onChange={e => setFormItemSearch(e.target.value)}
+                        placeholder="Search products to add to this godown..."
+                        className="w-full pl-9 pr-4 py-2 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                      {formItemDropdown.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                          {formItemDropdown.filter(p => p.type !== 'service').map(p => (
+                            <button key={p._id} type="button" onClick={() => addFormItem(p)}
+                              className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700">
+                              <span className="text-gray-900 dark:text-gray-100">{p.name}</span>
+                              <span className="text-xs text-gray-400">Stock: {p.stock || 0} {p.unit || 'pcs'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {formItems.length > 0 && (
+                      <div className="mt-2 border dark:border-gray-700 rounded-lg divide-y dark:divide-gray-700">
+                        {formItems.map(i => (
+                          <div key={i.product} className="flex items-center justify-between px-3 py-2 text-sm">
+                            <span className="text-gray-800 dark:text-gray-200">{i.productName}{i.sku ? ` (${i.sku})` : ''}</span>
+                            <button type="button" onClick={() => removeFormItem(i.product)} className="text-red-500 hover:text-red-700 text-xs font-medium">Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs text-gray-400">Selected items will be assigned to this godown after it is created.</p>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-2 p-4 border-t dark:border-gray-700">
-                <button onClick={() => { setShowModal(false); setEditing(null); }} className="px-4 py-2 border dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+                <button onClick={() => { setShowModal(false); setEditing(null); resetGodownForm(); }} className="px-4 py-2 border dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Update' : 'Save'}</button>
               </div>
             </motion.div>

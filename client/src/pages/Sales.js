@@ -7,6 +7,7 @@ import Badge from '../components/UI/Badge';
 import Modal from '../components/UI/Modal';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate } from '../utils/format';
+import { shareDocumentToWhatsApp } from '../utils/shareUtils';
 import { motion } from 'framer-motion';
 import {
   Plus, Eye, Trash2, Printer, Download, Edit3, Copy, RotateCcw,
@@ -194,13 +195,14 @@ ${sale.customer ? `<div class="bill-to"><p class="section-title">Bill To</p><p c
   };
 
   const handleShareWhatsApp = async (sale) => {
-    const msg = `*Invoice ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}\nStatus: ${sale.paymentStatus}`;
+    const phone = sale.customerPhone || sale.customer?.phone;
+    if (!phone) return toast.error('No phone number for this party');
+    const caption = `*Invoice ${sale.invoiceNumber}*\nAmount: ${formatCurrency(sale.totalAmount)}`;
     try {
-      await whatsappAPI.send({ phone: sale.customerPhone || sale.customer?.phone, message: msg });
-      toast.success('WhatsApp message sent');
-    } catch {
-      const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-      window.open(url, '_blank');
+      await shareDocumentToWhatsApp({ type: 'invoice', id: sale._id, phone, caption, fileName: `Invoice-${sale.invoiceNumber}` });
+      toast.success('PDF sent on WhatsApp');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Connect WhatsApp in Settings to send the PDF');
     }
   };
 

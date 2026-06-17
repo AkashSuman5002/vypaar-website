@@ -12,7 +12,7 @@ import { saleAPI, customerAPI, productAPI, settingAPI } from '../services/api';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
 import useSettings from '../hooks/useSettings';
 import { validateMobile, validateEmail, formatMobile } from '../utils/validation';
-import { shareToWhatsApp, shareViaEmail, copyToClipboard, generateShareContent } from '../utils/shareUtils';
+import { shareToWhatsApp, shareViaEmail, copyToClipboard, generateShareContent, shareDocumentToWhatsApp } from '../utils/shareUtils';
 import CustomerSearch from '../components/Invoice/CustomerSearch';
 import ProductRow from '../components/Invoice/ProductRow';
 import InvoicePreview from '../components/Invoice/InvoicePreview';
@@ -806,9 +806,17 @@ const QuickInvoice = () => {
               }} className="flex items-center justify-center gap-2 px-5 py-3 border border-slate-200/80 dark:border-gray-700/80 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
                 <Share2 className="w-4 h-4" /> Share
               </button>
-              <button onClick={() => {
-                const { message } = generateShareContent('invoice', form);
-                shareToWhatsApp(message, form.customerPhone);
+              <button onClick={async () => {
+                if (!form._id) return toast.error('Save the invoice first to share the PDF');
+                const phone = form.customerPhone || form.customer?.phone;
+                if (!phone) return toast.error('No phone number for this party');
+                const caption = `*Invoice ${form.invoiceNumber}*\nAmount: ${formatCurrency(grandTotal)}`;
+                try {
+                  await shareDocumentToWhatsApp({ type: 'invoice', id: form._id, phone, caption, fileName: `Invoice-${form.invoiceNumber}` });
+                  toast.success('PDF sent on WhatsApp');
+                } catch (err) {
+                  toast.error(err?.response?.data?.message || 'Connect WhatsApp in Settings to send the PDF');
+                }
               }} className="flex items-center justify-center gap-2 px-5 py-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-medium rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors border border-emerald-200 dark:border-emerald-800/30">
                 <MessageSquare className="w-4 h-4" /> WhatsApp
               </button>

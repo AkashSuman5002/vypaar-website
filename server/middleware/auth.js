@@ -17,6 +17,14 @@ const authMiddleware = async (req, res, next) => {
       token = authHeader.split(' ')[1];
     }
 
+    // EventSource (SSE) cannot set an Authorization header, so for those requests
+    // accept the token from the query string. Gated on the SSE Accept header so this
+    // fallback is not available to ordinary API requests.
+    if (!token && req.query && req.query.token &&
+        typeof req.headers.accept === 'string' && req.headers.accept.includes('text/event-stream')) {
+      token = req.query.token;
+    }
+
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });
     }
@@ -42,6 +50,11 @@ const sseAuthMiddleware = async (req, res, next) => {
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
+    }
+
+    // EventSource cannot set headers — the token arrives as a query-string param.
+    if (!token && req.query && req.query.token) {
+      token = req.query.token;
     }
 
     if (!token) {

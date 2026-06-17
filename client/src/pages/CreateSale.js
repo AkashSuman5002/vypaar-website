@@ -55,7 +55,7 @@ const createEmptyForm = (type = 'invoice') => ({
   shippingCharge: 0, packingCharge: 0, freightCharge: 0, loadingCharge: 0, otherCharge: 0,
   additionalChargesTotal: 0, discountOnInvoice: 0,
   roundOff: 0, roundOffEnabled: false, roundingMethod: 'Normal',
-  totalAmount: 0, payments: [], paidAmount: 0, remainingBalance: 0, paymentStatus: 'unpaid',
+  totalAmount: 0, payments: [], paidAmount: 0, remainingBalance: 0, paymentStatus: 'unpaid', paymentMode: 'cash',
   eWayBill: '', transportMode: '', vehicleNo: '', poNumber: '', poDate: '',
   validityDays: 15,
   reverseCharge: false, notes: '', internalNotes: '', termsConditions: '', returnReason: '',
@@ -276,6 +276,7 @@ const CreateSale = () => {
             paidAmount: data.paidAmount || 0,
             remainingBalance: data.remainingBalance || 0,
             paymentStatus: data.paymentStatus || 'unpaid',
+            paymentMode: data.payments?.[0]?.mode || 'cash',
             eWayBill: data.eWayBill || '', transportMode: data.transportMode || '',
             vehicleNo: data.vehicleNo || '', poNumber: data.poNumber || '', poDate: data.poDate ? data.poDate.split('T')[0] : '',
             reverseCharge: data.reverseCharge || false,
@@ -964,6 +965,66 @@ const CreateSale = () => {
               <span className="text-slate-900">Total</span>
               <span className="text-slate-900 tabular-nums text-lg">{fmt(form.totalAmount)}</span>
             </div>
+            {(form.type === 'invoice' || form.type === 'credit_note') && (
+              <div className="pt-2 mt-1 border-t border-slate-200 space-y-2">
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="text-slate-500">Payment Mode</span>
+                  <select
+                    value={form.paymentMode || 'cash'}
+                    onChange={(e) => {
+                      const mode = e.target.value;
+                      setForm(prev => {
+                        const amt = prev.paidAmount || 0;
+                        const payments = amt > 0
+                          ? [{ mode, amount: amt, date: prev.date, transactionNo: '', bankName: '', chequeNo: '', referenceNo: '' }]
+                          : [];
+                        return { ...prev, paymentMode: mode, payments };
+                      });
+                    }}
+                    className="px-2 py-1 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <option value="cash">Cash</option>
+                    <option value="upi">UPI</option>
+                    <option value="card">Card</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="text-slate-500">Amount Received</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-slate-400">₹</span>
+                    <input type="number" step="0.01" min="0" value={form.paidAmount || 0}
+                      onChange={(e) => {
+                        const amt = parseFloat(e.target.value) || 0;
+                        setForm(prev => {
+                          const mode = prev.paymentMode || 'cash';
+                          const payments = amt > 0
+                            ? [{ mode, amount: amt, date: prev.date, transactionNo: '', bankName: '', chequeNo: '', referenceNo: '' }]
+                            : [];
+                          const calc = calculate(prev.items, amt, payments, prev.discountOnInvoice);
+                          return { ...prev, payments, ...calc };
+                        });
+                      }}
+                      className="w-28 px-2 py-1 text-sm text-right border-b border-slate-300 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500 transition-colors" />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => {
+                    setForm(prev => {
+                      const amt = prev.totalAmount || 0;
+                      const mode = prev.paymentMode || 'cash';
+                      const payments = [{ mode, amount: amt, date: prev.date, transactionNo: '', bankName: '', chequeNo: '', referenceNo: '' }];
+                      const calc = calculate(prev.items, amt, payments, prev.discountOnInvoice);
+                      return { ...prev, payments, ...calc };
+                    });
+                  }} className="text-xs text-blue-600 hover:text-blue-700 hover:underline">Received full amount</button>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold py-1">
+                  <span className="text-slate-600">Balance Due</span>
+                  <span className={`tabular-nums ${(form.remainingBalance || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(form.remainingBalance || 0)}</span>
+                </div>
+              </div>
+            )}
             {customerCreditLimit > 0 && form.remainingBalance > customerCreditLimit && (
               <div className="flex items-center gap-1.5 mt-1 text-xs font-medium text-red-600 bg-red-50 px-2 py-1.5 rounded-lg">
                 <AlertTriangle className="w-3 h-3" /> Credit limit of {fmt(customerCreditLimit)} exceeded

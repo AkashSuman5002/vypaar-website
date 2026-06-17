@@ -20,8 +20,19 @@ const ProtectedRoute = ({ children }) => {
   const [hasBusiness, setHasBusiness] = useState(true);
   const checked = useRef(false);
 
+  // A staff member joins an existing business (user.business is set) — they must NEVER be
+  // sent to the business-setup page (that's for owners creating their company). Owners
+  // registered without user.business, so they still go through the setup check.
+  const isMember = !!user?.business;
+
   useEffect(() => {
     if (!user) {
+      setBusinessChecking(false);
+      return;
+    }
+    if (isMember) {
+      // Members always belong to a business — skip the owner-only status check entirely.
+      setHasBusiness(true);
       setBusinessChecking(false);
       return;
     }
@@ -36,7 +47,7 @@ const ProtectedRoute = ({ children }) => {
         setHasBusiness(false);
         setBusinessChecking(false);
       });
-  }, [user]);
+  }, [user, isMember]);
 
   if (loading || businessChecking) {
     return (
@@ -50,7 +61,7 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (!hasBusiness && location.pathname !== '/business-setup') {
+  if (!hasBusiness && !isMember && location.pathname !== '/business-setup') {
     return <Navigate to="/business-setup" replace />;
   }
 

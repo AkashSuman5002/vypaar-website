@@ -820,6 +820,34 @@ const CreatePurchaseBill = () => {
               <span className="text-slate-900 dark:text-slate-100">Total</span>
               <span className="text-slate-900 dark:text-slate-100 w-32 text-right tabular-nums text-lg">{fmt(totals.total)}</span>
             </div>
+            {payments.length === 0 && (
+              <div className="pt-2 mt-1 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-end gap-2 text-sm">
+                  <span className="text-slate-500">Payment Mode</span>
+                  <select value={form.paymentType} onChange={e => setForm({ ...form, paymentType: e.target.value })}
+                    className="px-2 py-1 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    {PAYMENT_MODES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center justify-end gap-2 text-sm">
+                  <span className="text-slate-500">Amount Paid</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-slate-400">₹</span>
+                    <input type="number" step="0.01" min="0" value={form.paidAmount || 0}
+                      onChange={e => setForm({ ...form, paidAmount: parseFloat(e.target.value) || 0 })}
+                      className="w-28 px-2 py-1 text-sm text-right border-b border-slate-300 bg-transparent focus:outline-none focus:border-blue-500" />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => setForm({ ...form, paidAmount: totals.total })}
+                    className="text-xs text-blue-600 hover:text-blue-700 hover:underline">Paid full amount</button>
+                </div>
+                <div className="flex items-center justify-end gap-2 text-sm font-semibold">
+                  <span className="text-slate-600">Balance Due</span>
+                  <span className={`w-32 text-right tabular-nums ${(totals.total - (form.paidAmount || 0)) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(Math.max(0, totals.total - (form.paidAmount || 0)))}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

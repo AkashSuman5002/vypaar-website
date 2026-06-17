@@ -14,7 +14,13 @@ const getPreferredBusiness = async (ownerId) => {
 
 const getBusinessStatus = async (req, res) => {
   try {
-    const business = await getPreferredBusiness(req.user._id);
+    // Members (non-owner staff) belong to the owner's business via user.business.
+    let business;
+    if (req.user.business) {
+      business = await Business.findById(req.user.business);
+    } else {
+      business = await getPreferredBusiness(req.user._id);
+    }
     res.json({ hasBusiness: !!business, business: business || null });
   } catch (error) {
     res.status(500).json({ message: error.message });

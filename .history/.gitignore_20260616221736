@@ -1,0 +1,11 @@
+.env
+.env.local
+.env.production
+server/.env
+node_modules/
+*.log
+*.err
+server.log
+server.err
+server/server.log
+server/server.err

@@ -28,6 +28,19 @@ export const shareToWhatsApp = async (message, phone) => {
   }
 };
 
+/**
+ * Share a document (invoice/receipt/etc.) to WhatsApp as a real PDF attachment.
+ * The PDF is generated server-side (same template as download/print) and sent via the
+ * connected WhatsApp session — wa.me links cannot attach files, so this needs WhatsApp
+ * to be connected (Settings → WhatsApp). Throws if not connected so callers can prompt.
+ *
+ * type ∈ invoice | estimate | quotation | order | challan | proforma | credit_note | return | purchase | receipt
+ */
+export const shareDocumentToWhatsApp = async ({ type, id, phone, caption = '', fileName }) => {
+  const res = await whatsappAPI.sendDocument({ type, id, phone, caption, fileName });
+  return res?.data;
+};
+
 export const shareViaEmail = (subject, body) => {
   window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_self');
 };

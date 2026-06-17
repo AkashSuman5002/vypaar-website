@@ -56,7 +56,7 @@ const getStockForCount = async (req, res) => {
       ];
     }
 
-    const products = await Product.find(filter).sort({ name: 1 }).select('name stock unit godown sku barcode category');
+    const products = await Product.find(filter).sort({ name: 1 }).select('name stock unit warehouse sku barcode category');
     res.json({ items: products });
   } catch (error) {
     res.status(500).json({ message: error.message });

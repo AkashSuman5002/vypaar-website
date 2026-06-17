@@ -238,6 +238,11 @@ const createSale = async (req, res) => {
       if (item.product) {
         const prod = productMap.get(item.product.toString());
         if (!prod) return res.status(400).json({ message: `Product not found: ${item.productName}` });
+        // Services never affect stock: skip negative-stock & serial validation.
+        if (prod.type === 'service') {
+          if (requireHSN && !item.hsn && prod?.hsn) item.hsn = prod.hsn;
+          continue;
+        }
         if (stopOnNegative && prod.stock < item.quantity) {
           return res.status(400).json({ message: `Insufficient stock for ${prod.name}. Available: ${prod.stock}, Requested: ${item.quantity}` });
         }
@@ -378,6 +383,8 @@ const createSale = async (req, res) => {
         if (item.product) {
           const prod = productMap.get(item.product.toString());
           if (!prod) continue;
+          // Services never affect stock: skip deduction, movement, batch & serial updates.
+          if (prod.type === 'service') continue;
 
           const serialTracking = setting?.preferences?.item?.serialNumberTracking === true;
 
@@ -453,13 +460,17 @@ const createSale = async (req, res) => {
       if (priceOps.length > 0) await Product.bulkWrite(priceOps, { session });
     }
 
+    // Respect the payment mode: cash goes to the cash ledger/account, everything else
+    // (UPI/card/cheque/bank transfer) goes to the bank ledger/account.
+    const primaryPayMode = (payments && payments[0] && payments[0].mode) || 'cash';
+    const isCashPay = primaryPayMode === 'cash';
     if (paidAmount > 0) {
       const addTime = setting?.preferences?.transaction?.addTimeOnTransactions === true;
       const txnDate = addTime ? new Date() : (date || new Date());
       const txn = new Transaction({
         user: req.user._id,
         business: req.businessId,
-        type: 'cash_in',
+        type: isCashPay ? 'cash_in' : 'bank_in',
         amount: paidAmount,
         description: `Payment received - ${invoiceNumber} from ${customerName || 'Walk-in'}`,
         date: txnDate,
@@ -481,7 +492,9 @@ const createSale = async (req, res) => {
       const creditLine = { account: salesRevenue._id, accountName: salesRevenue.name, accountType: salesRevenue.type, debit: 0, credit: totalAmount };
       const lines = [debitLine, creditLine];
       if (paidAmount > 0) {
-        const cash = await Account.findOne({ ...baseFilter, code: '1001' });
+        const payCode = isCashPay ? '1001' : '1002';
+        let cash = await Account.findOne({ ...baseFilter, code: payCode });
+        if (!cash) cash = await Account.findOne({ ...baseFilter, code: '1001' });
         if (cash) {
           debitLine.debit = remainingBalance;
     // Calculate expiry date for estimates/quotations
@@ -653,6 +666,8 @@ const updateSale = async (req, res) => {
       for (const item of sale.items) {
         if (item.product) {
           const prod = oldProductMap.get(item.product.toString());
+          // Services never affect stock: skip restore (reversal) leg.
+          if (prod && prod.type === 'service') continue;
           const balBefore = prod ? prod.stock : 0;
           restoreOps.push({
             updateOne: {
@@ -707,6 +722,8 @@ const updateSale = async (req, res) => {
       for (const item of sale.items) {
         if (item.product) {
           const prod = newProductMap.get(item.product.toString());
+          // Services never affect stock: skip apply (deduction) leg.
+          if (prod && prod.type === 'service') continue;
           const balBefore = prod ? prod.stock : 0;
           adjustOps.push({
             updateOne: {
@@ -796,6 +813,8 @@ const deleteSale = async (req, res) => {
     for (const item of sale.items) {
       if (item.product) {
         const prod = deleteProductMap.get(item.product.toString());
+        // Services never affect stock: skip restore on delete.
+        if (prod && prod.type === 'service') continue;
         const balBefore = prod ? prod.stock : 0;
         deleteStockOps.push({
           updateOne: {
@@ -954,6 +973,8 @@ const convertToReturn = async (req, res) => {
     for (const item of returnData.items) {
       if (item.product) {
         const prod = returnProductMap.get(item.product.toString());
+        // Services never affect stock: skip return restore.
+        if (prod && prod.type === 'service') continue;
         const balBefore = prod ? prod.stock : 0;
         returnStockOps.push({
           updateOne: {
@@ -1225,6 +1246,8 @@ const convertToInvoice = async (req, res) => {
       if (item.product) {
         const prod = convProductMap.get(item.product.toString());
         if (!prod) return res.status(400).json({ message: `Product not found: ${item.productName}` });
+        // Services never affect stock: skip negative-stock validation.
+        if (prod.type === 'service') continue;
         if (stopOnNegative && prod.stock < item.quantity) {
           return res.status(400).json({ message: `Insufficient stock for ${prod.name}. Available: ${prod.stock}, Requested: ${item.quantity}` });
         }
@@ -1239,6 +1262,8 @@ const convertToInvoice = async (req, res) => {
     for (const item of invoiceData.items) {
       if (item.product) {
         const prod = convProductMap.get(item.product.toString());
+        // Services never affect stock: skip deduction & movement.
+        if (prod && prod.type === 'service') continue;
         const balBefore = prod ? prod.stock : 0;
         convStockOps.push({
           updateOne: {
@@ -1396,10 +1421,11 @@ const receivePayment = async (req, res) => {
 
     await receipt.save({ session });
 
+    const isCashPay = (mode || 'cash') === 'cash';
     const payTxn = new Transaction({
       user: req.user._id,
       business: req.businessId,
-      type: 'cash_in', amount: Number(amount),
+      type: isCashPay ? 'cash_in' : 'bank_in', amount: Number(amount),
       description: `Payment received - ${receiptNumber} for ${sale.invoiceNumber} from ${sale.customerName || 'Walk-in'}`,
       date: date || new Date(), reference: receiptNumber, referenceModel: 'Receipt', referenceId: receipt._id,
       partyName: sale.customerName || 'Walk-in', partyType: 'customer',
@@ -1407,7 +1433,8 @@ const receivePayment = async (req, res) => {
     await payTxn.save({ session });
 
     // Create journal entry for payment received
-    const payAccount = await Account.findOne({ ...baseFilter, code: '1001' });
+    let payAccount = await Account.findOne({ ...baseFilter, code: isCashPay ? '1001' : '1002' });
+    if (!payAccount) payAccount = await Account.findOne({ ...baseFilter, code: '1001' });
     const custAccount = await Account.findOne({ ...baseFilter, code: '1101' });
     if (payAccount && custAccount) {
       const payLines = [

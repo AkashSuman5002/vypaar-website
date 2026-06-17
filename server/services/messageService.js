@@ -289,15 +289,27 @@ const sendManualMessage = async (userId, businessId, phone, message) => {
   const sock = getSession(userId);
   if (!sock) throw new Error('WhatsApp not connected');
 
-  const result = await sendMessage(userId, phone, message);
-  await logMessage(userId, businessId, {
-    to: phone,
-    message,
-    status: 'sent',
-    referenceType: 'manual',
-    transactionType: 'manual',
-  });
-  return result;
+  try {
+    const result = await sendMessage(userId, phone, message);
+    await logMessage(userId, businessId, {
+      to: phone,
+      message,
+      status: 'sent',
+      referenceType: 'manual',
+      transactionType: 'manual',
+    });
+    return result;
+  } catch (err) {
+    await logMessage(userId, businessId, {
+      to: phone,
+      message,
+      status: 'failed',
+      failReason: err.message,
+      referenceType: 'manual',
+      transactionType: 'manual',
+    });
+    throw err;
+  }
 };
 
 module.exports = {

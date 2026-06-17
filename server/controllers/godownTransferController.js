@@ -1,7 +1,6 @@
 const GodownTransfer = require('../models/GodownTransfer');
 const Godown = require('../models/Godown');
 const Product = require('../models/Product');
-const { recordStockMovement } = require('./stockController');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 
 const getNextTransferNumber = async (req) => {
@@ -82,44 +81,18 @@ const createTransfer = async (req, res) => {
     for (const item of items) {
       const product = productMap.get(item.product.toString());
       if (!product) return res.status(404).json({ message: `Product not found: ${item.productName || item.product}` });
-      if (product.stock < item.quantity) {
-        return res.status(400).json({ message: `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}` });
-      }
     }
 
     const transferNumber = await getNextTransferNumber(req);
     const processedItems = [];
 
+    // A product belongs to a single godown via its `warehouse` reference, so a transfer
+    // moves each selected product from the source godown to the destination godown.
     for (const item of items) {
       const product = productMap.get(item.product.toString());
 
-      await recordStockMovement({
-        userId: req.user._id,
-        businessId: req.businessId,
-        productId: product._id,
-        productName: product.name,
-        type: 'transfer',
-        quantity: -Math.abs(item.quantity),
-        rate: product.costPrice || 0,
-        totalAmount: (product.costPrice || 0) * item.quantity,
-        referenceType: 'GodownTransfer',
-        referenceNumber: transferNumber,
-        description: `Transfer from ${fromG.name} to ${toG.name}`,
-      });
-
-      await recordStockMovement({
-        userId: req.user._id,
-        businessId: req.businessId,
-        productId: product._id,
-        productName: product.name,
-        type: 'transfer',
-        quantity: Math.abs(item.quantity),
-        rate: product.costPrice || 0,
-        totalAmount: (product.costPrice || 0) * item.quantity,
-        referenceType: 'GodownTransfer',
-        referenceNumber: transferNumber,
-        description: `Transfer from ${fromG.name} to ${toG.name}`,
-      });
+      product.warehouse = toGodown;
+      await product.save();
 
       processedItems.push({
         product: product._id,
@@ -157,31 +130,12 @@ const deleteTransfer = async (req, res) => {
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
 
     if (transfer.status === 'completed') {
-      for (const item of transfer.items) {
-        await recordStockMovement({
-          userId: req.user._id,
-          businessId: req.businessId,
-          productId: item.product,
-          productName: item.productName,
-          type: 'adjustment',
-          quantity: item.quantity,
-          referenceType: 'GodownTransfer',
-          referenceNumber: transfer.transferNumber,
-          description: `Reversal of transfer ${transfer.transferNumber}`,
-        });
-
-        await recordStockMovement({
-          userId: req.user._id,
-          businessId: req.businessId,
-          productId: item.product,
-          productName: item.productName,
-          type: 'adjustment',
-          quantity: -item.quantity,
-          referenceType: 'GodownTransfer',
-          referenceNumber: transfer.transferNumber,
-          description: `Reversal of transfer ${transfer.transferNumber}`,
-        });
-      }
+      // Move the products back to the source godown.
+      const productIds = transfer.items.map(item => item.product);
+      await Product.updateMany(
+        { ...baseFilter, _id: { $in: productIds }, warehouse: transfer.toGodown },
+        { $set: { warehouse: transfer.fromGodown } }
+      );
     }
 
     await GodownTransfer.findOneAndDelete({ _id: req.params.id, ...baseFilter });

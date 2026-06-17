@@ -182,8 +182,8 @@ const WhatsAppConnect = () => {
 
   const renderQR = (qr) => {
     if (!qr) return null;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qr)}`;
-    return <img src={qrUrl} alt="WhatsApp QR Code" className="w-64 h-64 rounded-lg border" />;
+    // `qr` is a server-rendered image data URL (data:image/png;base64,...)
+    return <img src={qr} alt="WhatsApp QR Code" className="w-64 h-64 rounded-lg border" />;
   };
 
   const statusColor = {
