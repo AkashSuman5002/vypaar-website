@@ -109,7 +109,7 @@ const Manufacturing = () => {
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!form.finishedProduct) return toast.error('Select a finished product');
-    if (!form.plannedQuantity || Number(form.plannedQuantity) < 1) return toast.error('Enter a valid output quantity');
+    if (!form.plannedQuantity || (parseInt(form.plannedQuantity, 10) || 0) < 1) return toast.error('Enter a valid output quantity');
 
     const finished = products.find(p => p._id === form.finishedProduct);
 
@@ -131,7 +131,7 @@ const Manufacturing = () => {
       date: form.date || undefined,
       dueDate: form.dueDate || undefined,
       finishedProduct: form.finishedProduct,
-      plannedQuantity: Number(form.plannedQuantity),
+      plannedQuantity: parseInt(form.plannedQuantity, 10) || 0,
       unit: finished?.unit || 'pcs',
       bomItems,
       labourCost: form.labourCost !== '' ? Number(form.labourCost) : 0,
@@ -276,9 +276,10 @@ const Manufacturing = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">Output Quantity <span className="text-red-500">*</span></label>
-                  <input type="number" min="1" step="any" value={form.plannedQuantity}
+                  <input type="number" min="1" step="1" value={form.plannedQuantity}
                     onChange={e => setField('plannedQuantity', e.target.value)} required
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+                    onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                    className="no-spinner w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">Due Date</label>
@@ -310,7 +311,7 @@ const Manufacturing = () => {
                       <div className="col-span-3">
                         <input type="number" min="0" step="any" placeholder="Qty" value={row.quantity}
                           onChange={e => setBomField(idx, 'quantity', e.target.value)}
-                          className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+                          className="no-spinner w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
                       </div>
                       <div className="col-span-2">
                         <input type="number" min="0" step="any" placeholder="Cost" value={row.costPerUnit}

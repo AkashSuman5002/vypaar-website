@@ -162,10 +162,18 @@ const buildThermalTextReceipt = (sale, settings, printPrefs, currency) => {
 const generateInvoicePDF = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const sale = await Sale.findOne({ _id: req.params.id, ...baseFilter });
-    if (!sale) return res.status(404).json({ message: 'Sale not found' });
-
-    const settings = await Setting.findOne(getSettingQuery(req));
+    // Preview mode (from the Settings → Print live preview) injects a sample sale and
+    // the live (possibly unsaved) settings so the preview is rendered by THIS exact
+    // engine — guaranteeing it matches the real printed invoice.
+    let sale, settings;
+    if (req.previewMode) {
+      sale = req.previewSale;
+      settings = req.previewSettings;
+    } else {
+      sale = await Sale.findOne({ _id: req.params.id, ...baseFilter });
+      if (!sale) return res.status(404).json({ message: 'Sale not found' });
+      settings = await Setting.findOne(getSettingQuery(req));
+    }
     const printPrefs = settings?.preferences?.print || {};
     printPrefs._generalDecimalPlaces = settings?.preferences?.general?.amountDecimalPlaces;
     const showYouSaved = printPrefs.youSaved !== false;
@@ -180,6 +188,8 @@ const generateInvoicePDF = async (req, res) => {
     // makeThermalDefault: when set and no explicit printerType chosen, default to thermal layout.
     const printerType = printPrefs.printerType || (printPrefs.makeThermalDefault ? 'thermal' : 'regular');
     const decimals = printPrefs.showAmountDecimal === false ? 0 : (parseInt(printPrefs.amountDecimalPlaces) || parseInt(printPrefs._generalDecimalPlaces) || 2);
+    // Number of identical copies of the invoice to render (clamped to a sane 1-5 range).
+    const numberOfCopies = Math.min(5, Math.max(1, parseInt(printPrefs.numberOfCopies) || 1));
 
     let pageWidth, pageHeight;
     if (printerType === 'thermal') {
@@ -203,7 +213,7 @@ const generateInvoicePDF = async (req, res) => {
       const receipt = buildThermalTextReceipt(sale, settings, printPrefs, currencyEarly);
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       const safeName = (sale.invoiceNumber || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeName}.txt"`);
+      res.setHeader('Content-Disposition', `${req.previewMode ? 'inline' : 'attachment'}; filename="${safeName}.txt"`);
       return res.send(receipt);
     }
 
@@ -215,8 +225,13 @@ const generateInvoicePDF = async (req, res) => {
 
     res.setHeader('Content-Type', 'application/pdf');
     const safeInvoiceName = (sale.invoiceNumber || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeInvoiceName}.pdf"`);
+    res.setHeader('Content-Disposition', `${req.previewMode ? 'inline' : 'attachment'}; filename="${safeInvoiceName}.pdf"`);
     doc.pipe(res);
+
+    // Render the invoice once per requested copy. Each additional copy starts on a fresh
+    // page so the printout contains numberOfCopies identical invoices.
+    for (let copy = 0; copy < numberOfCopies; copy++) {
+    if (copy > 0) doc.addPage();
 
     const bizName = settings?.businessName || 'Your Business';
     const bizAddr = settings?.address || '';
@@ -239,11 +254,14 @@ const generateInvoicePDF = async (req, res) => {
     const showItemUOM = isThermal ? printPrefs.showItemUOM !== false : printPrefs.showItemUOM !== false;
     const showItemMRP = isThermal ? printPrefs.showItemMRP !== false : true;
     const showItemDescription = isThermal ? printPrefs.showItemDescription !== false : printPrefs.printDescription !== false;
-    const showBatchNo = isThermal ? printPrefs.showBatchNo !== false : false;
-    const showExpDate = isThermal ? printPrefs.showExpDate !== false : false;
-    const showMfgDate = isThermal ? printPrefs.showMfgDate !== false : false;
-    const showSize = isThermal ? printPrefs.showSize !== false : false;
-    const showModelNo = isThermal ? printPrefs.showModelNo !== false : false;
+    // Item-detail toggles are honored in both thermal and regular/A4 mode using the same
+    // setting keys. In regular mode they are opt-in (default off) so the A4 layout stays
+    // compact unless the user explicitly enables a column/field.
+    const showBatchNo = isThermal ? printPrefs.showBatchNo !== false : printPrefs.showBatchNo === true;
+    const showExpDate = isThermal ? printPrefs.showExpDate !== false : printPrefs.showExpDate === true;
+    const showMfgDate = isThermal ? printPrefs.showMfgDate !== false : printPrefs.showMfgDate === true;
+    const showSize = isThermal ? printPrefs.showSize !== false : printPrefs.showSize === true;
+    const showModelNo = isThermal ? printPrefs.showModelNo !== false : printPrefs.showModelNo === true;
     const showSerialNo = isThermal ? printPrefs.showSerialNo !== false : printPrefs.showSerialNo === true;
     const showTotalItemQty = isThermal ? printPrefs.showTotalItemQty !== false : true;
     const showAmountDecimal = isThermal ? printPrefs.showAmountDecimal !== false : true;
@@ -435,6 +453,19 @@ const generateInvoicePDF = async (req, res) => {
             doc.text(formatAmount(item.sgst || 0, printPrefs, currency), marginLeft + 450, y, { width: 50, align: 'right' });
           }
           doc.text(formatAmount(item.amount, printPrefs, currency), marginLeft + (hasTax ? 500 : 360), y, { width: 60, align: 'right' });
+        }
+        // Optional per-item details (batch/model/exp/mfg/size) shown as a sub-line under
+        // the product name when their respective toggles are enabled.
+        const metaParts = [];
+        if (showBatchNo && item.batchNumber) metaParts.push(`Batch: ${item.batchNumber}`);
+        if (showModelNo && item.modelNumber) metaParts.push(`Model: ${item.modelNumber}`);
+        if (showExpDate && item.expiryDate) metaParts.push(`Exp: ${new Date(item.expiryDate).toLocaleDateString('en-IN')}`);
+        if (showMfgDate && item.manufacturingDate) metaParts.push(`Mfg: ${new Date(item.manufacturingDate).toLocaleDateString('en-IN')}`);
+        if (showSize && item.size) metaParts.push(`Size: ${item.size}`);
+        if (metaParts.length > 0) {
+          y += 11;
+          doc.font('Helvetica-Oblique').fontSize(7).fillColor('#666666').text(metaParts.join(', '), marginLeft, y, { width: 120 });
+          doc.font('Helvetica').fontSize(9).fillColor('#000000');
         }
       }
       y += isThermal ? 4 : 16;
@@ -654,6 +685,8 @@ const generateInvoicePDF = async (req, res) => {
         doc.image(qrBuffer, marginLeft, y + 10, { width: isThermal ? 50 : 70 });
       } catch (qrErr) {}
     }
+
+    } // end per-copy render loop
 
     doc.end();
   } catch (error) {
@@ -975,4 +1008,54 @@ const generatePurchasePDF = async (req, res) => {
   }
 };
 
-module.exports = { generateInvoicePDF, generatePurchasePDF };
+// Sample invoice used by the Settings → Print live preview so it renders through the
+// exact same engine as a real printed invoice.
+const buildSamplePreviewSale = () => ({
+  invoiceNumber: 'INV-001',
+  date: new Date(),
+  type: 'invoice',
+  customerName: 'Walk-in Customer',
+  customerPhone: '7878650749',
+  customerGst: '29AAACC1206D2ZB',
+  billingAddress: 'Kota, Rajasthan, 324005',
+  shippingAddress: 'Kota, Rajasthan, 324005',
+  transportMode: 'Road',
+  vehicleNo: 'RJ-20-AB-1234',
+  additionalField1: '',
+  additionalField2: '',
+  items: [
+    { productName: 'Brittania Choclate Cake', hsn: '12345678', quantity: 100, unit: 'Box', rate: 100, amount: 10000, gstRate: 0, description: 'Brittania Choclate Cake description', batchNumber: 'N1234', modelNumber: 'A12345', expiryDate: '06/2027', manufacturingDate: '10/06/2026', size: 'Med/32', mrp: 100, taxableAmount: 10000, cgst: 0, sgst: 0, serialNo: '', discountType: '', discountAmount: 0 },
+    { productName: 'Cadbury Chocolate', hsn: '34567890', quantity: 50, unit: 'Pac', rate: 150, amount: 7500, gstRate: 0, description: 'Cadbury cake description', batchNumber: 'N5678', modelNumber: 'B67890', expiryDate: '06/2027', manufacturingDate: '10/06/2026', size: 'Med/32', mrp: 150, taxableAmount: 7500, cgst: 0, sgst: 0, serialNo: '', discountType: '', discountAmount: 0 },
+  ],
+  taxableAmount: 17500,
+  discountOnInvoice: 0,
+  cgstTotal: 0,
+  sgstTotal: 0,
+  igstTotal: 0,
+  totalAmount: 17500,
+  paidAmount: 15000,
+  remainingBalance: 2500,
+  customer: { openingBalance: 2500 },
+  paymentStatus: 'partial',
+});
+
+const generateInvoicePreviewPDF = async (req, res) => {
+  try {
+    const settingsDoc = await Setting.findOne(getSettingQuery(req));
+    const settings = settingsDoc ? settingsDoc.toObject() : { preferences: {} };
+    settings.preferences = settings.preferences || {};
+    // Merge the live (possibly unsaved) print preferences sent from the Settings tab so
+    // the preview reflects toggles before they are saved.
+    if (req.body && req.body.print && typeof req.body.print === 'object') {
+      settings.preferences.print = { ...(settings.preferences.print || {}), ...req.body.print };
+    }
+    req.previewMode = true;
+    req.previewSale = buildSamplePreviewSale();
+    req.previewSettings = settings;
+    return generateInvoicePDF(req, res);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { generateInvoicePDF, generatePurchasePDF, generateInvoicePreviewPDF };

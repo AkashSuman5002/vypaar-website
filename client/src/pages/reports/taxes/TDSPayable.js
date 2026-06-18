@@ -4,6 +4,8 @@ import { toast } from 'react-toastify';
 import { reportAPI } from '../../../services/api';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 import { exportToExcel } from '../../../utils/exportUtils';
+import { useAuth } from '../../../context/AuthContext';
+import { PERIOD_OPTIONS, getPeriodRange } from '../../../components/reports/common/periodRange';
 
 const columns = [
   { key: 'date', label: 'Date', width: 'w-[110px]' },
@@ -20,12 +22,22 @@ const fyStart = new Date().getMonth() >= 3 ? `${currentYear}-04-01` : `${current
 const today = new Date().toISOString().split('T')[0];
 
 const TDSPayable = () => {
+  const { user } = useAuth();
+  const firmName = user?.businessName || 'My Company';
+  const [firm, setFirm] = useState(firmName);
+  const [period, setPeriod] = useState('custom');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState(fyStart);
   const [dateTo, setDateTo] = useState(today);
   const filteredData = data.filter(d => !search || Object.values(d).some(v => String(v).toLowerCase().includes(search.toLowerCase())));
+
+  const handlePeriodChange = (value) => {
+    setPeriod(value);
+    const range = getPeriodRange(value);
+    if (range) { setDateFrom(range.from); setDateTo(range.to); }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -51,27 +63,30 @@ const TDSPayable = () => {
       <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-200 dark:border-[#334155]">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <select className="appearance-none bg-white dark:bg-[#1E293B] border border-gray-300 dark:border-[#334155] rounded px-3 py-1.5 pr-7 text-sm text-gray-600 dark:text-[#94A3B8] min-w-[130px] cursor-pointer">
-              <option>This Month</option>
-              <option>Today</option>
-              <option>Yesterday</option>
-              <option>This Week</option>
-              <option>This Quarter</option>
-              <option>This Year</option>
-              <option>Custom</option>
+            <select
+              value={period}
+              onChange={(e) => handlePeriodChange(e.target.value)}
+              className="appearance-none bg-white dark:bg-[#1E293B] border border-gray-300 dark:border-[#334155] rounded px-3 py-1.5 pr-7 text-sm text-gray-600 dark:text-[#94A3B8] min-w-[130px] cursor-pointer"
+            >
+              {PERIOD_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 dark:text-[#64748B] pointer-events-none" />
           </div>
           <span className="text-xs text-gray-500 dark:text-[#64748B]">Between</span>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
+          <input type="date" value={dateFrom} onChange={(e) => { setPeriod('custom'); setDateFrom(e.target.value); }} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
           <span className="text-xs text-gray-500 dark:text-[#64748B]">To</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
+          <input type="date" value={dateTo} onChange={(e) => { setPeriod('custom'); setDateTo(e.target.value); }} className="border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B] rounded px-2 py-1.5 w-[120px] text-xs text-gray-600 dark:text-[#94A3B8]" />
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
-            <select className="appearance-none bg-white dark:bg-[#1E293B] border border-gray-300 dark:border-[#334155] rounded px-3 py-1.5 pr-7 text-xs text-gray-600 dark:text-[#94A3B8] min-w-[130px] cursor-pointer">
-              <option>ALL FIRMS</option>
-              <option>My Company</option>
+            <select
+              value={firm}
+              onChange={(e) => setFirm(e.target.value)}
+              className="appearance-none bg-white dark:bg-[#1E293B] border border-gray-300 dark:border-[#334155] rounded px-3 py-1.5 pr-7 text-xs text-gray-600 dark:text-[#94A3B8] min-w-[130px] cursor-pointer"
+            >
+              <option value={firmName}>{firmName}</option>
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 dark:text-[#64748B] pointer-events-none" />
           </div>

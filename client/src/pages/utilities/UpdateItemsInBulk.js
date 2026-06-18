@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Search, IndianRupee, RefreshCw } from 'lucide-react';
-import { productAPI } from '../../services/api';
+import { productAPI, utilityAPI } from '../../services/api';
 
 const TAX_TYPES = ['Included', 'Excluded'];
 const DISCOUNT_TYPES = ['Percentage', 'Value'];
@@ -52,8 +52,26 @@ const UpdateItemsInBulk = () => {
     if (toUpdate.length === 0) { toast.error('No changes to update'); return; }
     setSaving(true);
     try {
-      await Promise.all(toUpdate.map(id => productAPI.update(id, updates[id])));
-      toast.success(`Updated ${toUpdate.length} items successfully!`);
+      // Build the batch payload the backend (POST /utilities/bulk-update-items) expects.
+      // Map the page's pricing fields onto the canonical Product fields while preserving
+      // the page-specific fields (tax type, discount, etc.).
+      const payload = {
+        updates: toUpdate.map(id => {
+          const u = updates[id];
+          const item = { id };
+          if (u.category !== undefined) item.category = u.category;
+          if (u.purchasePrice !== undefined && u.purchasePrice !== '') item.costPrice = parseFloat(u.purchasePrice) || 0;
+          if (u.salePrice !== undefined && u.salePrice !== '') item.price = parseFloat(u.salePrice) || 0;
+          if (u.purchaseTaxType !== undefined) item.purchaseTaxType = u.purchaseTaxType;
+          if (u.saleTaxType !== undefined) item.saleTaxType = u.saleTaxType;
+          if (u.discount !== undefined && u.discount !== '') item.discount = parseFloat(u.discount) || 0;
+          if (u.discountType !== undefined) item.discountType = u.discountType;
+          if (u.taxRate !== undefined) item.taxRate = u.taxRate;
+          return item;
+        }),
+      };
+      const res = await utilityAPI.bulkUpdateItems(payload);
+      toast.success(res.data?.message || `Updated ${toUpdate.length} items successfully!`);
       setSelectedItems([]); setUpdates({});
       loadProducts();
     } catch (err) { toast.error(err.response?.data?.message || 'Update failed'); }

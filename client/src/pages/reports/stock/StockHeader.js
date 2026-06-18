@@ -1,8 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, Search, Download, Printer } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../../context/AuthContext';
 
-const StockHeader = ({ title, search, onSearchChange }) => (
+const StockHeader = ({ title, search, onSearchChange }) => {
+  const { user } = useAuth();
+  const firmName = user?.businessName || 'My Company';
+  const [firm, setFirm] = useState(firmName);
+
+  return (
   <>
     <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-200 dark:border-[#334155]">
       <div className="flex items-center gap-3">
@@ -25,9 +31,12 @@ const StockHeader = ({ title, search, onSearchChange }) => (
       </div>
       <div className="flex items-center gap-3">
         <div className="relative">
-          <select className="appearance-none bg-white dark:bg-[#1E293B] border border-gray-300 dark:border-[#334155] rounded px-3 py-1.5 pr-7 text-xs text-gray-600 dark:text-[#94A3B8] min-w-[130px] cursor-pointer">
-            <option>ALL FIRMS</option>
-            <option>My Company</option>
+          <select
+            value={firm}
+            onChange={(e) => setFirm(e.target.value)}
+            className="appearance-none bg-white dark:bg-[#1E293B] border border-gray-300 dark:border-[#334155] rounded px-3 py-1.5 pr-7 text-xs text-gray-600 dark:text-[#94A3B8] min-w-[130px] cursor-pointer"
+          >
+            <option value={firmName}>{firmName}</option>
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 dark:text-[#64748B] pointer-events-none" />
         </div>
@@ -48,6 +57,7 @@ const StockHeader = ({ title, search, onSearchChange }) => (
       </div>
     </div>
   </>
-);
+  );
+};
 
 export default StockHeader;

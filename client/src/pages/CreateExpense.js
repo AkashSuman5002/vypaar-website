@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import {
   Plus, X, Trash2, Save, Share2, ChevronDown, Loader2,
-  StickyNote, Camera, MessageSquare, Mail, Link2,
+  StickyNote, MessageSquare, Mail, Link2,
   Calculator, Delete, Settings as SettingsIcon, GripVertical,
 } from 'lucide-react';
 import { expenseAPI, fetchCsrfToken } from '../services/api';
@@ -13,21 +13,23 @@ import { generateShareContent, shareToWhatsApp, shareViaEmail, copyToClipboard }
 import useSettings from '../hooks/useSettings';
 
 const EXPENSE_CATEGORIES = [
-  'Office Supplies', 'Travel', 'Food & Beverages', 'Utilities', 'Rent',
-  'Salary', 'Marketing', 'Transportation', 'Maintenance', 'Legal Fees',
-  'Insurance', 'Internet', 'Telephone', 'Stationery', 'Repairs',
-  'Equipment', 'Software', 'Subscriptions', 'Taxes', 'Other',
+  'Electricity', 'Office Rent', 'Salary', 'Internet', 'Fuel',
+  'Repairs & Maintenance', 'Office Supplies', 'Marketing', 'Travel',
+  'Food & Refreshments', 'Printing & Stationery', 'Software Subscription',
+  'Professional Fees', 'Other',
 ];
-const PAYMENT_MODES = ['Cash', 'Bank', 'UPI', 'Cheque', 'Card', 'Credit', 'NEFT', 'RTGS', 'IMPS', 'Wallet'];
-const DEFAULT_PAYMENT_TYPES = ['Cash', 'Bank', 'UPI', 'Cheque'];
+const PAYMENT_MODES = ['Cash', 'Bank Transfer', 'UPI', 'Credit Card', 'Debit Card', 'Cheque', 'Wallet', 'NEFT', 'RTGS', 'IMPS'];
+const DEFAULT_PAYMENT_TYPES = ['Cash', 'Bank Transfer', 'UPI', 'Credit Card', 'Debit Card', 'Cheque', 'Wallet'];
 const GST_RATES = [0, 5, 12, 18, 28];
+
+// Shared, dark-mode-safe field styles for the compact top form.
+const EXP_INP = "w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors";
+const EXP_LBL = "block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1";
 
 const newItem = (id) => ({
   _id: id || Date.now() + Math.random(),
   item: '',
-  quantity: 0,
-  unit: '',
-  rate: 0,
+  rate: 0,      // the expense line price (no quantity — an expense bill has a price per line)
   amount: 0,
   gstRate: 0,
   gstAmount: 0,
@@ -37,7 +39,6 @@ const CreateExpense = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
-  const fileInputRef = useRef(null);
   const descInputRef = useRef(null);
   const { getPref } = useSettings();
 
@@ -47,11 +48,11 @@ const CreateExpense = () => {
   const [showDesc, setShowDesc] = useState(false);
   const [showPaymentMenu, setShowPaymentMenu] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
   const [availableTypes, setAvailableTypes] = useState(DEFAULT_PAYMENT_TYPES);
 
   const emptyForm = () => ({
-    category: '', expenseNo: '', date: new Date().toISOString().split('T')[0],
+    category: '', customCategory: '', paidTo: '', reference: '',
+    expenseNo: '', date: new Date().toISOString().split('T')[0],
     items: [newItem()], paymentType: 'Cash', gstEnabled: false,
     roundOffEnabled: true, roundOff: 0, description: '', notes: '', receiptImage: '',
   });
@@ -112,16 +113,18 @@ const CreateExpense = () => {
         await fetchCsrfToken();
         if (isEdit) {
           const { data } = await expenseAPI.getById(id);
+          const knownCat = EXPENSE_CATEGORIES.includes(data.category);
           const editFormData = {
-            category: data.category || '',
+            category: knownCat ? data.category : (data.category ? 'Other' : ''),
+            customCategory: knownCat ? '' : (data.category || ''),
+            paidTo: data.paidTo || '',
+            reference: data.reference || '',
             expenseNo: data.expenseNumber || '',
             date: data.date ? data.date.split('T')[0] : new Date().toISOString().split('T')[0],
             items: data.items?.length ? data.items.map((i, idx) => ({
               _id: Date.now() + idx,
               item: i.item || i.name || '',
-              quantity: i.quantity || i.qty || 0,
-              unit: i.unit || '',
-              rate: i.rate || i.price || 0,
+              rate: i.rate || i.price || i.amount || 0,
               amount: i.amount || 0,
               gstRate: i.gstRate || 0,
               gstAmount: i.gstAmount || 0,
@@ -158,12 +161,10 @@ const CreateExpense = () => {
   }, [id, isEdit]);
 
   const calculateItem = useCallback((item) => {
-    const qty = parseFloat(item.quantity) || 0;
-    const rate = parseFloat(item.rate) || 0;
-    const base = qty * rate;
+    const price = parseFloat(item.rate) || 0;
     const gstRate = parseFloat(item.gstRate) || 0;
-    const gstAmt = base * gstRate / 100;
-    const amount = base + gstAmt;
+    const gstAmt = price * gstRate / 100;
+    const amount = price + gstAmt;
     return { ...item, amount, gstAmount: gstAmt };
   }, []);
 
@@ -183,11 +184,7 @@ const CreateExpense = () => {
   };
 
   const totals = useMemo(() => {
-    const subtotal = form.items.reduce((s, i) => {
-      const qty = parseFloat(i.quantity) || 0;
-      const rate = parseFloat(i.rate) || 0;
-      return s + qty * rate;
-    }, 0);
+    const subtotal = form.items.reduce((s, i) => s + (parseFloat(i.rate) || 0), 0);
     const taxTotal = form.gstEnabled ? form.items.reduce((s, i) => s + (parseFloat(i.gstAmount) || 0), 0) : 0;
     let total = subtotal + taxTotal;
     let roundOff = 0;
@@ -231,28 +228,36 @@ const CreateExpense = () => {
   };
 
   const handleSave = async (action = 'save') => {
+    if (submitting) return; // prevent duplicate submissions
     if (!form.category) { toast.error('Expense category is required'); return; }
+    if (form.category === 'Other' && !form.customCategory.trim()) { toast.error('Enter the custom category name'); return; }
+    if (!form.date) { toast.error('Date is required'); return; }
+    if (!form.paymentType) { toast.error('Payment type is required'); return; }
     if (form.items.length === 0 || form.items.every(i => !i.item)) {
       toast.error('At least one item is required');
       return;
     }
+    if (totals.total < 0) { toast.error('Amount cannot be negative'); return; }
+    const category = form.category === 'Other' ? (form.customCategory.trim() || 'Other') : form.category;
     setSubmitting(true);
     try {
       const items = form.items.filter(i => i.item).map(i => ({
         item: i.item,
-        quantity: parseFloat(i.quantity) || 0,
+        quantity: 1, // expenses have no quantity; kept as 1 for backend compatibility
         rate: parseFloat(i.rate) || 0,
         amount: parseFloat(i.amount) || 0,
         gstRate: parseFloat(i.gstRate) || 0,
         gstAmount: parseFloat(i.gstAmount) || 0,
       }));
       const payload = {
-        category: form.category,
+        category,
+        paidTo: form.paidTo,
+        reference: form.reference,
         expenseNumber: form.expenseNo,
         date: form.date,
         items,
         description: form.description,
-        notes: form.description,
+        notes: form.notes || form.description,
         paymentMethod: (form.paymentType || 'Cash').toLowerCase(),
         totalAmount: totals.total,
         amount: totals.total,
@@ -336,40 +341,48 @@ const CreateExpense = () => {
         </div>
       </div>
 
-      {/* Top Form Section */}
+      {/* Top Form Section — compact ERP layout */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">
           <div>
-            <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-              Expense Category <span className="text-red-500">*</span>
-            </label>
+            <label className={EXP_LBL}>Expense No.</label>
+            <input value={form.expenseNo} onChange={e => setForm({ ...form, expenseNo: e.target.value })} className={EXP_INP} />
+          </div>
+          <div>
+            <label className={EXP_LBL}>Date <span className="text-red-500">*</span></label>
+            <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className={EXP_INP} />
+          </div>
+          <div>
+            <label className={EXP_LBL}>Expense Category <span className="text-red-500">*</span></label>
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
-              className="w-full px-3 py-2.5 text-sm border-2 border-blue-400 dark:border-blue-500 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-            >
+              className={EXP_INP + ' border-blue-400 dark:border-blue-500'}>
               <option value="">Select Category</option>
               {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-              placeholder="Or type custom category"
-              className="w-full mt-2 px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            />
           </div>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-slate-500 dark:text-slate-400 w-24 shrink-0 text-right">Expense No</label>
-              <input value={form.expenseNo} onChange={e => setForm({ ...form, expenseNo: e.target.value })}
-                className="flex-1 px-3 py-2 text-sm border-b border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-slate-500 dark:text-slate-400 w-24 shrink-0 text-right">Date</label>
-              <div className="flex-1 relative">
-                <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border-b border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
+          <div>
+            <label className={EXP_LBL}>Paid To</label>
+            <input value={form.paidTo} onChange={e => setForm({ ...form, paidTo: e.target.value })}
+              placeholder="Vendor / party (e.g. Jio Fiber)" className={EXP_INP} />
           </div>
+          <div>
+            <label className={EXP_LBL}>Payment Type <span className="text-red-500">*</span></label>
+            <select value={form.paymentType} onChange={e => setForm({ ...form, paymentType: e.target.value })} className={EXP_INP}>
+              {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={EXP_LBL}>Reference No.</label>
+            <input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })}
+              placeholder="UPI / Cheque / Txn ID" className={EXP_INP} />
+          </div>
+          {form.category === 'Other' && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className={EXP_LBL}>Custom Category Name</label>
+              <input value={form.customCategory} onChange={e => setForm({ ...form, customCategory: e.target.value })}
+                placeholder="Enter a category name" className={EXP_INP} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -380,10 +393,9 @@ const CreateExpense = () => {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-[10px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-700/50">
                 <th className="px-2 py-3 text-center w-10">#</th>
-                <th className="px-2 py-3 text-left min-w-[200px]">ITEM</th>
-                <th className="px-2 py-3 text-center w-24">QTY</th>
-                <th className="px-2 py-3 text-right w-32">PRICE/UNIT</th>
-                <th className="px-2 py-3 text-right w-32">AMOUNT</th>
+                <th className="px-2 py-3 text-left min-w-[260px]">ITEM</th>
+                <th className="px-2 py-3 text-right w-40">PRICE</th>
+                <th className="px-2 py-3 text-right w-40">AMOUNT</th>
                 <th className="px-2 py-3 w-10">
                   <button onClick={addRow} className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Add row">
                     <Plus className="w-4 h-4" />
@@ -418,12 +430,8 @@ const CreateExpense = () => {
                     )}
                   </td>
                   <td className="px-2 py-2 align-top">
-                    <input type="number" min="0" step="0.001" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)}
-                      className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500"
-                    />
-                  </td>
-                  <td className="px-2 py-2 align-top">
                     <input type="number" min="0" step="0.01" value={item.rate} onChange={e => updateItem(idx, 'rate', e.target.value)}
+                      placeholder="0.00"
                       className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500"
                     />
                   </td>
@@ -448,9 +456,6 @@ const CreateExpense = () => {
                   </button>
                 </td>
                 <td className="px-2 py-3 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider">TOTAL</td>
-                <td className="px-2 py-3 text-right text-sm font-medium text-slate-700 dark:text-slate-200 tabular-nums">
-                  {form.items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0)}
-                </td>
                 <td className="px-2 py-3 text-right text-sm font-bold text-slate-900 dark:text-slate-100">
                   {fmt(totals.total)}
                 </td>
@@ -466,15 +471,6 @@ const CreateExpense = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Add buttons */}
           <div className="space-y-3">
-            <div className="flex flex-col gap-1.5 max-w-[240px]">
-              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment Type</label>
-              <select value={form.paymentType} onChange={e => setForm({ ...form, paymentType: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              >
-                {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-
             <div className="relative">
               <button onClick={() => setShowPaymentMenu(!showPaymentMenu)}
                 className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-1 py-1 transition-colors"
@@ -510,16 +506,6 @@ const CreateExpense = () => {
               >
                 <StickyNote className="w-3.5 h-3.5" />
                 {form.description ? '✓ Description Added' : 'ADD DESCRIPTION'}
-              </button>
-            </div>
-
-            <div>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={e => { setImageFile(e.target.files[0]); toast.success('Image added'); }} className="hidden" />
-              <button onClick={() => fileInputRef.current?.click()}
-                className={`inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-all ${imageFile ? 'text-emerald-700 border border-emerald-200 bg-emerald-50' : 'text-slate-700 border border-slate-200 hover:border-blue-300 hover:bg-blue-50'}`}
-              >
-                <Camera className="w-3.5 h-3.5" />
-                {imageFile ? `✓ ${imageFile.name.slice(0, 16)}...` : 'ADD IMAGE'}
               </button>
             </div>
 

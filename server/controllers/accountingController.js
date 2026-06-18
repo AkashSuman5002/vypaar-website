@@ -419,7 +419,22 @@ const getBankAccounts = async (req, res) => {
 const createBankAccount = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const { name, openingBalance, accountNumber, ifscCode, bankName, upiId, accountHolderName, printQr, printDetails, acceptPayments } = req.body;
+    const body = req.body || {};
+    // The client sends the details nested under `metadata` and the balance as `balance`;
+    // older callers used top-level fields and `openingBalance`. Accept both so the saved
+    // account actually keeps its details/balance.
+    const meta = body.metadata || {};
+    const pick = (k) => (meta[k] !== undefined ? meta[k] : body[k]);
+    const name = body.name;
+    const balanceInput = body.balance !== undefined ? body.balance : body.openingBalance;
+    const accountNumber = pick('accountNumber');
+    const ifscCode = pick('ifscCode');
+    const bankName = pick('bankName');
+    const upiId = pick('upiId');
+    const accountHolderName = pick('accountHolderName');
+    const printQr = pick('printQr');
+    const printDetails = pick('printDetails');
+    const acceptPayments = pick('acceptPayments');
     const userId = req.user._id;
     const lastAccount = await Account.findOne({ ...baseFilter, category: 'bank' }).sort({ code: -1 });
     const nextCode = lastAccount ? String(parseInt(lastAccount.code) + 1) : '1003';
@@ -430,7 +445,7 @@ const createBankAccount = async (req, res) => {
       code: nextCode,
       type: 'asset',
       category: 'bank',
-      balance: parseFloat(openingBalance) || 0,
+      balance: parseFloat(balanceInput) || 0,
       description: accountNumber ? `${bankName || ''} - ${accountNumber}` : '',
       metadata: { accountNumber, ifscCode, bankName, upiId, accountHolderName, printQr, printDetails, acceptPayments },
       isActive: true,

@@ -96,7 +96,12 @@ const getSales = async (req, res) => {
       else filter.type = type;
     } else filter.type = 'invoice';
     if (status) filter.status = status;
-    if (paymentStatus) filter.paymentStatus = paymentStatus;
+    // Support comma-separated values (e.g. Payment-In requests 'unpaid,partial'),
+    // mirroring the `type` handling above. Otherwise the literal string matches nothing.
+    if (paymentStatus) {
+      if (paymentStatus.includes(',')) filter.paymentStatus = { $in: paymentStatus.split(',') };
+      else filter.paymentStatus = paymentStatus;
+    }
     if (customer) filter.customer = customer;
     if (branch) filter.branch = branch;
 
@@ -317,10 +322,15 @@ const createSale = async (req, res) => {
     if (invoiceNumber) {
       const exists = await Sale.findOne({ ...baseFilter, invoiceNumber, type: { $in: [type || 'invoice', 'order', 'quotation', 'challan', 'estimate', 'proforma'] } });
       if (exists) {
+        // Each transaction type regenerates against its own configured prefix.
+        const txnPrefs = setting?.preferences?.transaction || {};
         let prefix;
-        if (type === 'order') prefix = setting?.preferences?.transaction?.saleOrderPrefix || 'SO-';
-        else if (type === 'proforma') prefix = setting?.preferences?.transaction?.proformaPrefix || 'PRO-';
-        else prefix = setting?.preferences?.transaction?.salePrefix || setting?.invoicePrefix || 'INV-';
+        if (type === 'order') prefix = txnPrefs.saleOrderPrefix || 'SO-';
+        else if (type === 'proforma') prefix = txnPrefs.proformaPrefix || 'PRO-';
+        else if (type === 'estimate' || type === 'quotation') prefix = txnPrefs.estimatePrefix || 'EST-';
+        else if (type === 'challan') prefix = txnPrefs.deliveryChallanPrefix || 'DC-';
+        else if (type === 'return' || type === 'credit_note') prefix = txnPrefs.creditNotePrefix || 'CN-';
+        else prefix = txnPrefs.salePrefix || setting?.invoicePrefix || 'INV-';
         const allSales = await Sale.find({ ...baseFilter, type: type || 'invoice' }).select('invoiceNumber').lean();
         let maxNum = 0;
         for (const s of allSales) {
@@ -349,6 +359,16 @@ const createSale = async (req, res) => {
     // Collected here, fired AFTER the transaction commits (external side effects).
     const lowStockAlerts = [];
 
+    // Derive the payment fields from the amounts so they are always self-consistent.
+    // The old `remainingBalance || totalAmount` treated 0 as falsy, which stored the FULL
+    // amount as outstanding on every fully-paid invoice (and inflated the customer's
+    // ledger by the same amount). Compute outstanding = total - paid instead.
+    const finalPaidAmount = paidAmount || 0;
+    const finalRemainingBalance = Math.round(((totalAmount || 0) - finalPaidAmount) * 100) / 100;
+    const finalPaymentStatus = finalRemainingBalance <= 0
+      ? 'paid'
+      : (finalPaidAmount > 0 ? 'partial' : 'unpaid');
+
     const sale = new Sale({
       user: req.user._id,
       business: req.businessId,
@@ -364,9 +384,9 @@ const createSale = async (req, res) => {
       roundOff, roundOffEnabled, roundingMethod,
       totalAmount,
       payments: payments || [],
-      paidAmount: paidAmount || 0,
-      remainingBalance: remainingBalance || totalAmount,
-      paymentStatus: paymentStatus || 'unpaid',
+      paidAmount: finalPaidAmount,
+      remainingBalance: finalRemainingBalance,
+      paymentStatus: finalPaymentStatus,
       eWayBill, transportMode, vehicleNo, poNumber,
       notes, internalNotes, termsConditions,
       tcsAmount, tdsAmount,
@@ -492,7 +512,7 @@ const createSale = async (req, res) => {
     const salesRevenue = await Account.findOne({ ...baseFilter, code: '4001' });
     const receivable = await Account.findOne({ ...baseFilter, code: '1101' });
     if (salesRevenue && receivable) {
-      const debitLine = { account: receivable._id, accountName: receivable.name, accountType: receivable.type, debit: remainingBalance || totalAmount, credit: 0 };
+      const debitLine = { account: receivable._id, accountName: receivable.name, accountType: receivable.type, debit: finalRemainingBalance, credit: 0 };
       const creditLine = { account: salesRevenue._id, accountName: salesRevenue.name, accountType: salesRevenue.type, debit: 0, credit: totalAmount };
       const lines = [debitLine, creditLine];
       if (paidAmount > 0) {
@@ -500,7 +520,7 @@ const createSale = async (req, res) => {
         let cash = await Account.findOne({ ...baseFilter, code: payCode });
         if (!cash) cash = await Account.findOne({ ...baseFilter, code: '1001' });
         if (cash) {
-          debitLine.debit = remainingBalance;
+          debitLine.debit = finalRemainingBalance;
     // Calculate expiry date for estimates/quotations
     if ((sale.type === 'estimate' || sale.type === 'quotation') && validityDays > 0) {
       const expiry = new Date(sale.date || new Date());
@@ -559,7 +579,7 @@ const createSale = async (req, res) => {
     }
 
     if (customer) {
-      await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $inc: { openingBalance: remainingBalance || totalAmount } }, { new: true, session });
+      await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $inc: { openingBalance: finalRemainingBalance } }, { new: true, session });
     }
 
     // Earn loyalty points
@@ -613,7 +633,7 @@ const createSale = async (req, res) => {
       invoiceId: sale._id,
       date: date || new Date(),
       totalAmount,
-      remainingBalance: remainingBalance || totalAmount,
+      remainingBalance: finalRemainingBalance,
     }).catch(() => {});
 
     createNotification(req.user._id, 'new_sale', 'New Sale Created',
@@ -1328,7 +1348,7 @@ const convertToInvoice = async (req, res) => {
     );
 
     if (invoiceData.customer) {
-      await Customer.findOneAndUpdate({ _id: invoiceData.customer, user: req.user._id }, { $inc: { openingBalance: invoiceData.remainingBalance || invoiceData.totalAmount } }, { new: true, session });
+      await Customer.findOneAndUpdate({ _id: invoiceData.customer, user: req.user._id }, { $inc: { openingBalance: (invoiceData.remainingBalance != null ? invoiceData.remainingBalance : ((invoiceData.totalAmount || 0) - (invoiceData.paidAmount || 0))) } }, { new: true, session });
     }
 
     // Create journal entry for converted invoice
@@ -1414,7 +1434,10 @@ const receivePayment = async (req, res) => {
     const setting = await Setting.findOne(getSettingQuery(req));
     const linkPaymentsToInvoice = setting?.preferences?.transaction?.linkPaymentsToInvoice === true;
 
-    const prefix = setting?.preferences?.transaction?.paymentInPrefix || setting?.receiptPrefix || 'RCP-';
+    // Payment-in receipt: prefer the dedicated payment-in prefix, then the
+    // generic receipt prefix, both configured under preferences.transaction.
+    const txnPrefs = setting?.preferences?.transaction || {};
+    const prefix = txnPrefs.paymentInPrefix || txnPrefs.receiptPrefix || 'RCP-';
     const lastReceipt = await Receipt.findOne(baseFilter).sort({ createdAt: -1 });
     let nextNum = 1;
     if (lastReceipt && lastReceipt.receiptNumber) {

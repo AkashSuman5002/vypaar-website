@@ -23,6 +23,7 @@ const GSTR1 = () => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dates, setDates] = useState({ start: '', end: '' });
+  const [nonTaxAsExempted, setNonTaxAsExempted] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,43 +47,56 @@ const GSTR1 = () => {
     ? invoices.filter(i => i.customer && i.customerName !== 'Walk-in')
     : invoices.filter(i => !i.customer || i.customerName === 'Walk-in');
 
-  const mappedData = filtered.map((inv) => ({
-    gstin: inv.customer?.gstNumber || 'Unregistered',
-    partyName: inv.customerName || 'Walk-in',
-    invoiceNo: inv.invoiceNumber,
-    date: new Date(inv.date).toLocaleDateString(),
-    value: inv.totalAmount,
-    taxableValue: inv.taxableAmount,
-    cgst: inv.cgstTotal,
-    sgst: inv.sgstTotal,
-    igst: inv.igstTotal,
-  }));
+  const mappedData = filtered.map((inv) => {
+    const tax = (inv.cgstTotal || 0) + (inv.sgstTotal || 0) + (inv.igstTotal || 0);
+    const isNonTax = tax === 0;
+    return {
+      gstin: nonTaxAsExempted && isNonTax ? 'Exempted' : (inv.customer?.gstNumber || 'Unregistered'),
+      partyName: inv.customerName || 'Walk-in',
+      invoiceNo: inv.invoiceNumber,
+      date: new Date(inv.date).toLocaleDateString(),
+      value: inv.totalAmount,
+      // When considering non-tax as exempted, exclude exempt taxable value from the figures.
+      taxableValue: nonTaxAsExempted && isNonTax ? 0 : inv.taxableAmount,
+      cgst: inv.cgstTotal,
+      sgst: inv.sgstTotal,
+      igst: inv.igstTotal,
+    };
+  });
+
+  // Recompute summary client-side so the flag is reflected in the displayed totals.
+  const displaySummary = summary && {
+    ...summary,
+    totalTaxable: mappedData.reduce((s, r) => s + (r.taxableValue || 0), 0),
+    totalGST: mappedData.reduce((s, r) => s + (r.cgst || 0) + (r.sgst || 0) + (r.igst || 0), 0),
+  };
 
   if (loading) return <div className="bg-white dark:bg-[#0F172A] min-h-full"><LoadingSpinner /></div>;
 
   return (
     <div className="bg-white dark:bg-[#0F172A] min-h-full">
       <GSTFilterBar title="GSTR 1" onDateChange={setDate} startDate={dates.start} endDate={dates.end}
+        nonTaxAsExempted={nonTaxAsExempted} onNonTaxChange={setNonTaxAsExempted}
         onExcel={() => exportToExcel(mappedData, columns, 'GSTR1 Report')}
         onPrint={() => printReport('GSTR1 Report', columns, mappedData)} />
       <div className="px-6 pt-6">
-        {summary && (
+        {displaySummary && (
           <div className="grid grid-cols-4 gap-4 mb-4">
             <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-3">
               <p className="text-xs text-gray-500 dark:text-[#64748B]">Total Invoices</p>
-              <p className="text-lg font-bold text-gray-900 dark:text-[#F8FAFC]">{summary.totalInvoices}</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-[#F8FAFC]">{displaySummary.totalInvoices}</p>
             </div>
             <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-3">
               <p className="text-xs text-gray-500 dark:text-[#64748B]">Total Taxable Value</p>
-              <p className="text-lg font-bold text-gray-900 dark:text-[#F8FAFC]">₹{summary.totalTaxable.toLocaleString()}</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-[#F8FAFC]">₹{displaySummary.totalTaxable.toLocaleString()}</p>
             </div>
             <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-3">
               <p className="text-xs text-gray-500 dark:text-[#64748B]">Total GST</p>
-              <p className="text-lg font-bold text-blue-600 dark:text-[#3B82F6]">₹{summary.totalGST.toLocaleString()}</p>
+              <p className="text-lg font-bold text-blue-600 dark:text-[#3B82F6]">₹{displaySummary.totalGST.toLocaleString()}</p>
             </div>
             <div className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-[#334155] rounded-xl p-3">
               <p className="text-xs text-gray-500 dark:text-[#64748B]">B2B / B2C</p>
-              <p className="text-lg font-bold text-gray-900 dark:text-[#F8FAFC]">{summary.b2bCount} / {summary.b2cCount}</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-[#F8FAFC]">{displaySummary.b2bCount} / {displaySummary.b2cCount}</p>
             </div>
           </div>
         )}

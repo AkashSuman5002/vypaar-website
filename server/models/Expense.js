@@ -1,10 +1,16 @@
 const mongoose = require('mongoose');
 
 const expenseItemSchema = new mongoose.Schema({
+  // `name`/`price` kept for backward compatibility; the form sends `item`/`rate`.
   name: { type: String, trim: true },
+  item: { type: String, trim: true },
   quantity: { type: Number, default: 1 },
+  unit: { type: String, trim: true },
   price: { type: Number, default: 0 },
+  rate: { type: Number, default: 0 },
   amount: { type: Number, default: 0 },
+  gstRate: { type: Number, default: 0 },
+  gstAmount: { type: Number, default: 0 },
 }, { _id: false });
 
 const expenseSchema = mongoose.Schema({
@@ -19,6 +25,7 @@ const expenseSchema = mongoose.Schema({
   date: { type: Date, default: Date.now },
   paymentMethod: { type: String, default: 'cash' },
   reference: { type: String },
+  paidTo: { type: String, trim: true },
   notes: { type: String },
   items: [expenseItemSchema],
   isRecurring: { type: Boolean, default: false },

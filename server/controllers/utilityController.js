@@ -367,7 +367,7 @@ router.post('/bulk-update-items', authorize('products:manage'), async (req, res)
       return res.status(400).json({ message: 'Updates array is required' });
     }
     const results = [];
-    const allowedFields = ['name', 'price', 'costPrice', 'stock', 'minStock', 'hsnCode', 'unit', 'description', 'category', 'images'];
+    const allowedFields = ['name', 'price', 'costPrice', 'stock', 'minStock', 'hsnCode', 'unit', 'description', 'category', 'images', 'salePrice', 'purchasePrice', 'saleTaxType', 'purchaseTaxType', 'discount', 'discountType', 'taxRate'];
     for (const update of updates) {
       const { id, ...rawData } = update;
       const data = {};

@@ -123,6 +123,8 @@ const CalendarPage = LazyLoad(lazy(() => import('../pages/CalendarPage')));
 const StaffPage = LazyLoad(lazy(() => import('../pages/StaffPage')));
 const Manufacturing = LazyLoad(lazy(() => import('../pages/Manufacturing')));
 const GstFiling = LazyLoad(lazy(() => import('../pages/GstFiling')));
+const LoyaltyPoints = LazyLoad(lazy(() => import('../pages/LoyaltyPoints')));
+const Currencies = LazyLoad(lazy(() => import('../pages/Currencies')));
 
 const ImportItems = LazyLoad(lazy(() => import('../pages/utilities/ImportItems')));
 const SetupMyBusiness = LazyLoad(lazy(() => import('../pages/utilities/SetupMyBusiness')));
@@ -233,6 +235,8 @@ const AppRoutes = () => {
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/manufacturing" element={<Manufacturing />} />
         <Route path="/gst-filing" element={<GstFiling />} />
+        <Route path="/loyalty-points" element={<LoyaltyPoints />} />
+        <Route path="/currencies" element={<Currencies />} />
 
         <Route path="/utilities/import-items" element={<ImportItems />} />
         <Route path="/utilities/setup-business" element={<SetupMyBusiness />} />

@@ -64,7 +64,7 @@ const PurchaseBills = () => {
   useEffect(() => { loadData(); }, [loadData]);
 
   const calcItemAmount = (item) => {
-    const qty = parseFloat(item.qty) || 0;
+    const qty = parseInt(item.qty, 10) || 0;
     const price = parseFloat(item.price) || 0;
     const taxPct = parseFloat(item.tax) || 0;
     const subtotal = qty * price;
@@ -111,7 +111,7 @@ const PurchaseBills = () => {
     if (items.length === 0 || items.every(i => !i.product)) { toast.error('At least one item is required'); return; }
     const mappedItems = items.map(item => ({
       productName: item.product || '',
-      quantity: parseFloat(item.qty) || 1,
+      quantity: parseInt(item.qty, 10) || 1,
       rate: parseFloat(item.price) || 0,
       gstRate: parseFloat(item.tax) || 0,
       amount: parseFloat(item.amount) || 0,
@@ -552,9 +552,10 @@ const PurchaseBills = () => {
                               </div>
                             </td>
                             <td className="px-3 py-2">
-                              <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)}
-                                min="1"
-                                className="w-16 px-3 py-2 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', parseInt(e.target.value, 10) || 0)}
+                                min="1" step="1"
+                                onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                className="no-spinner w-16 px-3 py-2 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                               />
                             </td>
                             <td className="px-3 py-2">

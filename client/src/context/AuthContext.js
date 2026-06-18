@@ -76,6 +76,33 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  // --- Passwordless OTP ---
+  const finishAuth = (data) => {
+    localStorage.setItem('user', JSON.stringify(data));
+    setUser(data);
+    clearCache();
+    fetchCsrfToken().catch(() => null);
+    setTimeout(() => loadActiveBusiness(), 500);
+    return data;
+  };
+  // Returns the server response (may include devOtp in non-production).
+  const registerStart = async ({ name, email, phone }) => {
+    const { data } = await authAPI.registerStart({ name, email, phone });
+    return data;
+  };
+  const registerVerify = async ({ email, otp }) => {
+    const { data } = await authAPI.registerVerify({ email, otp });
+    return finishAuth(data);
+  };
+  const loginOtp = async (identifier) => {
+    const { data } = await authAPI.loginOtp({ identifier });
+    return data;
+  };
+  const loginVerify = async ({ identifier, otp }) => {
+    const { data } = await authAPI.loginVerify({ identifier, otp });
+    return finishAuth(data);
+  };
+
   const logout = async () => {
     try {
       await authAPI.logout();
@@ -88,7 +115,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, registerStart, registerVerify, loginOtp, loginVerify }}>
       {children}
     </AuthContext.Provider>
   );

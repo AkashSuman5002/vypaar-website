@@ -31,27 +31,26 @@ const ViewReturn = () => {
     load();
   }, [id]);
 
-  const handlePrint = () => {
-    const printContent = document.getElementById('invoice-print-area');
-    if (!printContent) return;
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${sale.invoiceNumber || 'Invoice'}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
-            @media print { body { padding: 0; } }
-          </style>
-        </head>
-        <body>${printContent.innerHTML}</body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+  // Print the settings-driven PDF (pdfController) so the printout matches Print Settings.
+  const handlePrint = async () => {
+    try {
+      const res = await saleAPI.getPDF(sale._id);
+      const type = res.headers?.['content-type'] || 'application/pdf';
+      const url = URL.createObjectURL(new Blob([res.data], { type }));
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = url;
+      iframe.onload = () => {
+        try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { /* ignore */ }
+      };
+      document.body.appendChild(iframe);
+      setTimeout(() => { URL.revokeObjectURL(url); iframe.remove(); }, 60000);
+    } catch { toast.error('Failed to print'); }
   };
 
   const handleDownloadPDF = async () => {

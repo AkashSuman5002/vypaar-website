@@ -35,6 +35,7 @@ const Expenses = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -327,17 +328,7 @@ const Expenses = () => {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => {
-                        const detail = [
-                          `Category: ${exp.category}`,
-                          `Expense No: ${exp.expenseNumber}`,
-                          `Date: ${formatDate(exp.date)}`,
-                          `Payment: ${exp.paymentMethod}`,
-                          `Amount: ${formatCurrency(exp.totalAmount)}`,
-                          exp.description ? `Description: ${exp.description}` : '',
-                        ].filter(Boolean).join('\n');
-                        alert(detail);
-                      }}
+                      <button onClick={() => setViewing(exp)}
                         className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="View"><Eye className="w-3.5 h-3.5" /></button>
                       {exp.approvalStatus === 'pending' && (
                         <div className="flex items-center gap-1">
@@ -561,6 +552,135 @@ const Expenses = () => {
                 <button onClick={handleSave}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm"
                 ><Save className="w-4 h-4" /> Save</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* View Expense Modal */}
+      <AnimatePresence>
+        {viewing && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewing(null)}
+            />
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
+              className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-elevated w-full max-w-lg max-h-[92vh] overflow-hidden border border-slate-200/80"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Expense Details</h3>
+                  <p className="text-xs text-slate-500 mt-0.5 font-mono">{viewing.expenseNumber}</p>
+                </div>
+                <button onClick={() => setViewing(null)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                ><X className="w-4.5 h-4.5 text-slate-500" /></button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[70vh] space-y-5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-start gap-2.5">
+                    <Tag className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</p>
+                      <p className="text-sm text-slate-900 mt-0.5">{viewing.category || '-'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <Calendar className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</p>
+                      <p className="text-sm text-slate-900 mt-0.5">{formatDate(viewing.date)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <Wallet className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment Mode</p>
+                      <p className="text-sm text-slate-900 mt-0.5 capitalize">{viewing.paymentMethod || '-'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <CheckCircle className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</p>
+                      <p className="text-sm text-slate-900 mt-0.5 capitalize">{viewing.approvalStatus || 'approved'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {viewing.party && (
+                  <div className="flex items-start gap-2.5">
+                    <Receipt className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Party</p>
+                      <p className="text-sm text-slate-900 mt-0.5">{viewing.party}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Items */}
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 mb-3">Items</h4>
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-50">
+                          {['#', 'Item', 'Qty', 'Price/Unit', 'Amount'].map(h => (
+                            <th key={h} className="px-3 py-2.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(viewing.items?.length ? viewing.items : viewing.description ? [{ name: viewing.description, quantity: 1, price: viewing.totalAmount, amount: viewing.totalAmount }] : []).map((it, i) => (
+                          <tr key={i} className="border-t border-slate-100">
+                            <td className="px-3 py-2 text-sm text-slate-500">{i + 1}</td>
+                            <td className="px-3 py-2 text-sm text-slate-900">{it.name || '-'}</td>
+                            <td className="px-3 py-2 text-sm text-slate-600">{it.quantity ?? 1}</td>
+                            <td className="px-3 py-2 text-sm text-slate-600 text-right">{formatCurrency(it.price || 0)}</td>
+                            <td className="px-3 py-2 text-sm font-semibold text-slate-900 text-right">{formatCurrency(it.amount || 0)}</td>
+                          </tr>
+                        ))}
+                        {!(viewing.items?.length) && !viewing.description && (
+                          <tr><td colSpan={5} className="px-3 py-4 text-center text-sm text-slate-400">No items</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {viewing.taxAmount != null && (
+                  <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-600">Tax</span>
+                    <span className="text-sm font-semibold text-slate-900">{formatCurrency(viewing.taxAmount)}</span>
+                  </div>
+                )}
+
+                {viewing.description && (
+                  <div className="flex items-start gap-2.5">
+                    <FileText className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Notes</p>
+                      <p className="text-sm text-slate-700 mt-0.5">{viewing.description}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-900">Total Amount</span>
+                  <span className="text-lg font-bold text-blue-600">{formatCurrency(viewing.totalAmount)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                <button onClick={() => setViewing(null)}
+                  className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                >Close</button>
               </div>
             </motion.div>
           </motion.div>

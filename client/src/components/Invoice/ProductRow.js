@@ -126,8 +126,9 @@ const ProductRow = ({ item, index, products, onChange, onRemove, errors }) => {
           min="0"
           step="1"
           value={item.quantity}
-          onChange={(e) => onChange(index, { quantity: Math.max(0, parseInt(e.target.value) || 0) })}
-          className="w-16 px-2 py-2 border border-slate-200/80 dark:border-gray-700/80 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          onChange={(e) => onChange(index, { quantity: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+          onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+          className="w-16 px-2 py-2 border border-slate-200/80 dark:border-gray-700/80 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 no-spinner"
         />
       </td>
 

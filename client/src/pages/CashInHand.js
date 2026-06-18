@@ -23,10 +23,12 @@ const CashInHand = () => {
     setLoading(true);
     try {
       const [txnRes, balRes] = await Promise.all([
-        transactionAPI.getAll(),
+        transactionAPI.getAll({ limit: 1000 }),
         transactionAPI.getBalance(),
       ]);
-      const cashTxns = (txnRes.data || []).filter(t => t.type === 'cash_in' || t.type === 'cash_out');
+      // getTransactions returns { data: [...], pagination }, so unwrap the array.
+      const txns = Array.isArray(txnRes.data) ? txnRes.data : (txnRes.data?.data || []);
+      const cashTxns = txns.filter(t => t.type === 'cash_in' || t.type === 'cash_out');
       setAdjustments(cashTxns.map(t => ({
         id: t._id,
         type: t.type === 'cash_in' ? 'add' : 'reduce',

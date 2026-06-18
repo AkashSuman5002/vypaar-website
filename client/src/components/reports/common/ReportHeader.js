@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Calendar, Download, FileText, Search, ChevronDown } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext';
 
-const ReportHeader = ({ title, description, onDateChange, startDate, endDate, search, onSearchChange, onDownload, onPrint, children }) => (
+const ReportHeader = ({ title, description, onDateChange, startDate, endDate, search, onSearchChange, onDownload, onPrint, children }) => {
+  const { user } = useAuth();
+  const firmName = user?.businessName || 'My Company';
+  const [firm, setFirm] = useState(firmName);
+
+  return (
   <div className="sticky top-0 z-10 bg-[#0F172A] pt-6 pb-4 px-6 border-b border-[#1E293B] space-y-4">
     <div className="flex items-start justify-between">
       <div>
@@ -16,9 +22,12 @@ const ReportHeader = ({ title, description, onDateChange, startDate, endDate, se
           <input type="date" value={endDate} onChange={(e) => onDateChange?.('end', e.target.value)} className="w-[110px] bg-transparent text-xs text-[#F8FAFC] border-none outline-none" />
         </div>
         <div className="relative">
-          <select className="appearance-none bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 pr-7 text-xs text-[#F8FAFC] cursor-pointer min-w-[110px]">
-            <option>ALL FIRMS</option>
-            <option>My Company</option>
+          <select
+            value={firm}
+            onChange={(e) => setFirm(e.target.value)}
+            className="appearance-none bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 pr-7 text-xs text-[#F8FAFC] cursor-pointer min-w-[110px]"
+          >
+            <option value={firmName}>{firmName}</option>
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#64748B] pointer-events-none" />
         </div>
@@ -44,6 +53,7 @@ const ReportHeader = ({ title, description, onDateChange, startDate, endDate, se
       </div>
     )}
   </div>
-);
+  );
+};
 
 export default ReportHeader;

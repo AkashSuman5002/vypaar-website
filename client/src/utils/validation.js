@@ -74,6 +74,26 @@ export const formatMobile = (value) => {
 };
 
 // ============================================================
+// GENERAL PHONE VALIDATION (permissive)
+// Accepts 10-digit mobiles, toll-free (e.g. 1800-102-8080 / 1860-xxx-xxxx),
+// landlines with STD codes, and optional +country code. Keeps separators
+// (dashes/spaces/parentheses/+) so numbers like "1800-102-8080" display as typed.
+// ============================================================
+export const formatPhone = (value) => {
+  return value.replace(/[^0-9+\-() ]/g, '').slice(0, 18);
+};
+
+export const validatePhone = (value) => {
+  if (!value || !value.trim()) return { valid: true, error: '' };
+  const cleaned = value.replace(/[^0-9]/g, '');
+  // 8–12 digits covers landlines, mobiles (10), toll-free (11), and +91-prefixed (12).
+  if (cleaned.length < 8 || cleaned.length > 12) {
+    return { valid: false, error: 'Enter a valid phone number' };
+  }
+  return { valid: true, error: '' };
+};
+
+// ============================================================
 // EMAIL VALIDATION
 // ============================================================
 export const validateEmail = (value) => {

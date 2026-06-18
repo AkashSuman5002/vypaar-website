@@ -23,6 +23,59 @@ const BUSINESS_CATEGORIES = [
   'Furniture', 'Hardware & Paints', 'Agriculture', 'Other',
 ];
 
+// Defined at module scope (NOT inside EditProfile). If these lived inside the
+// component, every keystroke re-created them, remounting the <input> and dropping
+// focus after each character. Module scope keeps their identity stable across renders.
+const InputField = ({ label, field, type = 'text', placeholder, required, form, errors, onChangeField }) => {
+  const fieldErrors = errors[field] || '';
+  const hasError = !!fieldErrors;
+
+  const handleChangeLocal = (e) => {
+    let value = e.target.value;
+    if (field === 'phone') value = formatMobile(value);
+    else if (field === 'gstNumber') value = formatGST(value);
+    else if (field === 'pincode') value = formatPincode(value);
+    onChangeField(field, value);
+  };
+
+  return (
+    <div>
+      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <input
+        type={type}
+        value={form[field] || ''}
+        onChange={handleChangeLocal}
+        placeholder={placeholder}
+        required={required}
+        className={`w-full px-3 py-2.5 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors ${
+          hasError ? 'border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-gray-600'
+        }`}
+      />
+      {hasError && <p className="mt-1 text-xs text-red-500">{fieldErrors}</p>}
+    </div>
+  );
+};
+
+const SelectField = ({ label, field, options, placeholder, form, onChangeField }) => (
+  <div>
+    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
+    <select
+      value={form[field] || ''}
+      onChange={(e) => onChangeField(field, e.target.value)}
+      className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+    >
+      <option value="">{placeholder || 'Select'}</option>
+      {options.map(opt => (
+        <option key={typeof opt === 'string' ? opt : opt.value} value={typeof opt === 'string' ? opt : opt.value}>
+          {typeof opt === 'string' ? opt : opt.label}
+        </option>
+      ))}
+    </select>
+  </div>
+);
+
 const EditProfile = () => {
   const navigate = useNavigate();
   const { settings, reload } = useSettings();
@@ -83,6 +136,12 @@ const EditProfile = () => {
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Used by InputField/SelectField: update the value and clear that field's error.
+  const handleFieldChange = (field, value) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+    setErrors(prev => (prev[field] ? { ...prev, [field]: '' } : prev));
   };
 
   const handleLogoChange = (e) => {
@@ -151,59 +210,6 @@ const EditProfile = () => {
     }
   };
 
-  const InputField = ({ label, field, type = 'text', placeholder, required }) => {
-    const fieldErrors = errors[field] || '';
-    const hasError = !!fieldErrors;
-
-    const handleChangeLocal = (e) => {
-      let value = e.target.value;
-      if (field === 'phone') value = formatMobile(value);
-      else if (field === 'gstNumber') value = formatGST(value);
-      else if (field === 'pincode') value = formatPincode(value);
-      handleChange(field, value);
-      if (errors[field]) {
-        setErrors(prev => ({ ...prev, [field]: '' }));
-      }
-    };
-
-    return (
-      <div>
-        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-          {label} {required && <span className="text-red-500">*</span>}
-        </label>
-        <input
-          type={type}
-          value={form[field] || ''}
-          onChange={handleChangeLocal}
-          placeholder={placeholder}
-          required={required}
-          className={`w-full px-3 py-2.5 text-sm border rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors ${
-            hasError ? 'border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-gray-600'
-          }`}
-        />
-        {hasError && <p className="mt-1 text-xs text-red-500">{fieldErrors}</p>}
-      </div>
-    );
-  };
-
-  const SelectField = ({ label, field, options, placeholder }) => (
-    <div>
-      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
-      <select
-        value={form[field] || ''}
-        onChange={(e) => handleChange(field, e.target.value)}
-        className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-      >
-        <option value="">{placeholder || 'Select'}</option>
-        {options.map(opt => (
-          <option key={typeof opt === 'string' ? opt : opt.value} value={typeof opt === 'string' ? opt : opt.value}>
-            {typeof opt === 'string' ? opt : opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-slate-50 dark:bg-gray-900">
       {/* Header */}
@@ -259,10 +265,10 @@ const EditProfile = () => {
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4">Business Details</h2>
             <div className="space-y-4">
-              <InputField label="Business Name" field="businessName" placeholder="Enter business name" required />
-              <InputField label="Phone Number" field="phone" type="tel" placeholder="Enter phone number" />
-              <InputField label="GSTIN" field="gstNumber" placeholder="Enter GSTIN" />
-              <InputField label="Email ID" field="email" type="email" placeholder="Enter Email ID" />
+              <InputField label="Business Name" field="businessName" placeholder="Enter business name" required form={form} errors={errors} onChangeField={handleFieldChange} />
+              <InputField label="Phone Number" field="phone" type="tel" placeholder="Enter phone number" form={form} errors={errors} onChangeField={handleFieldChange} />
+              <InputField label="GSTIN" field="gstNumber" placeholder="Enter GSTIN" form={form} errors={errors} onChangeField={handleFieldChange} />
+              <InputField label="Email ID" field="email" type="email" placeholder="Enter Email ID" form={form} errors={errors} onChangeField={handleFieldChange} />
               <div>
                 <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Account Books Beginning Date</label>
                 <input
@@ -279,13 +285,13 @@ const EditProfile = () => {
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4">More Details</h2>
             <div className="space-y-4">
-              <SelectField label="Business Type" field="businessType" options={BUSINESS_TYPES} placeholder="Select Business Type" />
-              <SelectField label="Business Category" field="businessCategory" options={BUSINESS_CATEGORIES} placeholder="Select Business Category" />
+              <SelectField label="Business Type" field="businessType" options={BUSINESS_TYPES} placeholder="Select Business Type" form={form} onChangeField={handleChange} />
+              <SelectField label="Business Category" field="businessCategory" options={BUSINESS_CATEGORIES} placeholder="Select Business Category" form={form} onChangeField={handleChange} />
               <div>
                 <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">State</label>
                 <StateDropdown value={form.state} onChange={(value) => handleChange('state', value)} placeholder="Select State" />
               </div>
-              <InputField label="Pincode" field="pincode" placeholder="Enter Pincode" />
+              <InputField label="Pincode" field="pincode" placeholder="Enter Pincode" form={form} errors={errors} onChangeField={handleFieldChange} />
             </div>
           </div>
 

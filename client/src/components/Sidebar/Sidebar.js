@@ -8,7 +8,7 @@ import {
   Package, ShoppingCart, ChevronLeft, ChevronDown, LayoutDashboard, Search, Upload, Download, BarChart3, Settings, ScanBarcode,
   ArrowRightLeft, BookOpen, Wrench, Factory, FileBadge,
   FileSpreadsheet, Barcode, Layers, ClipboardCheck, Calendar, ShieldCheck, Database, Warehouse,
-  ScrollText, Truck as TruckIcon, Headphones,
+  ScrollText, Truck as TruckIcon, Headphones, Award, Coins,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import useSettings from '../../hooks/useSettings';
@@ -19,6 +19,7 @@ const partiesSubLinks = [
   { to: '/suppliers', label: 'Suppliers', icon: Users },
   { to: '/party-groups', label: 'Party Groups', icon: Layers },
   { to: '/parties/details', label: 'Party Details', icon: Users },
+  { to: '/loyalty-points', label: 'Loyalty Points', icon: Award },
   { to: '/parties/whatsapp', label: 'WhatsApp Connect', icon: MessageCircle },
   { to: '/parties/network', label: 'Vyapar Network', icon: Network },
 ];
@@ -86,6 +87,7 @@ const utilitiesSubLinks = [
   { to: '/utilities/export-tally', label: 'Exports To Tally', icon: Download },
   { to: '/utilities/export-items', label: 'Export Items', icon: FileSpreadsheet },
   { to: '/utilities/verify-data', label: 'Verify My Data', icon: ClipboardCheck },
+  { to: '/currencies', label: 'Currencies', icon: Coins },
   { to: '/utilities/close-financial-year', label: 'Close Financial Year', icon: Calendar },
 ];
 
@@ -93,6 +95,7 @@ const searchItems = [
   { name: 'Home', path: '/' },
   { name: 'Parties', path: '/parties/details' },
   { name: 'Party Details', path: '/parties/details' },
+  { name: 'Loyalty Points', path: '/loyalty-points' },
   { name: 'Party Groups', path: '/party-groups' },
   { name: 'WhatsApp Connect', path: '/parties/whatsapp' },
   { name: 'Vyapar Network', path: '/parties/network' },
@@ -145,6 +148,7 @@ const searchItems = [
   { name: 'Exports To Tally', path: '/utilities/export-tally' },
   { name: 'Export Items', path: '/utilities/export-items' },
   { name: 'Verify My Data', path: '/utilities/verify-data' },
+  { name: 'Currencies', path: '/currencies' },
   { name: 'Close Financial Year', path: '/utilities/close-financial-year' },
   { name: 'Calendar', path: '/calendar' },
   { name: 'Staff', path: '/staff' },

@@ -68,7 +68,8 @@ const Header = ({ onMenuClick }) => {
   const clearAllNotifications = async () => {
     setNotifications([]);
     setUnreadCount(0);
-    try { await notificationAPI.markAllAsRead(); } catch {}
+    // Permanently delete (not just mark read) so they don't reappear on reload.
+    try { await notificationAPI.clearAll(); } catch {}
   };
 
   const loadNotifications = async () => {

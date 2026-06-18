@@ -20,6 +20,10 @@ const productSchema = new mongoose.Schema({
   mrp: { type: Number, default: 0, min: 0 },
   description: { type: String, trim: true },
   type: { type: String, enum: ['product', 'service'], default: 'product' },
+  // Service-specific options (additive; products keep the defaults and are unaffected).
+  showInSales: { type: Boolean, default: true },
+  showInPurchases: { type: Boolean, default: true },
+  trackProfitability: { type: Boolean, default: false },
   batches: [{
     batchNo: { type: String, trim: true },
     expiryDate: { type: Date },
@@ -30,6 +34,8 @@ const productSchema = new mongoose.Schema({
   serialNumberTracking: { type: Boolean, default: false },
   warehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Godown', index: true },
   storageLocation: { type: String, trim: true, default: '' },
+  // Values for item-level custom fields defined in Settings → Item (keyed by field id).
+  customFields: { type: mongoose.Schema.Types.Mixed, default: {} },
 }, { timestamps: true });
 
 productSchema.index({ user: 1, name: 1 });

@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext';
 
-const ReportFilters = ({ search, onSearchChange, children, period, onPeriodChange, dateStart, dateEnd, onDateChange }) => (
+const ReportFilters = ({ search, onSearchChange, children, period, onPeriodChange, dateStart, dateEnd, onDateChange }) => {
+  const { user } = useAuth();
+  const firmName = user?.businessName || 'My Company';
+  const [firm, setFirm] = useState(firmName);
+
+  return (
   <div className="px-6 py-3 space-y-3">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -28,9 +34,12 @@ const ReportFilters = ({ search, onSearchChange, children, period, onPeriodChang
       </div>
       <div className="flex items-center gap-2">
         <div className="relative">
-          <select className="appearance-none bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 pr-7 text-xs text-[#F8FAFC] cursor-pointer min-w-[110px]">
-            <option>ALL FIRMS</option>
-            <option>My Company</option>
+          <select
+            value={firm}
+            onChange={(e) => setFirm(e.target.value)}
+            className="appearance-none bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 pr-7 text-xs text-[#F8FAFC] cursor-pointer min-w-[110px]"
+          >
+            <option value={firmName}>{firmName}</option>
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#64748B] pointer-events-none" />
         </div>
@@ -50,6 +59,7 @@ const ReportFilters = ({ search, onSearchChange, children, period, onPeriodChang
       </div>
     )}
   </div>
-);
+  );
+};
 
 export default ReportFilters;

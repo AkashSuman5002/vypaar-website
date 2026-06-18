@@ -48,7 +48,7 @@ const getExpenseById = async (req, res) => {
 const createExpense = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const { expenseNumber, category, description, amount: rawAmount, tax: rawTax, date, paymentMethod, reference, notes, isRecurring, recurringInterval } = req.body;
+    const { expenseNumber, category, description, amount: rawAmount, tax: rawTax, date, paymentMethod, reference, notes, paidTo, items, receiptImage, isRecurring, recurringInterval } = req.body;
     const amount = rawAmount ?? (req.body.totalAmount ? req.body.totalAmount - (rawTax || 0) : 0);
     const tax = rawTax ?? 0;
     const totalAmount = amount + tax;
@@ -58,7 +58,8 @@ const createExpense = async (req, res) => {
     [expense] = await Expense.create([
       getCreateData(req, { expenseNumber, category: category || 'Other', description,
         amount, tax, totalAmount, date, paymentMethod: paymentMethod || 'cash',
-        reference, notes, isRecurring, recurringInterval }),
+        reference, notes, paidTo, items: items || [], receiptImage,
+        isRecurring, recurringInterval }),
     ], { session });
 
     const txnType = paymentMethod === 'cash' ? 'cash_out' : 'bank_out';
@@ -144,14 +145,14 @@ const updateExpense = async (req, res) => {
     const expense = await Expense.findOne({ ...baseFilter, _id: req.params.id });
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
 
-    const { amount: rawAmount, tax: rawTax, category, description, paymentMethod, totalAmount: sentTotal, date, expenseNumber, items, roundOff } = req.body;
+    const { amount: rawAmount, tax: rawTax, category, description, paymentMethod, totalAmount: sentTotal, date, expenseNumber, items, roundOff, reference, paidTo, receiptImage, notes } = req.body;
     const amount = rawAmount ?? (sentTotal ? sentTotal - (rawTax || 0) : expense.amount);
     const tax = rawTax ?? expense.tax;
     const totalAmount = amount + tax;
 
     let updated;
     await withTransaction(async (session) => {
-    updated = await Expense.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, { date, expenseNumber, category, description, paymentMethod, items, roundOff, amount, tax, totalAmount }, { new: true, session });
+    updated = await Expense.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, { date, expenseNumber, category, description, paymentMethod, items, roundOff, amount, tax, totalAmount, reference, paidTo, receiptImage, notes }, { new: true, session });
 
     const txnType = (paymentMethod || expense.paymentMethod) === 'cash' ? 'cash_out' : 'bank_out';
     await Transaction.findOneAndUpdate(

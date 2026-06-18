@@ -2,6 +2,32 @@ const Product = require('../models/Product');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { getSettings } = require('../utils/settingsHelper');
 
+const { ROLE_PERMISSIONS } = require('../middleware/authorize');
+
+// Whether the requesting user is allowed to see cost/purchase price.
+// Mirrors the authorize() permission model: owners, wildcard perms, admin roles,
+// or anyone holding products:manage may view cost. Everyone else has it masked.
+const canSeeCost = (req) => {
+  const user = req.user;
+  if (!user) return false;
+  if (user.isOwner) return true;
+  const userPerms = user.permissions || [];
+  if (userPerms.includes('*') || userPerms.includes('products:manage')) return true;
+  if (user.role === 'admin' || user.role === 'Admin') return true;
+  const rolePerms = ROLE_PERMISSIONS[user.role] || [];
+  if (rolePerms.includes('*') || rolePerms.includes('products:manage')) return true;
+  return false;
+};
+
+// Remove cost/purchase-price fields from an outgoing product payload.
+const stripCost = (product) => {
+  if (!product) return product;
+  const obj = typeof product.toObject === 'function' ? product.toObject() : { ...product };
+  delete obj.costPrice;
+  delete obj.purchasePrice;
+  return obj;
+};
+
 const getProducts = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
@@ -26,8 +52,11 @@ const getProducts = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    // Mask cost/purchase price for users who lack cost-view permission.
+    const data = canSeeCost(req) ? products : products.map(stripCost);
+
     res.json({
-      data: products,
+      data,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -46,7 +75,7 @@ const createProduct = async (req, res) => {
     if (prefs.item.enableItem === false) {
       return res.status(400).json({ message: 'Item creation is disabled in settings' });
     }
-    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp, openingStock } = req.body;
+    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp, openingStock, customFields } = req.body;
     const type = itemType === 'Service' ? 'service' : 'product';
     // A service must never carry inventory: force inventory-related values regardless of request.
     const inventoryFields = type === 'service'
@@ -94,6 +123,7 @@ const createProduct = async (req, res) => {
       warehouse: warehouse || undefined,
       storageLocation, modelNo, size, serialNo, batchNo,
       expiryDate, mfgDate, cgst, sgst, igst, barcode, mrp,
+      customFields: (customFields && typeof customFields === 'object') ? customFields : {},
       ...inventoryFields,
     });
     res.status(201).json(product);
@@ -108,7 +138,7 @@ const updateProduct = async (req, res) => {
     const product = await Product.findOne({ ...baseFilter, _id: req.params.id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
     const prefs = await getSettings(req);
-    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp, openingStock } = req.body;
+    const { name, itemType, category, price, costPrice, stock, unit, gstRate, sku, brand, hsn, description, image, supplier, warehouse, storageLocation, modelNo, size, serialNo, batchNo, expiryDate, mfgDate, cgst, sgst, igst, minStock, barcode, mrp, openingStock, customFields } = req.body;
     const type = itemType !== undefined ? (itemType === 'Service' ? 'service' : 'product') : product.type;
     const merged = {
       name: name !== undefined ? name : product.name,
@@ -139,6 +169,7 @@ const updateProduct = async (req, res) => {
       minStock: minStock !== undefined ? minStock : product.minStock,
       barcode: barcode !== undefined ? barcode : product.barcode,
       mrp: mrp !== undefined ? mrp : product.mrp,
+      customFields: (customFields !== undefined && customFields && typeof customFields === 'object') ? customFields : product.customFields,
     };
     // A service must never carry inventory: force inventory-related fields,
     // so switching an item to Service also clears its existing inventory.
@@ -201,7 +232,8 @@ const getProductById = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const product = await Product.findOne({ ...baseFilter, _id: req.params.id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
-    res.json(product);
+    // Mask cost/purchase price for users who lack cost-view permission.
+    res.json(canSeeCost(req) ? product : stripCost(product));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

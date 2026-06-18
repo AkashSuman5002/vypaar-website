@@ -5,9 +5,12 @@ const {
   getSalesByCustomer, convertToInvoice, receivePayment, generateEWayBill, updateDelivery,
   generateEInvoice,
 } = require('../controllers/saleController');
-const { generateInvoicePDF } = require('../controllers/pdfController');
+const { generateInvoicePDF, generateInvoicePreviewPDF } = require('../controllers/pdfController');
 const { authorize } = require('../middleware/authorize');
 const router = express.Router();
+
+// Live print-settings preview: renders a sample invoice through the real PDF engine.
+router.post('/preview-pdf', authorize('sales:view'), generateInvoicePreviewPDF);
 
 router.route('/')
   .get(authorize('sales:view'), getSales)

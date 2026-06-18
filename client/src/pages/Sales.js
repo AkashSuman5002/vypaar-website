@@ -137,7 +137,32 @@ const Sales = () => {
     catch { toast.error('Conversion failed'); }
   };
 
+  // Print the settings-driven PDF (pdfController) so the printout matches Print Settings,
+  // identical to the invoice/document view pages. (Previously this built its own HTML that
+  // ignored print settings.)
   const handlePrint = async (sale) => {
+    try {
+      const res = await saleAPI.getPDF(sale._id);
+      const type = res.headers?.['content-type'] || 'application/pdf';
+      const url = URL.createObjectURL(new Blob([res.data], { type }));
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = url;
+      iframe.onload = () => {
+        try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { /* ignore */ }
+      };
+      document.body.appendChild(iframe);
+      setTimeout(() => { URL.revokeObjectURL(url); iframe.remove(); }, 60000);
+    } catch { toast.error('Failed to print'); }
+  };
+
+  // eslint-disable-next-line no-unused-vars
+  const handlePrintHtmlLegacy = async (sale) => {
     let bizName = 'Your Business', bizAddr = '', bizPhone = '', bizEmail = '', bizGst = '', bizLogo = '';
     try {
       const { data } = await settingAPI.get();

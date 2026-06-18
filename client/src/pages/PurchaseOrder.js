@@ -67,7 +67,7 @@ const PurchaseOrder = () => {
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   const calcItemAmount = (item) => {
-    const qty = parseFloat(item.qty) || 0;
+    const qty = parseInt(item.qty, 10) || 0;
     const price = parseFloat(item.price) || 0;
     const taxPct = parseFloat(item.tax) || 0;
     return qty * price * (1 + taxPct / 100);
@@ -110,7 +110,7 @@ const PurchaseOrder = () => {
       totalAmount: grandTotal,
       items: items.map(item => ({
         product: item.product, productName: item.product,
-        quantity: parseFloat(item.qty) || 0, rate: parseFloat(item.price) || 0,
+        quantity: parseInt(item.qty, 10) || 0, rate: parseFloat(item.price) || 0,
         gstRate: parseFloat(item.tax) || 0, amount: parseFloat(item.amount) || 0,
       })),
     };
@@ -488,8 +488,9 @@ const PurchaseOrder = () => {
                                 placeholder="Item name" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2" />
                             </td>
                             <td className="px-3 py-2">
-                              <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)} min="1"
-                                className="w-16 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2" />
+                              <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', parseInt(e.target.value, 10) || 0)} min="1" step="1"
+                                onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                className="no-spinner w-16 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2" />
                             </td>
                             <td className="px-3 py-2">
                               <select value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}
@@ -594,17 +595,18 @@ const PurchaseOrder = () => {
                           <td className="px-4 py-2.5 text-sm text-center text-emerald-600">{item.receivedQuantity}</td>
                           <td className="px-4 py-2.5 text-sm text-center text-amber-600 font-medium">{item.pendingQuantity}</td>
                           <td className="px-4 py-2.5">
-                            <input type="number" min="0" max={item.pendingQuantity}
+                            <input type="number" min="0" step="1" max={item.pendingQuantity}
                               value={item.newReceive}
+                              onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
                               onChange={e => {
-                                const val = Math.min(parseInt(e.target.value) || 0, item.pendingQuantity);
+                                const val = Math.min(parseInt(e.target.value, 10) || 0, item.pendingQuantity);
                                 setReceiveForm(prev => {
                                   const items = [...prev.items];
                                   items[idx] = { ...items[idx], newReceive: val };
                                   return { ...prev, items };
                                 });
                               }}
-                              className="w-full px-3 py-1.5 text-sm text-center border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="no-spinner w-full px-3 py-1.5 text-sm text-center border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                               placeholder="0" />
                           </td>
                         </tr>

@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { LayoutDashboard, RefreshCw, Sliders, Pencil, Trash2 } from 'lucide-react';
+import { LayoutDashboard, RefreshCw, Sliders, Pencil, Trash2, Landmark } from 'lucide-react';
 import EmptyState from '../components/UI/EmptyState';
 import FeatureCard from '../components/CashBank/FeatureCard';
 import Modal from '../components/UI/Modal';
 import FormField from '../components/CashBank/FormField';
 import { loanAccountAPI } from '../services/api';
+
+// Shared dark-mode-safe field styles.
+const INP = "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500";
 
 const LoanAccounts = () => {
   const [loans, setLoans] = useState([]);
@@ -26,6 +29,7 @@ const LoanAccounts = () => {
       setLoans(Array.isArray(res.data) ? res.data.map(a => ({
         id: a._id, accountName: a.name, currentBalance: String(a.balance || 0),
         lenderBank: a.metadata?.lenderBank || '', accountNumber: a.metadata?.accountNumber || '',
+        interestRate: a.metadata?.interestRate || '', termDuration: a.metadata?.termDuration || '',
       })) : []);
     } catch { /* ignore */ }
     finally { setLoading(false); }
@@ -36,7 +40,10 @@ const LoanAccounts = () => {
   const handleChange = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const handleSave = async () => {
-    if (!form.accountName || !form.currentBalance) return;
+    if (!form.accountName || !form.currentBalance) {
+      toast.error('Account name and current balance are required');
+      return;
+    }
     try {
       const payload = {
         name: form.accountName,
@@ -47,6 +54,12 @@ const LoanAccounts = () => {
         processingFee: form.processingFee,
         description: form.description,
         termDuration: form.termDuration,
+        // Also nest under metadata so the generic update path persists these too.
+        metadata: {
+          accountNumber: form.accountNumber, lenderBank: form.lenderBank,
+          interestRate: form.interestRate, processingFee: form.processingFee,
+          termDuration: form.termDuration,
+        },
       };
       if (editing) {
         await loanAccountAPI.update(editing.id, payload);
@@ -75,12 +88,12 @@ const LoanAccounts = () => {
       accountNumber: loan.accountNumber || '',
       currentBalance: loan.currentBalance || '',
       loanReceivedIn: 'cash',
-      interestRate: '',
+      interestRate: loan.interestRate || '',
       processingFee: '',
       lenderBank: loan.lenderBank || '',
       description: '',
       balanceAsOf: new Date().toISOString().split('T')[0],
-      termDuration: '',
+      termDuration: loan.termDuration || '',
       processingFeePaidFrom: 'cash',
     });
     setModalOpen(true);
@@ -97,25 +110,23 @@ const LoanAccounts = () => {
     }
   };
 
+  const addBtn = (
+    <button
+      onClick={() => { setEditing(null); setModalOpen(true); }}
+      className="px-4 py-2 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm bg-rose-500 hover:bg-rose-600"
+    >
+      + Add Loan Account
+    </button>
+  );
+
   if (!loading && loans.length === 0 && !modalOpen) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 p-6">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
         <EmptyState
           icon={
-            <svg width="110" height="90" viewBox="0 0 110 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="15" y="25" width="80" height="55" rx="6" fill="#E5E7EB" stroke="#D1D5DB" strokeWidth="1" />
-              <rect x="22" y="32" width="66" height="8" rx="2" fill="#D1D5DB" />
-              <rect x="22" y="44" width="66" height="3" rx="1.5" fill="#E5E7EB" />
-              <rect x="22" y="50" width="50" height="3" rx="1.5" fill="#E5E7EB" />
-              <rect x="22" y="56" width="35" height="3" rx="1.5" fill="#E5E7EB" />
-              <rect x="22" y="65" width="20" height="8" rx="2" fill="#D1D5DB" />
-              <rect x="46" y="65" width="20" height="8" rx="2" fill="#D1D5DB" />
-              <rect x="70" y="65" width="18" height="8" rx="2" fill="#D1D5DB" />
-              <rect x="35" y="10" width="40" height="18" rx="4" fill="#F3F4F6" stroke="#D1D5DB" strokeWidth="1" />
-              <rect x="42" y="15" width="10" height="8" rx="1" fill="#9CA3AF" />
-              <rect x="56" y="15" width="12" height="8" rx="1" fill="#9CA3AF" />
-              <rect x="45" y="17" width="4" height="4" rx="1" fill="white" />
-            </svg>
+            <div className="w-20 h-20 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center">
+              <Landmark className="w-9 h-9 text-rose-500" />
+            </div>
           }
           title="Manage Your Loan Accounts"
           subtitle="Add your loan accounts and check all loan transactions at one place"
@@ -139,88 +150,32 @@ const LoanAccounts = () => {
           </div>
           <button
             onClick={() => setModalOpen(true)}
-            className="px-6 py-2.5 text-white text-sm font-semibold rounded-md transition-colors shadow-sm"
-            style={{ backgroundColor: '#FF2D55' }}
+            className="px-6 py-2.5 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm bg-rose-500 hover:bg-rose-600"
           >
             + Add Loan Account
           </button>
         </EmptyState>
+        {renderModal()}
       </motion.div>
     );
   }
 
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 p-6">
-      {loans.length > 0 && (
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-xl font-semibold text-gray-900">Loan Accounts</h1>
-            <button
-              onClick={() => { setEditing(null); setModalOpen(true); }}
-              className="px-4 py-2 text-white text-sm font-semibold rounded-md transition-colors shadow-sm"
-              style={{ backgroundColor: '#FF2D55' }}
-            >
-              + Add Loan Account
-            </button>
-          </div>
-          <div className="space-y-3">
-            {loans.map((loan) => (
-              <div key={loan.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-900">{loan.accountName}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{loan.lenderBank || 'Loan Account'}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900">
-                      ₹{parseFloat(loan.currentBalance || 0).toLocaleString()}
-                    </span>
-                    <button onClick={() => handleEdit(loan)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDelete(loan.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }} title={editing ? 'Edit Loan Account' : 'Add Loan Account'} size="lg">
+  function renderModal() {
+    return (
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }} title={editing ? 'Edit Loan Account' : 'Add Loan Account'} size="xl">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-4">
             <FormField label="Account Name" required>
-              <input
-                type="text"
-                value={form.accountName}
-                onChange={handleChange('accountName')}
-                placeholder="Enter account name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="text" value={form.accountName} onChange={handleChange('accountName')} placeholder="Enter account name" className={INP} />
             </FormField>
             <FormField label="Account Number">
-              <input
-                type="text"
-                value={form.accountNumber}
-                onChange={handleChange('accountNumber')}
-                placeholder="Enter account number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="text" value={form.accountNumber} onChange={handleChange('accountNumber')} placeholder="Enter account number" className={INP} />
             </FormField>
             <FormField label="Current Balance" required>
-              <input
-                type="number"
-                value={form.currentBalance}
-                onChange={handleChange('currentBalance')}
-                placeholder="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="number" value={form.currentBalance} onChange={handleChange('currentBalance')} placeholder="0" className={INP} />
             </FormField>
             <FormField label="Loan received In">
-              <select
-                value={form.loanReceivedIn}
-                onChange={handleChange('loanReceivedIn')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
-              >
+              <select value={form.loanReceivedIn} onChange={handleChange('loanReceivedIn')} className={INP}>
                 <option value="cash">Cash</option>
                 <option value="bank">Bank</option>
                 <option value="cheque">Cheque</option>
@@ -228,66 +183,27 @@ const LoanAccounts = () => {
               </select>
             </FormField>
             <FormField label="Interest Rate (%)">
-              <input
-                type="number"
-                value={form.interestRate}
-                onChange={handleChange('interestRate')}
-                placeholder="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="number" value={form.interestRate} onChange={handleChange('interestRate')} placeholder="0" className={INP} />
             </FormField>
             <FormField label="Processing Fee">
-              <input
-                type="number"
-                value={form.processingFee}
-                onChange={handleChange('processingFee')}
-                placeholder="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="number" value={form.processingFee} onChange={handleChange('processingFee')} placeholder="0" className={INP} />
             </FormField>
           </div>
           <div className="space-y-4">
             <FormField label="Lender Bank">
-              <input
-                type="text"
-                value={form.lenderBank}
-                onChange={handleChange('lenderBank')}
-                placeholder="Enter lender bank name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="text" value={form.lenderBank} onChange={handleChange('lenderBank')} placeholder="Enter lender bank name" className={INP} />
             </FormField>
             <FormField label="Description">
-              <textarea
-                value={form.description}
-                onChange={handleChange('description')}
-                placeholder="Enter description"
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
-              />
+              <textarea value={form.description} onChange={handleChange('description')} placeholder="Enter description" rows={2} className={INP + ' resize-none'} />
             </FormField>
             <FormField label="Balance as of">
-              <input
-                type="date"
-                value={form.balanceAsOf}
-                onChange={handleChange('balanceAsOf')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="date" value={form.balanceAsOf} onChange={handleChange('balanceAsOf')} className={INP} />
             </FormField>
             <FormField label="Term Duration (in Months)">
-              <input
-                type="number"
-                value={form.termDuration}
-                onChange={handleChange('termDuration')}
-                placeholder="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <input type="number" value={form.termDuration} onChange={handleChange('termDuration')} placeholder="0" className={INP} />
             </FormField>
             <FormField label="Processing Fee Paid From">
-              <select
-                value={form.processingFeePaidFrom}
-                onChange={handleChange('processingFeePaidFrom')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
-              >
+              <select value={form.processingFeePaidFrom} onChange={handleChange('processingFeePaidFrom')} className={INP}>
                 <option value="cash">Cash</option>
                 <option value="existing_bank">Existing Bank Accounts</option>
                 <option value="add_new_bank">Add New Bank Account</option>
@@ -295,22 +211,69 @@ const LoanAccounts = () => {
             </FormField>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
-          <button
-            onClick={() => setModalOpen(false)}
-            className="px-5 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-          >
+        <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+          <button onClick={() => { setModalOpen(false); setEditing(null); }}
+            className="px-5 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
             Cancel
           </button>
-          <button
-            onClick={handleSave}
-            className="px-5 py-2 text-sm font-semibold text-white rounded-md transition-colors shadow-sm"
-            style={{ backgroundColor: '#2563EB' }}
-          >
+          <button onClick={handleSave}
+            className="px-5 py-2 text-sm font-semibold text-white rounded-lg transition-colors shadow-sm bg-blue-600 hover:bg-blue-700">
             Save
           </button>
         </div>
       </Modal>
+    );
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Loan Accounts</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{loans.length} loan account{loans.length !== 1 ? 's' : ''}</p>
+          </div>
+          {addBtn}
+        </div>
+
+        {loans.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center text-sm text-gray-500 dark:text-gray-400">
+            No loan accounts yet. Click “Add Loan Account” to create one.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {loans.map((loan) => (
+              <div key={loan.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center flex-shrink-0">
+                      <Landmark className="w-5 h-5 text-rose-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{loan.accountName}</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {loan.lenderBank || 'Loan Account'}
+                        {loan.accountNumber ? ` · A/C ${loan.accountNumber}` : ''}
+                        {loan.interestRate ? ` · ${loan.interestRate}% p.a.` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-semibold">Outstanding</p>
+                      <p className="text-base font-bold text-gray-900 dark:text-gray-100">₹{parseFloat(loan.currentBalance || 0).toLocaleString()}</p>
+                    </div>
+                    <button onClick={() => handleEdit(loan)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDelete(loan.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {renderModal()}
     </motion.div>
   );
 };

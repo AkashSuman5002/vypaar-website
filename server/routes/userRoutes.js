@@ -91,7 +91,9 @@ router.post('/', authorizeAdmin, apiLimiter, async (req, res) => {
 router.put('/:id', authorizeAdmin, async (req, res) => {
   try {
     const { name, email, password, phone, role, isActive, permissions } = req.body;
-    const user = await User.findById(req.params.id);
+    // Scope to the admin's own business so one business cannot edit another's users.
+    const baseFilter = getBaseFilter(req);
+    const user = await User.findOne({ _id: req.params.id, ...baseFilter });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -114,7 +116,9 @@ router.put('/:id', authorizeAdmin, async (req, res) => {
 // DELETE /api/users/:id - Delete user
 router.delete('/:id', authorizeAdmin, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    // Scope to the admin's own business so one business cannot delete another's users.
+    const baseFilter = getBaseFilter(req);
+    const user = await User.findOne({ _id: req.params.id, ...baseFilter });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -124,7 +128,7 @@ router.delete('/:id', authorizeAdmin, async (req, res) => {
     if (user._id.toString() === req.user._id.toString()) {
       return res.status(400).json({ message: 'Cannot delete your own account' });
     }
-    await User.findByIdAndDelete(req.params.id);
+    await User.findByIdAndDelete(user._id);
     res.json({ message: 'User deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -161,14 +165,16 @@ router.post('/roles', authorizeAdmin, async (req, res) => {
 // DELETE /api/users/roles/:id - Delete a role
 router.delete('/roles/:id', authorizeAdmin, async (req, res) => {
   try {
-    const role = await Role.findById(req.params.id);
+    // Scope to the admin's own business so one business cannot delete another's roles.
+    const businessId = req.businessId || req.user?.business;
+    const role = await Role.findOne({ _id: req.params.id, ...(businessId ? { business: businessId } : {}) });
     if (!role) {
       return res.status(404).json({ message: 'Role not found' });
     }
     if (role.isDefault) {
       return res.status(400).json({ message: 'Cannot delete the default role' });
     }
-    await Role.findByIdAndDelete(req.params.id);
+    await Role.findByIdAndDelete(role._id);
     res.json({ message: 'Role deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

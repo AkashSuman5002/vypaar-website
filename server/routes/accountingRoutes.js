@@ -136,4 +136,9 @@ router.get('/reports/payment-reminders', authorize('reports:view'), reportCtrl.g
 // GSTR-2A Reconciliation
 router.get('/reports/gstr2a-reconciliation', authorize('reports:view'), reportCtrl.getGSTR2AReconciliation);
 
+// Item Category Reports
+router.get('/reports/sale-purchase-by-item-category', authorize('reports:view'), reportCtrl.getSalePurchaseByItemCategory);
+router.get('/reports/stock-summary-by-item-category', authorize('reports:view'), reportCtrl.getStockSummaryByItemCategory);
+router.get('/reports/item-wise-discount', authorize('reports:view'), reportCtrl.getItemWiseDiscount);
+
 module.exports = router;

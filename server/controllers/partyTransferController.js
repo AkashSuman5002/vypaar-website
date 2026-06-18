@@ -43,15 +43,15 @@ const createPartyTransfer = async (req, res) => {
     const transferDesc = `Transfer ${amount} from ${fromPartyName} (${fromPartyType}) to ${toPartyName} (${toPartyType})`;
 
     if (fromPartyType === 'customer') {
-      await Customer.findByIdAndUpdate({ _id: fromParty, user: req.user._id }, { $inc: { openingBalance: -amount } });
+      await Customer.findOneAndUpdate({ _id: fromParty, ...baseFilter }, { $inc: { openingBalance: -amount } });
     } else {
-      await Supplier.findByIdAndUpdate({ _id: fromParty, user: req.user._id }, { $inc: { openingBalance: -amount } });
+      await Supplier.findOneAndUpdate({ _id: fromParty, ...baseFilter }, { $inc: { openingBalance: -amount } });
     }
 
     if (toPartyType === 'customer') {
-      await Customer.findByIdAndUpdate({ _id: toParty, user: req.user._id }, { $inc: { openingBalance: amount } });
+      await Customer.findOneAndUpdate({ _id: toParty, ...baseFilter }, { $inc: { openingBalance: amount } });
     } else {
-      await Supplier.findByIdAndUpdate({ _id: toParty, user: req.user._id }, { $inc: { openingBalance: amount } });
+      await Supplier.findOneAndUpdate({ _id: toParty, ...baseFilter }, { $inc: { openingBalance: amount } });
     }
 
     await Transaction.create({
@@ -82,15 +82,15 @@ const deletePartyTransfer = async (req, res) => {
     if (transfer.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
 
     if (transfer.fromPartyType === 'customer') {
-      await Customer.findByIdAndUpdate({ _id: transfer.fromParty, user: req.user._id }, { $inc: { openingBalance: transfer.amount } });
+      await Customer.findOneAndUpdate({ _id: transfer.fromParty, ...baseFilter }, { $inc: { openingBalance: transfer.amount } });
     } else {
-      await Supplier.findByIdAndUpdate({ _id: transfer.fromParty, user: req.user._id }, { $inc: { openingBalance: transfer.amount } });
+      await Supplier.findOneAndUpdate({ _id: transfer.fromParty, ...baseFilter }, { $inc: { openingBalance: transfer.amount } });
     }
 
     if (transfer.toPartyType === 'customer') {
-      await Customer.findByIdAndUpdate({ _id: transfer.toParty, user: req.user._id }, { $inc: { openingBalance: -transfer.amount } });
+      await Customer.findOneAndUpdate({ _id: transfer.toParty, ...baseFilter }, { $inc: { openingBalance: -transfer.amount } });
     } else {
-      await Supplier.findByIdAndUpdate({ _id: transfer.toParty, user: req.user._id }, { $inc: { openingBalance: -transfer.amount } });
+      await Supplier.findOneAndUpdate({ _id: transfer.toParty, ...baseFilter }, { $inc: { openingBalance: -transfer.amount } });
     }
 
     await PartyToPartyTransfer.findOneAndDelete({ _id: req.params.id, ...getBaseFilter(req) });

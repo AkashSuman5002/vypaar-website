@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Business = require('../models/Business');
 const Setting = require('../models/Setting');
@@ -9,8 +10,9 @@ const Role = require('../models/Role');
 const { JWT_SECRET } = require('../middleware/auth');
 const { authMiddleware } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimit');
-const { csrfProtection } = require('../middleware/csrf');
+const { csrfProtection, generateCsrfToken, CSRF_COOKIE } = require('../middleware/csrf');
 const { sendPasswordResetEmail } = require('../services/emailService');
+const { createOtp, verifyOtp, deliverOtp, isDev } = require('../utils/otpAuth');
 
 const router = express.Router();
 
@@ -19,6 +21,23 @@ const generateToken = (user) => {
 };
 
 const normalizeEmail = (email = '') => email.trim().toLowerCase();
+const normalizePhone = (p = '') => String(p).replace(/[\s-]/g, '').trim();
+
+// A constant, valid bcrypt hash (cost 12, matching the User model) used to run a dummy
+// compare when a login email doesn't exist. This keeps the response timing similar to the
+// real path so attackers can't use timing to enumerate which emails have accounts.
+const DUMMY_PASSWORD_HASH = '$2a$12$5WwsJp.osusMCBqdV9rA/uGHIObqqN7TlfWVGisC1TWHlCVlwmApi';
+
+// Create the full account (user + business + branch + default role + settings) for a
+// verified passwordless signup. Mirrors the password-based /register provisioning.
+const provisionAccount = async ({ name, email, phone }) => {
+  const user = await User.create({ name, email, phone: phone || '', role: 'admin', isOwner: false, isVerified: true });
+  const business = await Business.create({ name: name + "'s Business", email: user.email, phone: phone || '', owner: user._id, isActive: true });
+  await Branch.create({ name: 'Main Branch', business: business._id, isActive: true });
+  await Role.create({ name: 'Admin', business: business._id, permissions: ['*'], isDefault: true });
+  await Setting.create({ user: user._id, businessName: business.name, email: user.email, phone: phone || '' });
+  return user;
+};
 
 router.post('/register', authLimiter, async (req, res) => {
   try {
@@ -83,6 +102,9 @@ router.post('/login', authLimiter, async (req, res) => {
     }
     const user = await User.findOne({ email: normalizeEmail(email) });
     if (!user) {
+      // Perform a dummy bcrypt compare so the response timing matches the valid-user path,
+      // preventing attackers from enumerating accounts via login timing. Same generic 401.
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
     if (!user.isActive) {
@@ -137,6 +159,102 @@ router.post('/login', authLimiter, async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+// ===== Passwordless OTP — Registration (collects email + phone, verifies via OTP) =====
+router.post('/register/start', authLimiter, async (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    const email = normalizeEmail(req.body.email || '');
+    const phone = normalizePhone(req.body.phone || '');
+    if (!name || !email || !phone) return res.status(400).json({ message: 'Name, email and phone are all required' });
+    if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ message: 'Enter a valid email address' });
+    if (phone.replace(/\D/g, '').length < 7) return res.status(400).json({ message: 'Enter a valid phone number' });
+    if (await User.findOne({ email })) return res.status(400).json({ message: 'Email already registered' });
+    if (await User.findOne({ phone })) return res.status(400).json({ message: 'Phone number already registered' });
+
+    const code = await createOtp(email, 'register', { name, email, phone });
+    const delivery = await deliverOtp(code, { email, phone, name, purpose: 'register' });
+    res.json({
+      message: 'Verification code sent to your email and phone',
+      identifier: email,
+      ...(isDev() ? { devOtp: code } : {}),
+      ...delivery,
+    });
+  } catch (error) { res.status(500).json({ message: error.message }); }
+});
+
+router.post('/register/verify', authLimiter, async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email || req.body.identifier || '');
+    const otp = req.body.otp;
+    if (!email || !otp) return res.status(400).json({ message: 'Email and code are required' });
+    const result = await verifyOtp(email, 'register', otp);
+    if (!result.ok) return res.status(400).json({ message: result.reason });
+    if (await User.findOne({ email })) return res.status(400).json({ message: 'Email already registered' });
+    const data = result.payload || {};
+    const user = await provisionAccount({ name: data.name, email, phone: data.phone });
+    const token = generateToken(user);
+    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.status(201).json({ ...user.toJSON(), token });
+  } catch (error) { res.status(500).json({ message: error.message }); }
+});
+
+// ===== Passwordless OTP — Login (with email OR phone) =====
+router.post('/login/otp', authLimiter, async (req, res) => {
+  try {
+    const raw = (req.body.identifier || '').trim();
+    if (!raw) return res.status(400).json({ message: 'Enter your email or phone number' });
+    const isEmail = raw.includes('@');
+    const identifier = isEmail ? normalizeEmail(raw) : normalizePhone(raw);
+    const user = await User.findOne(isEmail ? { email: identifier } : { phone: identifier });
+    // Always respond the same way so the endpoint can't be used to probe for accounts.
+    if (!user || user.isActive === false) {
+      return res.json({ message: 'If an account exists, a code has been sent.', identifier });
+    }
+    const code = await createOtp(identifier, 'login', { userId: user._id.toString() });
+    const delivery = await deliverOtp(code, { email: user.email, phone: user.phone, name: user.name, purpose: 'login' });
+    res.json({ message: 'Code sent', identifier, ...(isDev() ? { devOtp: code } : {}), ...delivery });
+  } catch (error) { res.status(500).json({ message: error.message }); }
+});
+
+router.post('/login/verify', authLimiter, async (req, res) => {
+  try {
+    const raw = (req.body.identifier || '').trim();
+    const otp = req.body.otp;
+    if (!raw || !otp) return res.status(400).json({ message: 'Identifier and code are required' });
+    const isEmail = raw.includes('@');
+    const identifier = isEmail ? normalizeEmail(raw) : normalizePhone(raw);
+    const result = await verifyOtp(identifier, 'login', otp);
+    if (!result.ok) return res.status(400).json({ message: result.reason });
+
+    const userId = result.payload && result.payload.userId;
+    const user = userId
+      ? await User.findById(userId)
+      : await User.findOne(isEmail ? { email: identifier } : { phone: identifier });
+    if (!user || user.isActive === false) return res.status(401).json({ message: 'Account not found or deactivated' });
+    if (!user.isVerified) { user.isVerified = true; await user.save(); }
+
+    // Resolve the user's business (same logic as password login).
+    let business = null;
+    if (user.business) {
+      business = await Business.findById(user.business);
+    } else {
+      business = await Business.findOne({ owner: user._id }).sort({ createdAt: -1 });
+      if (!business) {
+        business = await Business.create({ name: user.name + "'s Business", email: user.email, owner: user._id, isActive: true });
+        await Branch.create({ name: 'Main Branch', business: business._id, isActive: true });
+        await Role.create({ name: 'Admin', business: business._id, permissions: ['*'], isDefault: true });
+      }
+    }
+    const fallbackBusinessName = business ? business.name : (user.name + "'s Business");
+    let setting = await Setting.findOne({ user: user._id });
+    if (!setting) setting = await Setting.create({ user: user._id, businessName: fallbackBusinessName, email: user.email });
+
+    const token = generateToken(user);
+    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.json({ ...user.toJSON(), token });
+  } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
 router.get('/profile', authMiddleware, async (req, res) => {
@@ -227,16 +345,35 @@ router.post('/reset-password', authLimiter, async (req, res) => {
 
 router.post('/logout', authMiddleware, csrfProtection, (req, res) => {
   res.clearCookie('token');
-  res.clearCookie('vyapar-csrf');
+  res.clearCookie(CSRF_COOKIE);
   res.json({ message: 'Logged out successfully' });
 });
 
-// Public: a CSRF token is a random double-submit value (not tied to a user) and must be
-// obtainable before login. Gating it behind authMiddleware caused the pre-login CSRF fetch
-// to 401, which the client interceptor turned into an infinite redirect-to-/login loop.
+// Public: the CSRF token must be obtainable BEFORE login. Gating it behind authMiddleware
+// caused the pre-login CSRF fetch to 401, which the client interceptor turned into an
+// infinite redirect-to-/login loop. So we do an optional, non-fatal token decode here: if
+// the caller is already authenticated we bind the signed CSRF token to their user id;
+// otherwise we issue an anonymous (uid = '') bootstrap token. Both are accepted by
+// csrfProtection. The returned `csrfToken` value is also set as the cookie (double-submit)
+// — the client reads `csrfToken` and echoes it back in the `x-csrf-token` header.
 router.get('/csrf-token', (req, res) => {
-  const token = crypto.randomBytes(32).toString('hex');
-  res.cookie('vyapar-csrf', token, {
+  let uid = '';
+  try {
+    const authHeader = req.headers.authorization;
+    const bearer = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+    const cookieToken = req.cookies?.token;
+    const jwtToken = bearer || cookieToken;
+    if (jwtToken) {
+      const decoded = jwt.verify(jwtToken, JWT_SECRET);
+      if (decoded && decoded.id) uid = String(decoded.id);
+    }
+  } catch {
+    // Invalid/expired/absent token — fall back to an anonymous bootstrap token. Never fatal.
+    uid = '';
+  }
+
+  const token = generateCsrfToken(uid);
+  res.cookie(CSRF_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
     // Standard pattern: secure flag only in production (HTTPS). Set NODE_ENV=production in deploy.

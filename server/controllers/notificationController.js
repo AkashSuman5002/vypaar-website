@@ -46,6 +46,17 @@ const deleteNotification = async (req, res) => {
   }
 };
 
+// "Clear all" must permanently remove notifications, not just mark them read —
+// otherwise getNotifications() (which returns read + unread) re-shows them on reload.
+const clearAllNotifications = async (req, res) => {
+  try {
+    await Notification.deleteMany({ user: req.user._id });
+    res.json({ message: 'All notifications cleared' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const getUnreadCount = async (req, res) => {
   try {
     const count = await Notification.countDocuments({ user: req.user._id, read: false });
@@ -99,4 +110,4 @@ const unsubscribePush = async (req, res) => {
   }
 };
 
-module.exports = { getNotifications, markAsRead, markAllAsRead, deleteNotification, getUnreadCount, createNotification, getVapidPublicKey, subscribePush, unsubscribePush };
+module.exports = { getNotifications, markAsRead, markAllAsRead, deleteNotification, clearAllNotifications, getUnreadCount, createNotification, getVapidPublicKey, subscribePush, unsubscribePush };

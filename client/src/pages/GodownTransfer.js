@@ -356,7 +356,8 @@ const GodownTransfer = () => {
                             <td className="px-4 py-2.5 text-sm text-center text-slate-500">{item.maxStock} {item.unit}</td>
                             <td className="px-4 py-2.5">
                               <input type="number" value={item.quantity} onChange={e => updateItemQty(idx, e.target.value)}
-                                min="1" className="w-full px-3 py-1.5 text-sm text-center border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                                onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                min="1" step="1" className="no-spinner w-full px-3 py-1.5 text-sm text-center border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                             </td>
                             <td className="px-4 py-2.5">
                               <button onClick={() => removeItem(idx)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">

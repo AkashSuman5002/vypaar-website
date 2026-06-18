@@ -2012,3 +2012,158 @@ module.exports = {
   getPaymentReminders,
   getGSTR2AReconciliation,
 };
+
+const getSalePurchaseByItemCategory = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { startDate, endDate } = req.query;
+    const saleFilter = { ...baseFilter, type: 'invoice' };
+    const purchaseFilter = { ...baseFilter };
+    if (startDate && endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      saleFilter.date = { $gte: new Date(startDate), $lt: end };
+      purchaseFilter.date = { $gte: new Date(startDate), $lt: end };
+    }
+
+    const [sales, purchases, products] = await Promise.all([
+      Sale.find(saleFilter).lean(),
+      Purchase.find(purchaseFilter).lean(),
+      Product.find(baseFilter).lean(),
+    ]);
+
+    const productCatMap = {};
+    products.forEach(p => { productCatMap[p._id.toString()] = p.category || 'Uncategorized'; });
+
+    const catMap = {};
+    sales.forEach(sale => {
+      (sale.items || []).forEach(item => {
+        const cat = productCatMap[item.product?.toString()] || item.category || 'Uncategorized';
+        if (!catMap[cat]) catMap[cat] = { category: cat, sales: 0, purchases: 0 };
+        catMap[cat].sales += item.amount || 0;
+      });
+    });
+    purchases.forEach(purchase => {
+      (purchase.items || []).forEach(item => {
+        const cat = productCatMap[item.product?.toString()] || item.category || 'Uncategorized';
+        if (!catMap[cat]) catMap[cat] = { category: cat, sales: 0, purchases: 0 };
+        catMap[cat].purchases += item.amount || 0;
+      });
+    });
+
+    const entries = Object.values(catMap);
+    const totalSales = entries.reduce((s, e) => s + e.sales, 0);
+    const totalPurchases = entries.reduce((s, e) => s + e.purchases, 0);
+    res.json({ entries, totalSales, totalPurchases });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const getStockSummaryByItemCategory = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const products = await Product.find({ ...baseFilter, type: { $ne: 'service' } }).lean();
+
+    const catMap = {};
+    products.forEach(p => {
+      const cat = p.category || 'Uncategorized';
+      if (!catMap[cat]) catMap[cat] = { category: cat, items: 0, qty: 0, value: 0 };
+      catMap[cat].items += 1;
+      catMap[cat].qty += p.stock || 0;
+      catMap[cat].value += (p.stock || 0) * (p.costPrice || p.price || 0);
+    });
+
+    const entries = Object.values(catMap);
+    const totalItems = entries.reduce((s, e) => s + e.items, 0);
+    const totalQty = entries.reduce((s, e) => s + e.qty, 0);
+    const totalValue = entries.reduce((s, e) => s + e.value, 0);
+    res.json({ entries, totalItems, totalQty, totalValue });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const getItemWiseDiscount = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { startDate, endDate } = req.query;
+    const filter = { ...baseFilter, type: 'invoice' };
+    if (startDate && endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      filter.date = { $gte: new Date(startDate), $lt: end };
+    }
+
+    const sales = await Sale.find(filter).lean();
+    const itemMap = {};
+
+    sales.forEach(sale => {
+      (sale.items || []).forEach(item => {
+        const name = item.productName || 'Unknown';
+        if (!itemMap[name]) itemMap[name] = { item: name, totalDiscount: 0, totalAmount: 0, discountRate: 0 };
+        itemMap[name].totalDiscount += item.discountAmount || 0;
+        itemMap[name].totalAmount += item.amount || 0;
+      });
+    });
+
+    const entries = Object.values(itemMap).map(e => ({
+      ...e,
+      discountRate: e.totalAmount > 0 ? ((e.totalDiscount / e.totalAmount) * 100).toFixed(1) : 0,
+    }));
+    const totalDiscount = entries.reduce((s, e) => s + e.totalDiscount, 0);
+    res.json({ entries, totalDiscount });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = {
+  getSalesReport,
+  getPurchaseReport,
+  getProfitReport,
+  getGSTReport,
+  getGSTR1,
+  getGSTR3B,
+  getGSTR9Report,
+  getHSNSummary,
+  getPartyReport,
+  getCashFlow,
+  getDayBook,
+  getOutstandingReport,
+  getGSTR2,
+  getSAC,
+  getTDSReceivable,
+  getTDSPayable,
+  getTCSReceivable,
+  getForm27EQ,
+  getBankStatement,
+  getExpenseReport,
+  getSaleOrders,
+  getSaleOrderItem,
+  getItemDetail,
+  getStockDetail,
+  getDiscountReport,
+  getLoanStatement,
+  getExpenseCategoryReport,
+  getExpenseItemReport,
+  getPartyStatement,
+  getPartyWiseProfitLoss,
+  getPartyReportByItem,
+  getSalePurchaseByParty,
+  getSalePurchaseByPartyGroup,
+  getItemWiseProfitLoss,
+  getItemCategoryProfitLoss,
+  getItemReportByParty,
+  getBillWiseProfit,
+  getPendingOrders,
+  getEMISchedule,
+  getLoanSummary,
+  getStockAging,
+  getLowStockReport,
+  getPaymentReminders,
+  getGSTR2AReconciliation,
+  getSalePurchaseByItemCategory,
+  getStockSummaryByItemCategory,
+  getItemWiseDiscount,
+};

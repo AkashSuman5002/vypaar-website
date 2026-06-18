@@ -744,9 +744,10 @@ const CreateSale = () => {
                   <option value="">Select Item</option>
                   {products.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
                 </select>
-                <input type="number" min="0.001" step="0.001" value={item.quantity}
-                  onChange={(e) => handleItemChange(item._id, 'quantity', parseFloat(e.target.value) || 0)}
-                  placeholder="Qty" className="w-20 px-2 py-1.5 text-sm text-right border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                <input type="number" min="0" step="1" value={item.quantity}
+                  onChange={(e) => handleItemChange(item._id, 'quantity', parseInt(e.target.value, 10) || 0)}
+                  onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                  placeholder="Qty" className="w-20 px-2 py-1.5 text-sm text-right border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 no-spinner" />
                 <input type="number" step="0.01" min="0" value={item.rate}
                   onChange={(e) => handleItemChange(item._id, 'rate', parseFloat(e.target.value) || 0)}
                   placeholder="Rate" className="w-24 px-2 py-1.5 text-sm text-right border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
@@ -791,11 +792,11 @@ const CreateSale = () => {
                     </select>
                   </td>
                   <td className="px-3 py-2.5">
-                    <input type="number" min="0.001" step="0.001" value={item.quantity} onChange={(e) => handleItemChange(item._id, 'quantity', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors" />
+                    <input type="number" min="0" step="1" value={item.quantity} onChange={(e) => handleItemChange(item._id, 'quantity', parseInt(e.target.value, 10) || 0)} onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()} className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors no-spinner" />
                   </td>
                   {freeQtyEnabled && (
                     <td className="px-3 py-2.5">
-                      <input type="number" min="0" step="1" value={item.freeQuantity || 0} onChange={(e) => handleItemChange(item._id, 'freeQuantity', parseInt(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors" />
+                      <input type="number" min="0" step="1" value={item.freeQuantity || 0} onChange={(e) => handleItemChange(item._id, 'freeQuantity', parseInt(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 bg-transparent hover:border-slate-300 focus:outline-none focus:border-blue-500 transition-colors no-spinner" />
                     </td>
                   )}
                   <td className="px-3 py-2.5 text-center text-xs text-slate-500 font-medium">{item.unit || 'Pcs'}</td>

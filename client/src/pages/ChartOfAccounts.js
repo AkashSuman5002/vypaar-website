@@ -10,10 +10,10 @@ import {
 } from 'lucide-react';
 
 const TYPE_CONFIG = [
-  { key: 'asset', label: 'Assets', types: ['asset'], color: 'blue', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  { key: 'equity_liability', label: 'Equities & Liabilities', types: ['equity', 'liability'], color: 'purple', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-  { key: 'income', label: 'Incomes', types: ['income'], color: 'green', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-  { key: 'expense', label: 'Expenses', types: ['expense'], color: 'red', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+  { key: 'asset', label: 'Assets', types: ['asset'], color: 'blue', bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-500/30' },
+  { key: 'equity_liability', label: 'Equities & Liabilities', types: ['equity', 'liability'], color: 'purple', bg: 'bg-purple-50 dark:bg-purple-500/10', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-500/30' },
+  { key: 'income', label: 'Incomes', types: ['income'], color: 'green', bg: 'bg-green-50 dark:bg-green-500/10', text: 'text-green-700 dark:text-green-300', border: 'border-green-200 dark:border-green-500/30' },
+  { key: 'expense', label: 'Expenses', types: ['expense'], color: 'red', bg: 'bg-red-50 dark:bg-red-500/10', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-500/30' },
 ];
 
 const SIDEBAR_TREE = {
@@ -298,53 +298,53 @@ const ChartOfAccounts = () => {
       <React.Fragment key={account._id}>
         <tr
           id={`account-row-${account._id}`}
-          className={`border-t border-slate-100 transition-colors group ${isHighlighted ? 'bg-blue-50' : 'hover:bg-slate-50/50'} ${hasChildren ? 'bg-slate-50/30' : ''}`}
+          className={`border-t border-slate-100 dark:border-gray-700 transition-colors group ${isHighlighted ? 'bg-blue-50 dark:bg-blue-500/10' : 'hover:bg-slate-50/50 dark:hover:bg-gray-700/30'} ${hasChildren ? 'bg-slate-50/30 dark:bg-gray-800/40' : ''}`}
         >
           <td className="py-2.5" style={{ paddingLeft: `${24 + depth * 24}px` }}>
             <div className="flex items-center gap-1.5">
               {hasChildren ? (
-                <button onClick={() => toggleCode(account.code)} className="p-0.5 rounded hover:bg-slate-200 transition-colors">
+                <button onClick={() => toggleCode(account.code)} className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors">
                   {isExpanded
-                    ? <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-                    : <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                    ? <ChevronDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-500" />
+                    : <ChevronRight className="w-3.5 h-3.5 text-slate-500 dark:text-slate-500" />
                   }
                 </button>
               ) : <span className="w-5" />}
-              {account.isDefault && <Lock className="w-3 h-3 text-slate-400 flex-shrink-0" />}
-              <span className={`text-sm ${hasChildren ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
+              {account.isDefault && <Lock className="w-3 h-3 text-slate-400 dark:text-slate-500 flex-shrink-0" />}
+              <span className={`text-sm ${hasChildren ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>
                 {account.name}
               </span>
             </div>
           </td>
           <td className="px-4 py-2.5">
-            <span className="text-xs font-mono text-slate-500">{account.code || '-'}</span>
+            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{account.code || '-'}</span>
           </td>
           <td className="px-4 py-2.5">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig?.bg || 'bg-slate-50'} ${typeConfig?.text || 'text-slate-700'}`}>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig?.bg || 'bg-slate-50 dark:bg-gray-700'} ${typeConfig?.text || 'text-slate-700 dark:text-slate-300'}`}>
               {CATEGORY_LABELS[account.category] || account.type}
             </span>
           </td>
           <td className="px-4 py-2.5 text-right">
-            <span className={`text-sm font-semibold ${groupTotal >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+            <span className={`text-sm font-semibold ${groupTotal >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-red-600 dark:text-red-400'}`}>
               {formatBalance(groupTotal, account.type)}
             </span>
           </td>
           <td className="px-3 py-2.5 w-10">
             <div className="relative">
               <button onClick={() => setMenuOpen(menuOpen === account._id ? null : account._id)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
               ><MoreVertical className="w-4 h-4" /></button>
               {menuOpen === account._id && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
+                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
                   <button onClick={() => { navigate(`/account-statements?account=${account._id}`); setMenuOpen(null); }}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 w-full text-left"
                   ><Eye className="w-3.5 h-3.5" /> View Statement</button>
                   {!account.isDefault && (
                     <>
-                      <button onClick={() => handleEdit(account)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left">
+                      <button onClick={() => handleEdit(account)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 w-full text-left">
                         <Edit2 className="w-3.5 h-3.5" /> Edit
                       </button>
-                      <button onClick={() => { setShowDeleteConfirm(account); setMenuOpen(null); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left">
+                      <button onClick={() => { setShowDeleteConfirm(account); setMenuOpen(null); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 w-full text-left">
                         <Trash2 className="w-3.5 h-3.5" /> Delete
                       </button>
                     </>
@@ -367,7 +367,7 @@ const ChartOfAccounts = () => {
     if (results.length === 0) {
       return (
         <tr>
-          <td colSpan="5" className="px-6 py-12 text-center text-sm text-slate-500">
+          <td colSpan="5" className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
             No accounts found matching "{searchQuery}"
           </td>
         </tr>
@@ -376,43 +376,43 @@ const ChartOfAccounts = () => {
     return results.map(account => {
       const typeConfig = TYPE_CONFIG.find(tc => tc.types.includes(account.type));
       return (
-        <tr key={account._id} className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors group">
+        <tr key={account._id} className="border-t border-slate-100 dark:border-gray-700 hover:bg-slate-50/50 dark:hover:bg-gray-700/30 transition-colors group">
           <td className="py-2.5" style={{ paddingLeft: '24px' }}>
             <div className="flex items-center gap-1.5">
               <span className="w-5" />
-              {account.isDefault && <Lock className="w-3 h-3 text-slate-400 flex-shrink-0" />}
-              <span className="text-sm text-slate-700">{account.name}</span>
+              {account.isDefault && <Lock className="w-3 h-3 text-slate-400 dark:text-slate-500 flex-shrink-0" />}
+              <span className="text-sm text-slate-700 dark:text-slate-300">{account.name}</span>
             </div>
           </td>
           <td className="px-4 py-2.5">
-            <span className="text-xs font-mono text-slate-500">{account.code || '-'}</span>
+            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{account.code || '-'}</span>
           </td>
           <td className="px-4 py-2.5">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig?.bg || 'bg-slate-50'} ${typeConfig?.text || 'text-slate-700'}`}>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig?.bg || 'bg-slate-50 dark:bg-gray-700'} ${typeConfig?.text || 'text-slate-700 dark:text-slate-300'}`}>
               {CATEGORY_LABELS[account.category] || account.type}
             </span>
           </td>
           <td className="px-4 py-2.5 text-right">
-            <span className={`text-sm font-semibold ${account.balance >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+            <span className={`text-sm font-semibold ${account.balance >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-red-600 dark:text-red-400'}`}>
               {formatBalance(account.balance, account.type)}
             </span>
           </td>
           <td className="px-3 py-2.5 w-10">
             <div className="relative">
               <button onClick={() => setMenuOpen(menuOpen === account._id ? null : account._id)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
               ><MoreVertical className="w-4 h-4" /></button>
               {menuOpen === account._id && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
+                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
                   <button onClick={() => { navigate(`/account-statements?account=${account._id}`); setMenuOpen(null); }}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 w-full text-left"
                   ><Eye className="w-3.5 h-3.5" /> View Statement</button>
                   {!account.isDefault && (
                     <>
-                      <button onClick={() => handleEdit(account)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left">
+                      <button onClick={() => handleEdit(account)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 w-full text-left">
                         <Edit2 className="w-3.5 h-3.5" /> Edit
                       </button>
-                      <button onClick={() => { setShowDeleteConfirm(account); setMenuOpen(null); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left">
+                      <button onClick={() => { setShowDeleteConfirm(account); setMenuOpen(null); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 w-full text-left">
                         <Trash2 className="w-3.5 h-3.5" /> Delete
                       </button>
                     </>
@@ -431,31 +431,31 @@ const ChartOfAccounts = () => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-[calc(100vh-4rem)]">
       {/* Left Sidebar */}
-      <div className="w-64 bg-white border-r border-slate-200 flex-shrink-0 overflow-y-auto">
+      <div className="w-64 bg-white dark:bg-gray-800 border-r border-slate-200 dark:border-gray-700 flex-shrink-0 overflow-y-auto">
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">ACCOUNT TYPE</h3>
-            <ChevronDown className="w-4 h-4 text-slate-400" />
+            <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">ACCOUNT TYPE</h3>
+            <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
           </div>
           <div className="space-y-0.5">
             <button
               onClick={() => setSelectedType(null)}
-              className={`w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${!selectedType ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+              className={`w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${!selectedType ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/30'}`}
             >
               <span>All Accounts</span>
-              <span className="ml-auto text-xs text-slate-400">{accounts.length}</span>
+              <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{accounts.length}</span>
             </button>
             {TYPE_CONFIG.map(tc => {
               return (<div key={tc.key}>
                 <button
                   onClick={() => toggleType(tc.key)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${selectedType === tc.key ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${selectedType === tc.key ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/30'}`}
                 >
                   <span>{tc.label}</span>
-                  <span className="text-xs text-slate-400">{accounts.filter(a => tc.types.includes(a.type) && !a.parent).length}</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">{accounts.filter(a => tc.types.includes(a.type) && !a.parent).length}</span>
                   {expandedTypes[tc.key]
-                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
-                    : <ChevronRight className="w-4 h-4 text-slate-400" />
+                    ? <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   }
                 </button>
                 <AnimatePresence>
@@ -492,7 +492,7 @@ const ChartOfAccounts = () => {
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-5 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
             {TYPE_CONFIG.map(tc => {
               let total = 0;
               if (tc.key === 'asset') total = summary.totalAssets;
@@ -511,8 +511,8 @@ const ChartOfAccounts = () => {
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-slate-900">Chart of Accounts</h1>
-              <Info className="w-4 h-4 text-slate-400" />
+              <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Chart of Accounts</h1>
+              <Info className="w-4 h-4 text-slate-400 dark:text-slate-500" />
             </div>
             <button onClick={() => { resetForm(); setEditingAccount(null); setShowModal(true); }}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#E11D48] text-white text-sm font-semibold rounded-full hover:bg-[#BE123C] transition-all shadow-lg"
@@ -523,11 +523,11 @@ const ChartOfAccounts = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               {selectedType && (
-                <button onClick={() => setSelectedType(null)} className="flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
+                <button onClick={() => setSelectedType(null)} className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors">
                   <X className="w-3 h-3" /> {TYPE_CONFIG.find(tc => tc.key === selectedType)?.label}
                 </button>
               )}
-              <button onClick={toggleAll} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium">
+              <button onClick={toggleAll} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium">
                 {allExpanded ? 'Collapse All' : 'Expand All'}
                 {allExpanded
                   ? <ChevronDown className="w-4 h-4" />
@@ -536,24 +536,24 @@ const ChartOfAccounts = () => {
               </button>
             </div>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search Accounts"
-                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="pl-9 pr-4 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
           </div>
 
           {/* Account Table */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700 shadow-soft overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="px-6 py-3.5 text-left text-2xs font-semibold text-slate-500 uppercase tracking-widest">ACCOUNT NAME</th>
-                    <th className="px-4 py-3.5 text-left text-2xs font-semibold text-slate-500 uppercase tracking-widest">CODE</th>
-                    <th className="px-4 py-3.5 text-left text-2xs font-semibold text-slate-500 uppercase tracking-widest">TYPE</th>
-                    <th className="px-4 py-3.5 text-right text-2xs font-semibold text-slate-500 uppercase tracking-widest">BALANCE</th>
+                  <tr className="border-b border-slate-100 dark:border-gray-700">
+                    <th className="px-6 py-3.5 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">ACCOUNT NAME</th>
+                    <th className="px-4 py-3.5 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">CODE</th>
+                    <th className="px-4 py-3.5 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">TYPE</th>
+                    <th className="px-4 py-3.5 text-right text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">BALANCE</th>
                     <th className="px-3 py-3.5 w-10"></th>
                   </tr>
                 </thead>
@@ -586,25 +586,25 @@ const ChartOfAccounts = () => {
             <motion.div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="relative bg-white rounded-2xl shadow-elevated w-full max-w-lg overflow-hidden border"
+              className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-elevated w-full max-w-lg overflow-hidden border dark:border-gray-700"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b">
-                <h3 className="text-lg font-semibold text-slate-900">{editingAccount ? 'Edit Account' : 'New Account'}</h3>
-                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100"><X className="w-4 h-4 text-slate-500" /></button>
+              <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{editingAccount ? 'Edit Account' : 'New Account'}</h3>
+                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700"><X className="w-4 h-4 text-slate-500 dark:text-slate-400" /></button>
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Account Name *</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Account Name *</label>
                   <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     placeholder="Enter account name"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Account Type *</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Account Type *</label>
                     <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value, category: CHART_CATEGORIES[e.target.value]?.[0]?.value || 'current_asset' })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     >
                       <option value="asset">Asset</option>
                       <option value="liability">Liability</option>
@@ -614,9 +614,9 @@ const ChartOfAccounts = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Category *</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Category *</label>
                     <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     >
                       {(CHART_CATEGORIES[form.type] || []).map(c => (
                         <option key={c.value} value={c.value}>{c.label}</option>
@@ -625,9 +625,9 @@ const ChartOfAccounts = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Parent Account</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Parent Account</label>
                   <select value={form.parent} onChange={e => setForm({ ...form, parent: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   >
                     <option value="">None (Top Level)</option>
                     {accounts.filter(a => a._id !== editingAccount?._id).map(a => (
@@ -637,30 +637,30 @@ const ChartOfAccounts = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Account Code</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Account Code</label>
                     <input type="text" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       placeholder="Auto-generated if empty"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Opening Balance</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Opening Balance</label>
                     <input type="number" value={form.balance} onChange={e => setForm({ ...form, balance: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       step="0.01"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Description</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
                   <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 dark:text-slate-100 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
                     rows={2} placeholder="Optional description"
                   />
                 </div>
               </div>
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t bg-slate-50/50">
-                <button onClick={() => setShowModal(false)} className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100">Cancel</button>
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t dark:border-gray-700 bg-slate-50/50 dark:bg-gray-900/40">
+                <button onClick={() => setShowModal(false)} className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={handleSave}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#E11D48] text-white text-sm font-semibold rounded-full hover:bg-[#BE123C] shadow-sm"
                 ><Save className="w-4 h-4" /> {editingAccount ? 'Update' : 'Save'}</button>
@@ -679,12 +679,12 @@ const ChartOfAccounts = () => {
             <motion.div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(null)} />
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="relative bg-white rounded-2xl shadow-elevated w-full max-w-sm overflow-hidden border p-6"
+              className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-elevated w-full max-w-sm overflow-hidden border dark:border-gray-700 p-6"
             >
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Delete Account</h3>
-              <p className="text-sm text-slate-500 mb-6">Are you sure you want to delete <strong>{showDeleteConfirm.name}</strong>? This action cannot be undone.</p>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Delete Account</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to delete <strong>{showDeleteConfirm.name}</strong>? This action cannot be undone.</p>
               <div className="flex items-center justify-end gap-2">
-                <button onClick={() => setShowDeleteConfirm(null)} className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100">Cancel</button>
+                <button onClick={() => setShowDeleteConfirm(null)} className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700">Cancel</button>
                 <button onClick={() => handleDelete(showDeleteConfirm._id)}
                   className="px-5 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700"
                 >Delete</button>
@@ -708,7 +708,7 @@ const SidebarItem = ({ item, depth, expandedCodes, toggleCode, handleSidebarClic
           handleSidebarClick(item.code);
           if (hasChildren) toggleCode(item.code);
         }}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-gray-700/30 rounded-lg transition-colors"
         style={{ paddingLeft: `${12 + depth * 12}px` }}
       >
         <span>{item.label}</span>

@@ -389,7 +389,8 @@ const StockReconciliation = () => {
                               <td className="px-4 py-2.5 text-sm text-center text-slate-500">{item.systemStock}</td>
                               <td className="px-4 py-2.5">
                                 <input type="number" value={item.countedStock} onChange={e => updateCounted(idx, e.target.value)}
-                                  min="0" className="w-full px-3 py-1.5 text-sm text-center border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                                  onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                  min="0" step="1" className="no-spinner w-full px-3 py-1.5 text-sm text-center border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                               </td>
                               <td className="px-4 py-2.5 text-center">
                                 {diff === 0 ? (

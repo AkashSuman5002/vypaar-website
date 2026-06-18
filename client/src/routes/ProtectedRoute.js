@@ -4,12 +4,35 @@ import { useAuth } from '../context/AuthContext';
 import { businessAPI } from '../services/api';
 import usePermissions from '../hooks/usePermissions';
 
-const ROLE_ROUTES = {
-  'user-management': ['admin', 'Admin', 'owner'],
-  'settings': ['admin', 'Admin', 'Manager', 'owner'],
-  'journal-entry': ['admin', 'Admin', 'Manager', 'Accountant', 'owner'],
-  'chart-of-accounts': ['admin', 'Admin', 'Manager', 'Accountant', 'owner'],
-  'account-statements': ['admin', 'Admin', 'Manager', 'Accountant', 'owner'],
+// Maps a route's first path segment -> the canAccess permission key it requires.
+// Any authenticated user is still allowed on segments not listed here (e.g. '' home,
+// calendar, support, edit-profile). Keys MUST exist on `canAccess` (usePermissions).
+const SEGMENT_PERMISSION = {
+  'user-management': 'users',
+  'staff': 'users',
+  'settings': 'settings',
+  'company': 'settings',
+  'utilities': 'settings',
+  'journal-entry': 'accounting',
+  'chart-of-accounts': 'accounting',
+  'account-statements': 'accounting',
+  'accounting': 'accounting',
+  'budgets': 'accounting',
+  'gst-filing': 'accounting',
+  'reports': 'reports',
+  'sales': 'sales',
+  'purchases': 'purchases',
+  'products': 'products',
+  'godowns': 'products',
+  'godown-transfer': 'products',
+  'stock-reconciliation': 'products',
+  'manufacturing': 'products',
+  'customers': 'customers',
+  'parties': 'customers',
+  'party-groups': 'customers',
+  'party-transfer': 'cashbank',
+  'suppliers': 'suppliers',
+  'cash-bank': 'cashbank',
 };
 
 const ProtectedRoute = ({ children }) => {
@@ -65,15 +88,12 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/business-setup" replace />;
   }
 
+  // Enforce per-segment permissions for EVERY sensitive route (not just a few), so a
+  // hidden page can't be reached by typing the URL. Unlisted segments stay open to any
+  // authenticated user; home ('/') is always allowed, so there is no redirect loop.
   const path = location.pathname.replace(/^\//, '').split('/')[0];
-
-  if (path === 'user-management' && !canAccess.users) {
-    return <Navigate to="/" replace />;
-  }
-  if (path === 'settings' && !canAccess.settings) {
-    return <Navigate to="/" replace />;
-  }
-  if ((path === 'journal-entry' || path === 'chart-of-accounts' || path === 'account-statements') && !canAccess.accounting) {
+  const requiredKey = SEGMENT_PERMISSION[path];
+  if (requiredKey && !canAccess[requiredKey]) {
     return <Navigate to="/" replace />;
   }
 

@@ -243,7 +243,7 @@ const CreatePurchaseBill = () => {
   };
 
   const calculateItem = useCallback((item) => {
-    const qty = parseFloat(item.quantity) || 0;
+    const qty = parseInt(item.quantity, 10) || 0;
     const rate = parseFloat(item.rate) || 0;
     const base = qty * rate;
     const discType = item.discountType;
@@ -384,7 +384,7 @@ const CreatePurchaseBill = () => {
             productName: i.productName,
             description: i.description,
             hsn: i.hsn,
-            quantity: parseFloat(i.quantity) || 0,
+            quantity: parseInt(i.quantity, 10) || 0,
             unit: i.unit,
             rate: parseFloat(i.rate) || 0,
             amount: parseFloat(i.amount) || 0,
@@ -628,8 +628,9 @@ const CreatePurchaseBill = () => {
                     />
                   </td>
                   <td className="px-2 py-2 align-top">
-                    <input type="number" min="0" step="0.001" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)}
-                      className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500"
+                    <input type="number" min="0" step="1" value={item.quantity} onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value, 10) || 0)}
+                      onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                      className="no-spinner w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500"
                     />
                   </td>
                   <td className="px-2 py-2 align-top">

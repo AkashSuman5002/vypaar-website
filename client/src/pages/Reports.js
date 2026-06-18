@@ -57,6 +57,9 @@ const sections = [
       { name: 'Stock Detail', route: 'stock-detail', icon: ClipboardList },
       { name: 'Stock Aging', route: 'stock-aging', icon: Clock },
       { name: 'Item Detail', route: 'item-detail', icon: Info },
+      { name: 'Sale/Purchase By Item Category', route: 'sale-purchase-report-by-item-category', icon: Layers },
+      { name: 'Stock Summary By Item Category', route: 'stock-summary-report-by-item-category', icon: Package },
+      { name: 'Item Wise Discount', route: 'item-wise-discount', icon: Percent },
     ]
   },
   {

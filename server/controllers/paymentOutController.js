@@ -52,7 +52,7 @@ const createPaymentOut = async (req, res) => {
 
       // Update supplier opening balance
       if (partyId && (partyType || 'supplier') === 'supplier') {
-        await Supplier.findByIdAndUpdate(partyId, { $inc: { openingBalance: -amount } }, { session });
+        await Supplier.findOneAndUpdate({ _id: partyId, ...baseFilter }, { $inc: { openingBalance: -amount } }, { session });
       }
 
       // Create journal entry
@@ -156,7 +156,7 @@ const deletePaymentOut = async (req, res) => {
       // Reverse supplier balance using the SAME stable id create decremented (stored on referenceId).
       // Exact opposite of create's $inc: { openingBalance: -amount }.
       if (payment.partyType === 'supplier' && payment.referenceId) {
-        await Supplier.findByIdAndUpdate(payment.referenceId, { $inc: { openingBalance: payment.amount } }, { session });
+        await Supplier.findOneAndUpdate({ _id: payment.referenceId, ...baseFilter }, { $inc: { openingBalance: payment.amount } }, { session });
       } else if (payment.partyType === 'supplier' && payment.partyName) {
         // NOTE: legacy doc has no stored supplier id; fall back to name lookup (may mis-credit duplicate/renamed suppliers).
         const supplier = await Supplier.findOne({ ...baseFilter, name: payment.partyName });

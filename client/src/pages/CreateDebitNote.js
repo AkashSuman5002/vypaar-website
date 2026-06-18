@@ -231,7 +231,7 @@ const CreateDebitNote = () => {
   }, [id, isEdit]);
 
   const calcItem = useCallback((item) => {
-    const qty = parseFloat(item.quantity) || 0;
+    const qty = parseInt(item.quantity, 10) || 0;
     const rate = parseFloat(item.rate) || 0;
     const gstRate = parseFloat(item.gstRate) || 0;
     const discountPct = parseFloat(item.discountPct) || 0;
@@ -319,7 +319,7 @@ const CreateDebitNote = () => {
         productName: it.productName,
         description: it.description,
         hsn: it.hsn,
-        quantity: parseFloat(it.quantity) || 0,
+        quantity: parseInt(it.quantity, 10) || 0,
         unit: it.unit,
         rate: parseFloat(it.rate) || 0,
         gstRate: parseFloat(it.gstRate) || 0,
@@ -524,9 +524,10 @@ const CreateDebitNote = () => {
                     </td>
                     <td className="px-3 py-2">
                       <input type="number" value={item.quantity}
-                        onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
+                        onChange={(e) => updateItem(item.id, 'quantity', parseInt(e.target.value, 10) || 0)}
+                        onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
                         min="0" step="1"
-                        className="w-full px-2 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        className="w-full px-2 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500/20 no-spinner"
                       />
                     </td>
                     <td className="px-3 py-2">

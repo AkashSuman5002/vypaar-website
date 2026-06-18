@@ -31,6 +31,139 @@ const GST_RATES = [0, 5, 12, 18, 28];
 const STOCK_FILTERS = ['All', 'In Stock', 'Low Stock', 'Out of Stock'];
 const TYPE_FILTERS = ['All Items', 'Products', 'Services'];
 
+// Shared styling for the compact Service form below.
+const SVC_INPUT = "w-full px-3 py-2.5 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all";
+const SVC_LABEL = "block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1";
+
+// Compact, service-only form shown when the "Service" tab is selected.
+// A service is intangible — NO barcode/brand/stock/godown/batch/serial/expiry/inventory fields.
+// Defined at module scope (stable identity) so inputs never lose focus while typing.
+const ServiceForm = ({ form, images, fileInputRef, onChange, onImageUpload }) => (
+  <div className="space-y-4 max-w-3xl">
+    {/* Section 1 — Basic Information */}
+    <section className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <ClipboardList className="w-4 h-4 text-purple-500" />
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Basic Information</h4>
+      </div>
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-12 sm:col-span-6">
+          <label className={SVC_LABEL}>Service Name *</label>
+          <input type="text" value={form.name} onChange={e => onChange('name', e.target.value)} placeholder="e.g. Repairing, Consulting"
+            className="w-full px-3 py-2.5 text-sm border-2 border-purple-300 dark:border-purple-500/60 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all" />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <label className={SVC_LABEL}>Service Code</label>
+          <input type="text" value={form.sku} onChange={e => onChange('sku', e.target.value)} placeholder="SRV-001" className={SVC_INPUT} />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <label className={SVC_LABEL}>SAC Code</label>
+          <input type="text" value={form.hsn} onChange={e => onChange('hsn', e.target.value)} placeholder="9954" className={SVC_INPUT} />
+        </div>
+        <div className="col-span-12 sm:col-span-6">
+          <label className={SVC_LABEL}>Category</label>
+          <select value={form.category} onChange={e => onChange('category', e.target.value)} className={SVC_INPUT}>
+            <option value="">Select Category</option>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="col-span-12 sm:col-span-6">
+          <label className={SVC_LABEL}>Service Image (optional)</label>
+          <button type="button" onClick={() => fileInputRef.current?.click()}
+            className="w-full px-3 py-2.5 text-sm font-medium text-purple-600 border border-dashed border-purple-300 dark:border-purple-500/50 rounded bg-purple-50/50 dark:bg-purple-500/5 hover:bg-purple-50 transition-colors flex items-center justify-center gap-1.5">
+            <Camera className="w-4 h-4" /> {images.length > 0 ? `${images.length} Image${images.length > 1 ? 's' : ''} Added` : 'Upload Image'}
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={onImageUpload} className="hidden" />
+        </div>
+        <div className="col-span-12">
+          <label className={SVC_LABEL}>Description</label>
+          <textarea value={form.description} onChange={e => onChange('description', e.target.value)} rows={2} placeholder="Short description of the service"
+            className={SVC_INPUT + ' resize-none'} />
+        </div>
+      </div>
+    </section>
+
+    {/* Section 2 — Pricing */}
+    <section className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <IndianRupee className="w-4 h-4 text-purple-500" />
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Pricing</h4>
+      </div>
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-12 sm:col-span-6">
+          <label className={SVC_LABEL}>Sale Price *</label>
+          <div className="flex">
+            <input type="number" value={form.sellingPrice} onChange={e => onChange('sellingPrice', e.target.value)} placeholder="0.00"
+              className="flex-1 min-w-0 px-3 py-2.5 text-sm border border-slate-300 dark:border-gray-600 rounded-l bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all" />
+            <select value={form.taxIncluded ? 'with' : 'without'} onChange={e => onChange('taxIncluded', e.target.value === 'with')}
+              className="px-2 py-2.5 text-xs border border-l-0 border-slate-300 dark:border-gray-600 rounded-r bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-300 focus:outline-none">
+              <option value="without">Excl. Tax</option>
+              <option value="with">Incl. Tax</option>
+            </select>
+          </div>
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <label className={SVC_LABEL}>Discount</label>
+          <div className="flex">
+            <input type="number" value={form.discountValue} onChange={e => onChange('discountValue', e.target.value)} placeholder="0"
+              className="flex-1 min-w-0 px-3 py-2.5 text-sm border border-slate-300 dark:border-gray-600 rounded-l bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all" />
+            <select value={form.discountType === 'fixed' ? 'fixed' : 'percentage'} onChange={e => onChange('discountType', e.target.value)}
+              className="px-2 py-2.5 text-xs border border-l-0 border-slate-300 dark:border-gray-600 rounded-r bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-300 focus:outline-none">
+              <option value="percentage">%</option>
+              <option value="fixed">₹</option>
+            </select>
+          </div>
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <label className={SVC_LABEL}>GST %</label>
+          <select value={form.gstRate} onChange={e => onChange('gstRate', parseFloat(e.target.value))} className={SVC_INPUT}>
+            <option value="0">None</option>
+            {GST_RATES.filter(r => r > 0).map(r => <option key={r} value={r}>{r}%</option>)}
+            <option value="-1">Exempt</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    {/* Section 3 — Purchase Information (optional) */}
+    <section className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <ShoppingCart className="w-4 h-4 text-purple-500" />
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Purchase Information <span className="font-normal text-slate-400">(optional)</span></h4>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Used only for profit calculation. A service is never treated as inventory — no stock is tracked.</p>
+      <div className="grid grid-cols-12">
+        <div className="col-span-12 sm:col-span-4">
+          <label className={SVC_LABEL}>Purchase Price</label>
+          <input type="number" value={form.purchasePrice} onChange={e => onChange('purchasePrice', e.target.value)} placeholder="0.00" className={SVC_INPUT} />
+        </div>
+      </div>
+    </section>
+
+    {/* Section 4 — Additional Options */}
+    <section className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Settings2 className="w-4 h-4 text-purple-500" />
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Additional Options</h4>
+      </div>
+      <div className="grid grid-cols-12 gap-x-4 gap-y-2.5">
+        {[
+          ['enableService', 'Enable Service'],
+          ['showInSales', 'Show in Sales'],
+          ['showInPurchases', 'Show in Purchases'],
+          ['trackProfitability', 'Track Service Profitability'],
+        ].map(([key, label]) => (
+          <label key={key} className="col-span-12 sm:col-span-6 flex items-center gap-2.5 cursor-pointer text-sm text-slate-700 dark:text-slate-300 select-none">
+            <input type="checkbox" checked={!!form[key]} onChange={e => onChange(key, e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 accent-purple-600" />
+            {label}
+          </label>
+        ))}
+      </div>
+    </section>
+  </div>
+);
+
 
 
 const StockHealthBar = ({ stock, minStock }) => {
@@ -113,6 +246,9 @@ const Products = () => {
   const partyWiseRateEnabled = getPref('item', 'partyWiseRate');
   const updateSalePriceAutoEnabled = getPref('item', 'updateSalePriceAuto');
   const calculateTaxOnMRPEnabled = getPref('item', 'calculateTaxOnMRP');
+  const itemCustomFieldDefs = getPref('item', 'customFieldDefs');
+  // Values entered for the item-level custom fields defined in Settings → Item.
+  const [customFields, setCustomFields] = useState({});
 
   const [form, setForm] = useState({
     name: '', itemType: 'Product', sku: '', category: '', brand: '', unit: effectiveDefaultUnit, hsn: '', description: '',
@@ -121,6 +257,7 @@ const Products = () => {
     trackInventory: true, openingStock: '', currentStock: '', minStock: 5, warehouse: '', storageLocation: '',
     gstRate: 0, taxIncluded: false, cgst: 0, sgst: 0, igst: 0,
     modelNo: '', size: '', serialNo: '', batchNo: '', expiryDate: '', mfgDate: '', mrp: 0, barcode: '',
+    enableService: true, showInSales: true, showInPurchases: true, trackProfitability: false,
   });
   const [activeTab, setActiveTab] = useState('pricing');
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -158,8 +295,10 @@ const Products = () => {
       trackInventory: true, openingStock: '', currentStock: '', minStock: 5, warehouse: '', storageLocation: '',
       gstRate: 0, taxIncluded: false, cgst: 0, sgst: 0, igst: 0,
       modelNo: '', size: '', serialNo: '', batchNo: '', expiryDate: '', mfgDate: '', mrp: 0, barcode: '',
+      enableService: true, showInSales: true, showInPurchases: true, trackProfitability: false,
     });
     setImages(prev => { prev.forEach(u => { if (u.startsWith('blob:')) URL.revokeObjectURL(u); }); return []; });
+    setCustomFields({});
     setEditingItem(null);
     setActiveTab('pricing');
   };
@@ -187,7 +326,12 @@ const Products = () => {
       serialNo: product.serialNo || '', batchNo: product.batchNo || '',
       expiryDate: product.expiryDate || '', mfgDate: product.mfgDate || '', mrp: product.mrp || 0,
       barcode: product.barcode || '',
+      enableService: product.isActive !== false,
+      showInSales: product.showInSales !== false,
+      showInPurchases: product.showInPurchases !== false,
+      trackProfitability: product.trackProfitability || false,
     });
+    setCustomFields(product.customFields || {});
     if (product.image) setImages([product.image]);
     setShowModal(true);
   };
@@ -231,7 +375,15 @@ const Products = () => {
       openingStock: isService ? 0 : parseInt(form.openingStock) || 0, barcode: form.barcode,
       taxIncluded: form.taxIncluded,
       trackInventory: isService ? false : form.trackInventory,
+      customFields,
     };
+    // Service-only options — never altered for products, so Product behaviour is unchanged.
+    if (isService) {
+      payload.isActive = form.enableService;
+      payload.showInSales = form.showInSales;
+      payload.showInPurchases = form.showInPurchases;
+      payload.trackProfitability = form.trackProfitability;
+    }
     try {
       if (editingItem) {
         await productAPI.update(editingItem._id, payload);
@@ -788,6 +940,10 @@ const Products = () => {
 
                 {/* Scrollable Form Body */}
                 <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/30 dark:bg-gray-900/30">
+                  {isService && (
+                    <ServiceForm form={form} images={images} fileInputRef={fileInputRef} onChange={handleInputChange} onImageUpload={handleImageUpload} />
+                  )}
+                  {!isService && (<>
                   {/* Row 1: Item Name | Item HSN | Select Unit | Add Item Image */}
                   <div className="grid grid-cols-12 gap-3">
                     <div className="col-span-12 sm:col-span-4">
@@ -1038,6 +1194,24 @@ const Products = () => {
                           </div>
                         </div>
                       )}
+
+                      {/* Item-level custom fields defined in Settings → Item (mirrors party customFieldDefs). */}
+                      {Array.isArray(itemCustomFieldDefs) && itemCustomFieldDefs.length > 0 && (
+                        <div className="bg-slate-50 dark:bg-gray-900/40 border border-slate-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Additional Fields</h4>
+                          <div className="grid grid-cols-12 gap-3">
+                            {itemCustomFieldDefs.map(field => (
+                              <div key={field.id} className="col-span-12 sm:col-span-6">
+                                <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">{field.name}</label>
+                                <input type="text" placeholder={field.name} value={customFields[field.id] || ''}
+                                  onChange={e => setCustomFields(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1059,23 +1233,26 @@ const Products = () => {
                         <div className="grid grid-cols-12 gap-3">
                           <div className="col-span-12 sm:col-span-4">
                             <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">Opening Stock</label>
-                            <input type="number" value={form.openingStock} onChange={e => handleInputChange('openingStock', e.target.value)}
+                            <input type="number" min="0" step="1" value={form.openingStock} onChange={e => handleInputChange('openingStock', e.target.value)}
+                              onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
                               placeholder="0"
-                              className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              className="no-spinner w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
                           </div>
                           <div className="col-span-12 sm:col-span-4">
                             <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">Current Stock</label>
-                            <input type="number" value={form.currentStock} onChange={e => handleInputChange('currentStock', e.target.value)}
+                            <input type="number" min="0" step="1" value={form.currentStock} onChange={e => handleInputChange('currentStock', e.target.value)}
+                              onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
                               placeholder="0"
-                              className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              className="no-spinner w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
                           </div>
                           <div className="col-span-12 sm:col-span-4">
                             <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">Min Stock Alert</label>
-                            <input type="number" value={form.minStock} onChange={e => handleInputChange('minStock', e.target.value)}
+                            <input type="number" min="0" step="1" value={form.minStock} onChange={e => handleInputChange('minStock', e.target.value)}
+                              onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
                               placeholder="5"
-                              className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              className="no-spinner w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
                           </div>
                         </div>
@@ -1154,6 +1331,7 @@ const Products = () => {
                       )}
                     </div>
                   )}
+                  </>)}
                 </div>
 
                 {/* Footer */}

@@ -26,6 +26,7 @@ const GSTR2 = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dates, setDates] = useState({ start: '', end: '' });
+  const [nonTaxAsExempted, setNonTaxAsExempted] = useState(false);
 
   const setDate = (type, value) => setDates(prev => ({ ...prev, [type]: value }));
 
@@ -43,14 +44,24 @@ const GSTR2 = () => {
     fetchData();
   }, [dates]);
 
+  // When considering non-tax as exempted, reclassify zero-tax rows as Exempted
+  // and exclude their taxable value from the displayed figures.
+  const displayData = nonTaxAsExempted
+    ? data.map((row) => {
+        const tax = (Number(row.igst) || 0) + (Number(row.cgst) || 0) + (Number(row.sgst) || 0);
+        return tax === 0 ? { ...row, gstin: 'Exempted', taxableValue: 0 } : row;
+      })
+    : data;
+
   if (loading) return <div className="bg-white dark:bg-[#0F172A] min-h-full"><LoadingSpinner /></div>;
 
   return (
     <>
       <GSTFilterBar title="GSTR 2" onDateChange={setDate} startDate={dates.start} endDate={dates.end}
-        onExcel={() => exportToExcel(data, columns, 'GSTR2 Report')}
-        onPrint={() => printReport('GSTR2 Report', columns, data)} />
-      <GSTTable columns={columns} data={data} />
+        nonTaxAsExempted={nonTaxAsExempted} onNonTaxChange={setNonTaxAsExempted}
+        onExcel={() => exportToExcel(displayData, columns, 'GSTR2 Report')}
+        onPrint={() => printReport('GSTR2 Report', columns, displayData)} />
+      <GSTTable columns={columns} data={displayData} />
     </>
   );
 };

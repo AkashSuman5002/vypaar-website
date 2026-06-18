@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, Download, Printer } from 'lucide-react';
 
 const currentYear = new Date().getFullYear();
@@ -14,8 +14,17 @@ const getMonthOptions = () => {
   return options;
 };
 
-const GSTFilterBar = ({ title, showNonTax = true, onExcel, onPrint, period, onPeriodChange, startDate, endDate, onDateChange }) => {
+const GSTFilterBar = ({ title, showNonTax = true, onExcel, onPrint, period, onPeriodChange, startDate, endDate, onDateChange, nonTaxAsExempted, onNonTaxChange }) => {
   const monthOptions = getMonthOptions();
+  // Controlled when the parent passes nonTaxAsExempted/onNonTaxChange; otherwise self-managed.
+  const [internalNonTax, setInternalNonTax] = useState(false);
+  const isControlled = nonTaxAsExempted !== undefined;
+  const checked = isControlled ? nonTaxAsExempted : internalNonTax;
+  const handleNonTaxChange = (e) => {
+    const val = e.target.checked;
+    if (!isControlled) setInternalNonTax(val);
+    if (onNonTaxChange) onNonTaxChange(val);
+  };
 
   return (
     <div className="flex items-center justify-between p-6 pb-0 flex-wrap gap-2">
@@ -50,7 +59,12 @@ const GSTFilterBar = ({ title, showNonTax = true, onExcel, onPrint, period, onPe
         </div>
         {showNonTax && (
           <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-[#94A3B8] cursor-pointer ml-2">
-            <input type="checkbox" className="rounded border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B]" />
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={handleNonTaxChange}
+              className="rounded border-gray-300 dark:border-[#334155] bg-white dark:bg-[#1E293B]"
+            />
             Consider Non-Tax As Exempted
           </label>
         )}

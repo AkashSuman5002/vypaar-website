@@ -31,33 +31,26 @@ const ViewChallan = () => {
     load();
   }, [id]);
 
-  const handlePrint = () => {
-    const printContent = document.getElementById('invoice-print-area');
-    if (!printContent) return;
-    const copies = parseInt(settings?.preferences?.print?.numberOfCopies) || 1;
-    const printWindow = window.open('', '_blank');
-    let repeatedContent = '';
-    for (let i = 0; i < copies; i++) {
-      repeatedContent += `<div class="invoice-copy">${printContent.innerHTML}</div>`;
-      if (i < copies - 1) {
-        repeatedContent += '<div style="page-break-after: always;"></div>';
-      }
-    }
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Challan ${sale.invoiceNumber}</title>
-          <style>
-            @media print { .invoice-copy { page-break-after: always; } }
-            .invoice-copy:last-child { page-break-after: auto; }
-            body { margin: 0; padding: 0; }
-          </style>
-        </head>
-        <body>${repeatedContent}</body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+  // Print the settings-driven PDF (pdfController) so the printout matches Print Settings.
+  const handlePrint = async () => {
+    try {
+      const res = await saleAPI.getPDF(sale._id);
+      const type = res.headers?.['content-type'] || 'application/pdf';
+      const url = URL.createObjectURL(new Blob([res.data], { type }));
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = url;
+      iframe.onload = () => {
+        try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { /* ignore */ }
+      };
+      document.body.appendChild(iframe);
+      setTimeout(() => { URL.revokeObjectURL(url); iframe.remove(); }, 60000);
+    } catch { toast.error('Failed to print'); }
   };
 
   const handleDownloadPDF = async () => {

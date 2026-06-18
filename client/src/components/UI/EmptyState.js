@@ -19,7 +19,16 @@ const EmptyState = ({ type = 'default', title, description, subtitle, actionLabe
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-12">
       <div className="flex flex-col items-center text-center max-w-sm mx-auto">
         {icon ? (
-          <div className="mb-5">{icon}</div>
+          // `icon` may be either a JSX element (e.g. <Package/>) or a component
+          // reference (e.g. Banknote). Rendering a component reference directly as a
+          // child throws "Objects are not valid as a React child", so normalize both.
+          React.isValidElement(icon) ? (
+            <div className="mb-5">{icon}</div>
+          ) : (
+            <div className="p-4 bg-slate-50 dark:bg-gray-700/50 rounded-2xl mb-5">
+              {React.createElement(icon, { className: 'w-10 h-10 text-slate-300 dark:text-slate-600' })}
+            </div>
+          )
         ) : (
           <div className="p-4 bg-slate-50 dark:bg-gray-700/50 rounded-2xl mb-5">
             <Icon className="w-10 h-10 text-slate-300 dark:text-slate-600" />

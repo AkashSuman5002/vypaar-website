@@ -32,7 +32,17 @@ const Customers = () => {
   useEffect(() => { loadCustomers(); }, []);
 
   const resetForm = () => {
-    setForm({ name: '', phone: '', email: '', address: '', openingBalance: '', partyType: 'Customer', paymentTerms: '', bankDetails: '', notes: '', gstNumber: '', panNumber: '', creditLimit: '' });
+    // Prefill defaults configured in Party settings for a NEW party.
+    // Mirrors how partyDefaultAddress / partyDefaultPaymentTerms are surfaced,
+    // and additionally consumes the previously-unused partyDefaultBanks.
+    setForm({
+      name: '', phone: '', email: '',
+      address: getPref('party', 'partyDefaultAddress') || '',
+      openingBalance: '', partyType: 'Customer',
+      paymentTerms: getPref('party', 'partyDefaultPaymentTerms') || '',
+      bankDetails: getPref('party', 'partyDefaultBanks') || '',
+      notes: '', gstNumber: '', panNumber: '', creditLimit: '',
+    });
     setCustomFields({});
   };
 

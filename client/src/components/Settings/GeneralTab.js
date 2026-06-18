@@ -6,7 +6,7 @@ import SettingsSection from './SettingsSection';
 import { SettingsSelectRow, SettingsInputRow } from './SettingsRow';
 import { ZoomIn, Warehouse, Save } from 'lucide-react';
 import { defaultPrefs, loadSettings, saveCategory } from '../../hooks/useSettings';
-import { settingAPI, backupAPI } from '../../services/api';
+import { settingAPI, backupAPI, themeAPI } from '../../services/api';
 
 const GeneralTab = () => {
   const [settings, setSettings] = useState(defaultPrefs.general);
@@ -51,6 +51,19 @@ const GeneralTab = () => {
   const update = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
   const updateBusiness = (key, value) => setBusiness(prev => ({ ...prev, [key]: value }));
 
+  // Zoom must take effect immediately, not only after a page reload. Apply it to the
+  // page right away for live feedback AND persist through the shared settings cache
+  // (saveCategory → notifyListeners) so ZoomProvider stays the single source of truth.
+  const applyZoom = (z) => {
+    const parsed = parseInt(z);
+    document.body.style.zoom = `${isNaN(parsed) ? 1 : parsed / 100}`;
+  };
+  const handleZoom = (z) => {
+    setSettings(prev => ({ ...prev, zoomLevel: z }));
+    applyZoom(z);
+    saveCategory('general', { ...settings, zoomLevel: z }).catch(() => {});
+  };
+
   const handleClearPasscode = async () => {
     try {
       await settingAPI.clearPasscode();
@@ -85,6 +98,9 @@ const GeneralTab = () => {
       setHasPasscode(!!data?.preferences?.general?.passcodeHash);
       setPasscodeInput('');
       setPasscodeConfirm('');
+      // Refresh the shared settings cache so live consumers (ZoomProvider, etc.) update
+      // without requiring a page reload.
+      loadSettings(true).catch(() => {});
       toast.success('General settings saved');
     } catch { toast.error('Failed to save general settings'); }
     finally { setSaving(false); }
@@ -128,7 +144,8 @@ const GeneralTab = () => {
               </div>
             )}
             <SettingsSelectRow label="Business Currency" value={settings.businessCurrency} onChange={v => update('businessCurrency', v)} options={['INR', 'USD', 'EUR']} />
-            <SettingsInputRow label="GSTIN Number" value={settings.gstin} onChange={v => update('gstin', v)} placeholder="Enter GSTIN" />
+            {/* GSTIN binds to the canonical top-level gstNumber (the value the rest of the app consumes), not the orphan general.gstin. */}
+            <SettingsInputRow label="GSTIN Number" value={business.gstNumber} onChange={v => updateBusiness('gstNumber', v)} placeholder="Enter GSTIN" />
             <ToggleSwitch label="Stop Sale on Negative Stock" checked={settings.stopSaleOnNegativeStock} onChange={v => update('stopSaleOnNegativeStock', v)} />
             <ToggleSwitch label="Block New Items from Transaction Form" checked={settings.blockNewItemsFromTransaction} onChange={v => update('blockNewItemsFromTransaction', v)} />
             <ToggleSwitch label="Block New Parties from Transaction Form" checked={settings.blockNewPartiesFromTransaction} onChange={v => update('blockNewPartiesFromTransaction', v)} />
@@ -233,15 +250,15 @@ const GeneralTab = () => {
             <div className="py-4 space-y-4">
               <div className="flex items-center gap-3">
                 <ZoomIn className="w-5 h-5 text-gray-400" />
-                <span className="text-sm font-medium text-[#1F2937]">Zoom Level</span>
+                <span className="text-sm font-medium text-[#1F2937] dark:text-slate-200">Zoom Level</span>
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {zoomOptions.map(z => (
-                  <button key={z} onClick={() => update('zoomLevel', z)}
+                  <button key={z} onClick={() => handleZoom(z)}
                     className={`py-2 text-sm font-medium rounded-md border transition-all ${
                       settings.zoomLevel === z
                         ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-[#1F2937] border-gray-200 hover:border-blue-300'
+                        : 'bg-white dark:bg-gray-700 text-[#1F2937] dark:text-slate-200 border-gray-200 dark:border-gray-600 hover:border-blue-300'
                     }`}>
                     {z}%
                   </button>
@@ -255,6 +272,9 @@ const GeneralTab = () => {
                 } else {
                   document.documentElement.classList.remove('dark');
                 }
+                // Persist to the canonical theme endpoint (same field the header reads),
+                // so the choice survives a reload and both controls stay in sync.
+                themeAPI.update(v).catch(() => {});
               }} />
             </div>
           </SettingsSection>

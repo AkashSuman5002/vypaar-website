@@ -57,6 +57,11 @@ export const fetchCsrfToken = async () => {
 export const authAPI = {
   login: (data) => API.post('/auth/login', data),
   register: (data) => API.post('/auth/register', data),
+  // Passwordless OTP flows
+  registerStart: (data) => API.post('/auth/register/start', data),
+  registerVerify: (data) => API.post('/auth/register/verify', data),
+  loginOtp: (data) => API.post('/auth/login/otp', data),
+  loginVerify: (data) => API.post('/auth/login/verify', data),
   getProfile: () => API.get('/auth/profile'),
   refresh: () => API.get('/auth/refresh'),
   forgotPassword: (data) => API.post('/auth/forgot-password', data),
@@ -101,6 +106,7 @@ export const saleAPI = {
   delete: (id) => API.delete(`/sales/${id}`),
   getNextInvoice: () => API.get('/sales/next-invoice'),
   getPDF: (id) => API.get(`/sales/${id}/pdf`, { responseType: 'blob' }),
+  previewPDF: (printPrefs) => API.post('/sales/preview-pdf', { print: printPrefs }, { responseType: 'blob' }),
   duplicate: (id) => API.post(`/sales/${id}/duplicate`),
   convertToReturn: (id) => API.post(`/sales/${id}/convert-to-return`),
   convertToChallan: (id) => API.post(`/sales/${id}/convert-to-challan`),
@@ -229,6 +235,9 @@ export const reportAPI = {
   getLowStock: (params) => API.get('/accounting/reports/low-stock', { params }),
   getPaymentReminders: (params) => API.get('/accounting/reports/payment-reminders', { params }),
   getGSTR2AReconciliation: (params) => API.get('/accounting/reports/gstr2a-reconciliation', { params }),
+  getSalePurchaseByItemCategory: (params) => API.get('/accounting/reports/sale-purchase-by-item-category', { params }),
+  getStockSummaryByItemCategory: (params) => API.get('/accounting/reports/stock-summary-by-item-category', { params }),
+  getItemWiseDiscount: (params) => API.get('/accounting/reports/item-wise-discount', { params }),
 };
 
 export const bankAccountAPI = {
@@ -347,6 +356,7 @@ export const notificationAPI = {
   markAsRead: (id) => API.put(`/notifications/${id}/read`),
   markAllAsRead: () => API.put('/notifications/read-all'),
   delete: (id) => API.delete(`/notifications/${id}`),
+  clearAll: () => API.delete('/notifications/clear-all'),
 };
 
 export const ledgerNoteAPI = {
@@ -410,6 +420,14 @@ export const loyaltyAPI = {
   earn: (data) => API.post('/loyalty-points/earn', data),
   redeem: (data) => API.post('/loyalty-points/redeem', data),
   adjust: (data) => API.post('/loyalty-points/adjust', data),
+};
+
+export const currencyAPI = {
+  getAll: () => API.get('/currencies'),
+  create: (data) => API.post('/currencies', data),
+  update: (id, data) => API.put(`/currencies/${id}`, data),
+  delete: (id) => API.delete(`/currencies/${id}`),
+  getExchangeRate: (from, to) => API.get(`/currencies/exchange-rate/${from}/${to}`),
 };
 
 export const backupAPI = {

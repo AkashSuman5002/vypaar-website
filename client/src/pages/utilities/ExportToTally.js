@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { Download, ArrowRight } from 'lucide-react';
-import { exportAPI } from '../../services/api';
+import { Download } from 'lucide-react';
+import { utilityAPI } from '../../services/api';
 
 const ExportToTally = () => {
-  const [exportType, setExportType] = useState('xml');
   const [selectedModules, setSelectedModules] = useState(['ledgers', 'vouchers']);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -24,12 +23,13 @@ const ExportToTally = () => {
     if (selectedModules.length === 0) { toast.error('Select at least one module'); return; }
     setExporting(true);
     try {
-      const res = await exportAPI.excelExport({ modules: selectedModules, format: exportType, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      // The backend (POST /utilities/export-tally) generates a Tally-compatible XML blob.
+      const res = await utilityAPI.exportToTally({ modules: selectedModules, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/xml' }));
       const a = document.createElement('a'); a.href = url;
-      a.download = `tally_export_${new Date().toISOString().split('T')[0]}.${exportType === 'xml' ? 'xml' : 'xlsx'}`;
+      a.download = `tally_export_${new Date().toISOString().split('T')[0]}.xml`;
       a.click(); window.URL.revokeObjectURL(url);
-      toast.success('Export downloaded successfully!');
+      toast.success('Tally XML exported successfully!');
     } catch (err) { toast.error(err.response?.data?.message || 'Export failed'); }
     finally { setExporting(false); }
   };
@@ -39,15 +39,8 @@ const ExportToTally = () => {
       <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC] mb-6">Export To Tally</h1>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-6">
-          <h2 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] mb-5">Select Export Format</h2>
-          <div className="flex gap-4 mb-6">
-            {['xml', 'xlsx'].map(fmt => (
-              <label key={fmt} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all flex-1 ${exportType === fmt ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10' : 'border-slate-200 hover:border-slate-300 dark:border-[#334155] dark:hover:border-[#475569]'}`}>
-                <input type="radio" name="format" checked={exportType === fmt} onChange={() => setExportType(fmt)} className="w-4 h-4 text-blue-600" />
-                <div><p className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">{fmt === 'xml' ? 'XML Format' : 'Excel Format'}</p><p className="text-xs text-slate-500 dark:text-[#64748B]">{fmt === 'xml' ? 'Direct Tally import format' : 'For manual review before import'}</p></div>
-              </label>
-            ))}
-          </div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] mb-2">Export Format</h2>
+          <p className="text-xs text-slate-500 dark:text-[#64748B] mb-5">Data is exported as Tally-compatible XML for direct import into Tally ERP 9 / TallyPrime.</p>
           <h3 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC] mb-3">Select Data to Export</h3>
           <div className="space-y-3 mb-6">
             {modules.map(mod => (

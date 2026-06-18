@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Save, ChevronRight, Download } from 'lucide-react';
 import { defaultPrefs, loadSettings, saveCategory } from '../../hooks/useSettings';
+import { saleAPI } from '../../services/api';
 
 const previewItems = [
   { name: 'Brittania Choclate Cake(12345678)', qty: 100, rate: 100, gst: 0, unit: 'Box', desc: 'Brittania Choclate Cake description', batch: 'N1234', model: 'A12345', exp: '06/2027', mfg: '10/06/2026', size: 'Med/32', hsn: '12345678', mrp: 100 },
@@ -82,6 +83,10 @@ const PrintTab = () => {
   const [settings, setSettings] = useState(defaultPrefs.print);
   const [businessSettings, setBusinessSettings] = useState({});
   const [saving, setSaving] = useState(false);
+  // Live preview rendered by the REAL server PDF engine (so it matches the printout).
+  const [pdfUrl, setPdfUrl] = useState('');
+  const [previewError, setPreviewError] = useState(false);
+  const pdfUrlRef = useRef('');
 
   useEffect(() => {
     loadSettings().then(data => {
@@ -94,7 +99,35 @@ const PrintTab = () => {
     });
   }, []);
 
+  // Regenerate the preview PDF whenever a print setting changes (debounced). This calls
+  // the same pdfController used for real invoices, with the live (unsaved) settings, so
+  // the preview is guaranteed to match what actually prints.
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const res = await saleAPI.previewPDF(settings);
+        if (cancelled) return;
+        const url = URL.createObjectURL(res.data);
+        if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = url;
+        setPdfUrl(url);
+        setPreviewError(false);
+      } catch {
+        if (!cancelled) setPreviewError(true);
+      }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [settings]);
+
+  useEffect(() => () => { if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current); }, []);
+
   const update = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
+
+  // Apply a printer preset (multiple print-setting keys at once) using the same settings
+  // state the other PrintTab controls write to, so the choice is persisted on Save and is
+  // reflected in the live preview.
+  const applyPrinterPreset = (preset) => setSettings(prev => ({ ...prev, ...preset }));
 
   const handleSave = async () => {
     setSaving(true);
@@ -1102,12 +1135,12 @@ const PrintTab = () => {
                 <SectionHeader title="Vyapar Printer Setup" />
                 <div className="px-5 py-3 space-y-2">
                   {[
-                    { label: '2 Inch (VYPRTP2001)', file: 'VYPRTP2001' },
-                    { label: '3 Inch (VYPRTP3001)', file: 'VYPRTP3001' },
-                    { label: '2 Inch (VYPRTP2002)', file: 'VYPRTP2002' },
+                    { label: '2 Inch (VYPRTP2001)', file: 'VYPRTP2001', preset: { printerType: 'thermal', thermalPageSize: '2inch', paperSize: 'A4', printingType: 'Text Printing', useTextStyling: true, autoCutPaper: true, openCashDrawer: false } },
+                    { label: '3 Inch (VYPRTP3001)', file: 'VYPRTP3001', preset: { printerType: 'thermal', thermalPageSize: '3inch', paperSize: 'A4', printingType: 'Text Printing', useTextStyling: true, autoCutPaper: true, openCashDrawer: false } },
+                    { label: '2 Inch (VYPRTP2002)', file: 'VYPRTP2002', preset: { printerType: 'thermal', thermalPageSize: '2inch', paperSize: 'A4', printingType: 'Image Printing', useTextStyling: true, autoCutPaper: true, openCashDrawer: true } },
                   ].map(printer => (
                     <button key={printer.file}
-                      onClick={() => toast.info(`Printer setup wizard for ${printer.label} coming soon`)}
+                      onClick={() => { applyPrinterPreset(printer.preset); toast.success(`${printer.label} preset applied`); }}
                       className="w-full flex items-center justify-between px-4 py-2.5 bg-pink-50 border border-pink-200 rounded-lg text-pink-700 text-sm font-medium hover:bg-pink-100 transition-colors">
                       <span>{printer.label} - Quick Setup</span>
                       <Download className="w-4 h-4" />
@@ -1124,8 +1157,15 @@ const PrintTab = () => {
             <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
               <span className="text-sm font-medium text-[#1F2937] dark:text-slate-200">Live Invoice Preview</span>
             </div>
-            <div className="p-6 flex justify-center">
-              {isThermal ? renderThermalPreview() : renderRegularPreview()}
+            <div className="p-4">
+              {pdfUrl ? (
+                <iframe title="Live Invoice Preview" src={pdfUrl}
+                  className="w-full h-[640px] border-0 rounded-lg bg-white" />
+              ) : (
+                <div className="h-[640px] w-full flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+                  {previewError ? 'Preview unavailable' : 'Generating preview…'}
+                </div>
+              )}
             </div>
           </div>
         </div>

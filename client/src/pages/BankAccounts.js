@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, ChevronUp, Check, Printer, Landmark, CreditCard, Pencil, Trash2 } from 'lucide-react';
-import EmptyState from '../components/UI/EmptyState';
 import FeatureCard from '../components/CashBank/FeatureCard';
 import FormField from '../components/CashBank/FormField';
 import { bankAccountAPI, transactionAPI } from '../services/api';
@@ -156,9 +155,9 @@ const BankAccounts = () => {
 
   if (accounts.length === 0 && !showForm) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 p-6">
-        <EmptyState
-          icon={
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft p-8 sm:p-12">
+          <div className="flex flex-col items-center text-center">
             <svg width="120" height="100" viewBox="0 0 120 100" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="10" y="25" width="100" height="65" rx="6" fill="#E5E7EB" />
               <rect x="15" y="30" width="90" height="12" rx="2" fill="#D1D5DB" />
@@ -172,34 +171,33 @@ const BankAccounts = () => {
               <rect x="36" y="72" width="12" height="8" rx="1" fill="#D1D5DB" />
               <rect x="68" y="72" width="12" height="8" rx="1" fill="#D1D5DB" />
             </svg>
-          }
-          title="Manage Multiple Bank Accounts"
-          subtitle="With Vyapar you can manage multiple banks and payment types like UPI, Net Banking and Credit Card"
-        >
-          <div className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <FeatureCard
-              icon={Printer}
-              title="Print Bank Details on Invoices"
-              description="Print account details on invoices and get payments via NEFT/RTGS/IMPS."
-            />
-            <FeatureCard
-              icon={Landmark}
-              title="Unlimited Payment Types"
-              description="Record transactions by methods like Banks, UPI, Net Banking and Cards."
-            />
-            <FeatureCard
-              icon={CreditCard}
-              title="Print UPI QR Code on Invoices"
-              description="Print QR code on your invoices or send payment links to your customers."
-            />
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mt-5 mb-1.5">Manage Multiple Bank Accounts</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mb-8">With Vyapar you can manage multiple banks and payment types like UPI, Net Banking and Credit Card</p>
+            <div className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 mb-8">
+              <FeatureCard
+                icon={Printer}
+                title="Print Bank Details on Invoices"
+                description="Print account details on invoices and get payments via NEFT/RTGS/IMPS."
+              />
+              <FeatureCard
+                icon={Landmark}
+                title="Unlimited Payment Types"
+                description="Record transactions by methods like Banks, UPI, Net Banking and Cards."
+              />
+              <FeatureCard
+                icon={CreditCard}
+                title="Print UPI QR Code on Invoices"
+                description="Print QR code on your invoices or send payment links to your customers."
+              />
+            </div>
+            <button
+              onClick={() => setShowForm(true)}
+              className="px-6 py-2.5 bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold rounded-md transition-colors shadow-sm"
+            >
+              + Add Bank Account
+            </button>
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-6 py-2.5 bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold rounded-md transition-colors shadow-sm"
-          >
-            + Add Bank Account
-          </button>
-        </EmptyState>
+        </div>
       </motion.div>
     );
   }

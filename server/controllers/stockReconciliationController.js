@@ -46,15 +46,21 @@ const getStockForCount = async (req, res) => {
     const { godown, search } = req.query;
     const filter = { ...baseFilter, isActive: true, type: 'product' };
 
-    if (godown) filter.warehouse = godown;
+    const andConditions = [];
+    // A selected godown should still surface products that have no warehouse assigned
+    // (the common case — `warehouse` has no default), otherwise the count list is empty.
+    if (godown) {
+      andConditions.push({ $or: [{ warehouse: godown }, { warehouse: null }, { warehouse: { $exists: false } }] });
+    }
     if (search) {
       const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.$or = [
+      andConditions.push({ $or: [
         { name: new RegExp(escaped, 'i') },
         { sku: new RegExp(escaped, 'i') },
         { barcode: new RegExp(escaped, 'i') },
-      ];
+      ] });
     }
+    if (andConditions.length) filter.$and = andConditions;
 
     const products = await Product.find(filter).sort({ name: 1 }).select('name stock unit warehouse sku barcode category');
     res.json({ items: products });

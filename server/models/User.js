@@ -4,14 +4,16 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  // Password is optional now that accounts can be created/used via passwordless OTP login.
   password: {
-    type: String, required: true, minlength: 8,
+    type: String, minlength: 8,
     validate: {
-      validator: (v) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(v),
+      validator: (v) => !v || /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(v),
       message: 'Password must contain at least 8 characters with uppercase, lowercase, and a number',
     },
   },
-  phone: { type: String, default: '' },
+  phone: { type: String, default: '', trim: true, index: true },
+  isVerified: { type: Boolean, default: false },
   role: { type: String, enum: ['admin', 'user', 'Admin', 'Manager', 'Accountant', 'Staff'], default: 'admin' },
   permissions: [{ type: String }],
   business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },

@@ -7,7 +7,7 @@ import LoadingSpinner from '../components/UI/LoadingSpinner';
 import EmptyState from '../components/UI/EmptyState';
 import { toast } from 'react-toastify';
 import { formatCurrency } from '../utils/format';
-import { validateMobile, validateEmail, formatMobile } from '../utils/validation';
+import { validatePhone, validateEmail, formatPhone } from '../utils/validation';
 import { useSettings } from '../hooks/useSettings';
 import { motion } from 'framer-motion';
 import { Pencil, Trash2, Plus, Eye, Truck, IndianRupee } from 'lucide-react';
@@ -22,12 +22,25 @@ const Suppliers = () => {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState(null);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', openingBalance: '', gstNumber: '', creditLimit: '', state: '', notes: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', openingBalance: '', gstNumber: '', creditLimit: '', state: '', notes: '', bankDetails: '' });
   const [errors, setErrors] = useState({});
   const [customFields, setCustomFields] = useState({});
   const { getPref } = useSettings();
 
   useEffect(() => { loadSuppliers(); }, []);
+
+  // Reset the form for a NEW supplier, prefilling the defaults configured in
+  // Party settings (mirrors partyDefaultAddress / partyDefaultPaymentTerms and
+  // additionally consumes the previously-unused partyDefaultBanks).
+  const resetForm = () => {
+    setForm({
+      name: '', phone: '', email: '',
+      address: getPref('party', 'partyDefaultAddress') || '',
+      openingBalance: '', gstNumber: '', creditLimit: '', state: '', notes: '',
+      bankDetails: getPref('party', 'partyDefaultBanks') || '',
+    });
+    setCustomFields({});
+  };
 
   const loadSuppliers = async () => {
     try {
@@ -40,7 +53,7 @@ const Suppliers = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const newErrors = {};
-    const phoneResult = validateMobile(form.phone);
+    const phoneResult = validatePhone(form.phone);
     if (!phoneResult.valid) newErrors.phone = phoneResult.error;
     const emailResult = validateEmail(form.email);
     if (!emailResult.valid) newErrors.email = emailResult.error;
@@ -57,8 +70,7 @@ const Suppliers = () => {
         toast.success('Supplier created');
       }
       setModal(false); setEdit(null);
-      setForm({ name: '', phone: '', email: '', address: '', openingBalance: '', gstNumber: '', creditLimit: '', state: '', notes: '' });
-      setCustomFields({});
+      resetForm();
       setErrors({});
       loadSuppliers();
     } catch { toast.error('Operation failed'); }
@@ -85,6 +97,7 @@ const Suppliers = () => {
       creditLimit: supplier.creditLimit || '',
       state: supplier.state || '',
       notes: supplier.notes || '',
+      bankDetails: supplier.bankDetails || '',
     });
     setCustomFields(supplier.customFields || {});
     setModal(true);
@@ -130,7 +143,7 @@ const Suppliers = () => {
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Suppliers</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Manage your vendor relationships</p>
         </div>
-        <button onClick={() => { setEdit(null); setForm({ name: '', phone: '', email: '', address: '', openingBalance: '' }); setCustomFields({}); setErrors({}); setModal(true); }} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+        <button onClick={() => { setEdit(null); resetForm(); setErrors({}); setModal(true); }} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
           <Plus className="w-4 h-4" /> Add Supplier
         </button>
       </div>
@@ -151,7 +164,7 @@ const Suppliers = () => {
       </div>
 
       {suppliers.length === 0 ? (
-        <EmptyState type="suppliers" actionLabel="Add Supplier" onAction={() => { setEdit(null); setForm({ name: '', phone: '', email: '', address: '', openingBalance: '' }); setCustomFields({}); setErrors({}); setModal(true); }} />
+        <EmptyState type="suppliers" actionLabel="Add Supplier" onAction={() => { setEdit(null); resetForm(); setErrors({}); setModal(true); }} />
       ) : (
         <DataTable columns={columns} data={suppliers} />
       )}
@@ -166,7 +179,7 @@ const Suppliers = () => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Phone</label>
-              <input placeholder="Phone number" value={form.phone} onChange={(e) => setForm({ ...form, phone: formatMobile(e.target.value) })} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 text-sm ${errors.phone ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
+              <input placeholder="Phone number" value={form.phone} onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })} className={`w-full px-3.5 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 text-sm ${errors.phone ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-600 focus:ring-blue-500/20 focus:border-blue-500'}`} />
               {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
             </div>
             <div>
@@ -179,6 +192,12 @@ const Suppliers = () => {
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Address</label>
               <textarea placeholder={getPref('party', 'partyDefaultAddress') || 'Enter address'} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={2} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
+            </div>
+          )}
+          {getPref('party', 'partyShowBankDetails') && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Bank Details</label>
+              <textarea placeholder={getPref('party', 'partyDefaultBanks') || 'Bank name, account number, IFSC'} value={form.bankDetails} onChange={(e) => setForm({ ...form, bankDetails: e.target.value })} rows={2} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
