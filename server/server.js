@@ -5,10 +5,11 @@ const helmet = require('helmet');
 const connectDB = require('./config/db');
 const { errorHandler } = require('./middleware/errorMiddleware');
 const { apiLimiter } = require('./middleware/rateLimit');
-const { authMiddleware } = require('./middleware/auth');
+const { authMiddleware, uploadsAuthMiddleware } = require('./middleware/auth');
 const { csrfProtection } = require('./middleware/csrf');
 const businessContext = require('./middleware/businessContext');
 const auditMiddleware = require('./middleware/audit');
+const sanitize = require('./middleware/sanitize');
 const multer = require('multer');
 const path = require('path');
 const cookieParser = require('cookie-parser');
@@ -75,8 +76,27 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
+
+// Strip NoSQL operator-injection keys ($..., dotted paths) from all request payloads.
+// Mounted EARLY (after body parsers, before any route/auth) so every downstream
+// handler and Mongoose query sees only sanitized req.body/req.query/req.params.
+app.use(sanitize);
+
 app.use('/api', apiLimiter);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Uploaded files (logos, signatures) use guessable Date.now() filenames, so the
+// static route must NOT be public. Require a valid auth token before serving any
+// file, and set safe response headers so browsers don't sniff/render content.
+app.use(
+  '/uploads',
+  uploadsAuthMiddleware,
+  (req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', 'inline');
+    next();
+  },
+  express.static(path.join(__dirname, 'uploads'))
+);
 
 // Request timeout
 app.use((req, res, next) => {

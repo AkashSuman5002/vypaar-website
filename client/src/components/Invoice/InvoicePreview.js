@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { BadgePercent, Phone, Mail, MapPin, Building } from 'lucide-react';
 import { formatCurrency, formatDate, numberToWords } from '../../utils/format';
-import { BASE_URL } from '../../services/api';
+import { BASE_URL, mediaUrl } from '../../services/api';
 
 const InvoicePreview = ({ form, settings }) => {
   const { items, customer, customerName, date, dueDate, invoiceNumber, paidAmount, paymentMethod } = form;
@@ -23,7 +23,7 @@ const InvoicePreview = ({ form, settings }) => {
 
   const paymentStatus = paidAmount >= grandTotal && grandTotal > 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid';
 
-  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? mediaUrl(settings.logo) : null;
 
   return (
     <motion.div

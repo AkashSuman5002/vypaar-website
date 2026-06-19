@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { Users, IndianRupee, Search, TrendingUp, Calendar } from 'lucide-react';
+import { Users, IndianRupee, Search, TrendingUp, Calendar, Percent, AlertCircle } from 'lucide-react';
 import { utilityAPI } from '../../services/api';
 
 const TrackYourSalesmen = () => {
@@ -23,13 +23,15 @@ const TrackYourSalesmen = () => {
   const filteredSalesmen = salesmen.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase()));
   const totalAmount = salesmen.reduce((acc, s) => acc + (s.totalAmount || 0), 0);
   const totalSales = salesmen.reduce((acc, s) => acc + (s.totalSales || 0), 0);
+  const totalCommission = salesmen.reduce((acc, s) => acc + (s.commissionEarned || 0), 0);
+  const totalPending = salesmen.reduce((acc, s) => acc + (s.pendingAmount || 0), 0);
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">Track Your Salesmen</h1>
-          <p className="text-sm text-slate-400 dark:text-[#64748B] mt-0.5">Monitor salesman performance based on customer assignments and sales data.</p>
+          <p className="text-sm text-slate-400 dark:text-[#64748B] mt-0.5">Monitor salesman performance, commissions, and pending collections.</p>
         </div>
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 dark:text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -37,7 +39,7 @@ const TrackYourSalesmen = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-5 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center"><Users className="w-5 h-5 text-blue-600" /></div>
           <div><p className="text-xs text-slate-400 dark:text-[#64748B]">Total Salesmen</p><p className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">{salesmen.length}</p></div>
@@ -51,8 +53,12 @@ const TrackYourSalesmen = () => {
           <div><p className="text-xs text-slate-400 dark:text-[#64748B]">Total Invoices</p><p className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">{totalSales}</p></div>
         </div>
         <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center"><IndianRupee className="w-5 h-5 text-amber-600" /></div>
-          <div><p className="text-xs text-slate-400 dark:text-[#64748B]">Avg. per Salesman</p><p className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">₹{salesmen.length > 0 ? Math.round(totalAmount / salesmen.length).toLocaleString('en-IN') : 0}</p></div>
+          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center"><Percent className="w-5 h-5 text-amber-600" /></div>
+          <div><p className="text-xs text-slate-400 dark:text-[#64748B]">Total Commission</p><p className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">₹{totalCommission.toLocaleString('en-IN')}</p></div>
+        </div>
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/15 flex items-center justify-center"><AlertCircle className="w-5 h-5 text-red-600" /></div>
+          <div><p className="text-xs text-slate-400 dark:text-[#64748B]">Pending Collection</p><p className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">₹{totalPending.toLocaleString('en-IN')}</p></div>
         </div>
       </div>
 
@@ -63,17 +69,20 @@ const TrackYourSalesmen = () => {
             <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Customers</th>
             <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Invoices</th>
             <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Total Amount</th>
+            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Pending</th>
+            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Commission %</th>
+            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Commission</th>
             <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#64748B]">Last Sale</th>
           </tr></thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="5" className="px-6 py-12 text-center text-sm text-slate-400 dark:text-[#64748B]">Loading salesmen data...</td></tr>
+              <tr><td colSpan="8" className="px-6 py-12 text-center text-sm text-slate-400 dark:text-[#64748B]">Loading salesmen data...</td></tr>
             ) : filteredSalesmen.length === 0 ? (
-              <tr><td colSpan="5" className="px-6 py-12 text-center">
+              <tr><td colSpan="8" className="px-6 py-12 text-center">
                 <div className="flex flex-col items-center">
                   <Users className="w-12 h-12 text-slate-300 dark:text-[#475569] mb-3" />
                   <p className="text-sm text-slate-400 dark:text-[#64748B] mb-1">No salesman data found</p>
-                  <p className="text-xs text-slate-400 dark:text-[#64748B]">Assign salesmen to customers in Party Details to track their performance.</p>
+                  <p className="text-xs text-slate-400 dark:text-[#64748B]">Add staff with salesman role or assign salesmen to customers.</p>
                 </div>
               </td></tr>
             ) : filteredSalesmen.map((s, idx) => (
@@ -82,6 +91,9 @@ const TrackYourSalesmen = () => {
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-[#94A3B8]">{s.customers || 0}</td>
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-[#94A3B8]">{s.totalSales || 0}</td>
                 <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-[#F8FAFC]">₹{(s.totalAmount || 0).toLocaleString('en-IN')}</td>
+                <td className="px-6 py-4 text-sm font-medium text-red-600 dark:text-red-400">₹{(s.pendingAmount || 0).toLocaleString('en-IN')}</td>
+                <td className="px-6 py-4 text-sm text-slate-600 dark:text-[#94A3B8]">{s.commissionRate || 0}%</td>
+                <td className="px-6 py-4 text-sm font-medium text-emerald-600 dark:text-emerald-400">₹{(s.commissionEarned || 0).toLocaleString('en-IN')}</td>
                 <td className="px-6 py-4 text-sm text-slate-500 dark:text-[#64748B]">{s.lastActive ? new Date(s.lastActive).toLocaleDateString('en-IN') : 'N/A'}</td>
               </tr>
             ))}

@@ -26,10 +26,18 @@ const CloseFinancialYear = () => {
     try {
       const res = await utilityAPI.closeFinancialYear({ confirmation: 'CLOSE' });
       setClosingResult(res.data);
+      // Reflect the now-locked state returned by the backend.
+      setFyStatus(prev => ({ ...(prev || {}), isOpen: false, isLocked: true, lockedUntil: res.data?.lockedUntil, closedFY: res.data?.closedFY }));
       setStep(2);
-      toast.success('Financial year closed successfully!');
+      toast.success('Financial year closed and locked successfully!');
     } catch (err) { toast.error(err.response?.data?.message || 'Failed to close'); }
     finally { setClosing(false); }
+  };
+
+  const fmtDate = (d) => {
+    if (!d) return '';
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('en-IN');
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" /></div>;
@@ -56,6 +64,15 @@ const CloseFinancialYear = () => {
 
           {step === 0 && (
             <div>
+              {fy.isLocked && (
+                <div className="flex items-center gap-4 p-5 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl mb-6">
+                  <Lock className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-800 dark:text-red-300">Financial year {fy.closedFY || ''} is closed and locked</p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">Transactions dated on or before {fmtDate(fy.lockedUntil)} are frozen and cannot be created or edited.</p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-4 p-5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl mb-6">
                 <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                 <div>
@@ -83,11 +100,13 @@ const CloseFinancialYear = () => {
                   `All transactions in ${fy.currentFY} will be frozen`,
                   'Opening balances will be carried forward to ' + fy.nextFY,
                   'Retained earnings will be updated',
+                  'New FY opening balance entry will be created',
+                  'All operations are wrapped in a database transaction for safety',
                 ].map((item, i) => (
                   <li key={i} className="flex items-center gap-2 text-sm text-slate-600 dark:text-[#94A3B8]"><CheckCircle className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0" /> {item}</li>
                 ))}
               </ul>
-              <div className="flex justify-end"><button onClick={() => setStep(1)} className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button></div>
+              <div className="flex justify-end"><button onClick={() => setStep(1)} disabled={fy.isLocked} className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">{fy.isLocked ? 'Already Closed' : 'Continue'} {!fy.isLocked && <ArrowRight className="w-4 h-4" />}</button></div>
             </div>
           )}
 

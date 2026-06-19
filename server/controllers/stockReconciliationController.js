@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
 const Godown = require('../models/Godown');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { withTransaction } = require('../utils/withTransaction');
 
 const getNextReconciliationNumber = async (req) => {
   const baseFilter = getBaseFilter(req);
@@ -149,10 +150,18 @@ const applyReconciliation = async (req, res) => {
       const product = productMap.get(item.product.toString());
       if (!product) continue;
 
-      const newStock = Math.max(0, product.stock + item.difference);
+      // Apply by the COUNTED absolute value, not the frozen-at-create-time
+      // `difference`. The snapshot's `systemStock` may be stale (e.g. sales
+      // happened between count and apply); applying `product.stock + difference`
+      // would double-apply that delta and corrupt stock. Setting to the counted
+      // figure makes post-apply stock equal what was physically counted,
+      // regardless of intervening activity. The recorded movement quantity is the
+      // real adjustment against current stock.
+      const newStock = Math.max(0, item.countedStock);
+      const adjustment = newStock - product.stock;
       bulkOps.push({
         updateOne: {
-          filter: { _id: product._id },
+          filter: { _id: product._id, ...baseFilter },
           update: { $set: { stock: newStock } },
         },
       });
@@ -163,7 +172,7 @@ const applyReconciliation = async (req, res) => {
         product: product._id,
         productName: product.name,
         type: 'adjustment',
-        quantity: item.difference,
+        quantity: adjustment,
         balanceBefore: product.stock,
         balanceAfter: newStock,
         referenceType: 'StockReconciliation',
@@ -173,15 +182,17 @@ const applyReconciliation = async (req, res) => {
       });
     }
 
-    if (bulkOps.length > 0) {
-      await Product.bulkWrite(bulkOps);
-    }
-    if (movements.length > 0) {
-      await StockMovement.insertMany(movements);
-    }
+    await withTransaction(async (session) => {
+      if (bulkOps.length > 0) {
+        await Product.bulkWrite(bulkOps, { session });
+      }
+      if (movements.length > 0) {
+        await StockMovement.insertMany(movements, { session });
+      }
 
-    reconciliation.status = 'applied';
-    await reconciliation.save();
+      reconciliation.status = 'applied';
+      await reconciliation.save({ session });
+    });
 
     res.json(reconciliation);
   } catch (error) {

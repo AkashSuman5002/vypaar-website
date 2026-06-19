@@ -33,6 +33,14 @@ const productSchema = new mongoose.Schema({
   batchTracking: { type: Boolean, default: false },
   serialNumberTracking: { type: Boolean, default: false },
   warehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Godown', index: true },
+  // Per-godown distribution of the global `stock` quantity (LOCATION tracking only).
+  // The sum of godownStock[].quantity should equal `stock`; transfers redistribute
+  // quantity between godowns without ever changing the global `stock` total.
+  // Sales/purchases continue to use the global `stock` field as the source of truth.
+  godownStock: [{
+    godown: { type: mongoose.Schema.Types.ObjectId, ref: 'Godown' },
+    quantity: { type: Number, default: 0, min: 0 },
+  }],
   storageLocation: { type: String, trim: true, default: '' },
   // Values for item-level custom fields defined in Settings → Item (keyed by field id).
   customFields: { type: mongoose.Schema.Types.Mixed, default: {} },

@@ -146,12 +146,41 @@ const getValuationByMethod = async (req, res) => {
     const method = req.query.method || 'average';
     const products = await Product.find({ ...baseFilter, isActive: true });
 
-    const valuation = await Promise.all(products.map(async (p) => {
+    // Avoid the N+1 (one StockMovement query per product). Fetch every relevant
+    // movement for these products in a single query, then group by product in
+    // memory and feed the existing pure valuation helpers. This preserves the
+    // exact per-product cost computation (and therefore the output shape).
+    const productIds = products.map((p) => p._id);
+    // fifo/average use purchase+sale movements; average effectively only uses
+    // purchases. Pulling both types in one query covers all methods.
+    const allMovements = productIds.length
+      ? await StockMovement.find({
+          product: { $in: productIds },
+          ...baseFilter,
+          type: { $in: ['purchase', 'sale'] },
+        })
+      : [];
+
+    // Bucket movements per product, then sort to match the original per-product
+    // query ordering: ascending date for fifo/average, descending for lifo.
+    const movementsByProduct = new Map();
+    for (const m of allMovements) {
+      const key = String(m.product);
+      if (!movementsByProduct.has(key)) movementsByProduct.set(key, []);
+      movementsByProduct.get(key).push(m);
+    }
+    const sortDir = method === 'lifo' ? -1 : 1;
+    for (const list of movementsByProduct.values()) {
+      list.sort((a, b) => (new Date(a.date) - new Date(b.date)) * sortDir);
+    }
+
+    const valuation = products.map((p) => {
       let costPrice = p.costPrice || 0;
+      const movements = movementsByProduct.get(String(p._id)) || [];
       if (method === 'fifo' || method === 'lifo') {
-        costPrice = await calculateCOGS(req, p._id, 1, method);
+        costPrice = calculateCOGSFromMovements(movements, 1, method);
       } else if (method === 'average') {
-        costPrice = await getWeightedAverageCost(req, p._id);
+        costPrice = getWeightedAverageCostFromMovements(movements);
       }
       return {
         _id: p._id,
@@ -165,7 +194,7 @@ const getValuationByMethod = async (req, res) => {
         valueAtPrice: (p.stock || 0) * (p.price || 0),
         lowStock: p.stock <= (p.minStock || 5),
       };
-    }));
+    });
 
     const totalValue = valuation.reduce((s, v) => s + v.valueAtCost, 0);
     res.json({ items: valuation, totalValue, totalItems: valuation.length, method });

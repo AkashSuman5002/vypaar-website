@@ -9,6 +9,7 @@ import {
   ArrowRightLeft, BookOpen, Wrench, Factory, FileBadge,
   FileSpreadsheet, Barcode, Layers, ClipboardCheck, Calendar, ShieldCheck, Database, Warehouse,
   ScrollText, Truck as TruckIcon, Headphones, Award, Coins,
+  Share2, Clock, Save, HardDrive, RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import useSettings from '../../hooks/useSettings';
@@ -76,7 +77,6 @@ const utilitiesSubLinks = [
   { to: '/dashboard/import-data', label: 'Import Data', icon: Upload },
   { to: '/dashboard/import-barcode', label: 'Import From Barcode', icon: Barcode },
   { to: '/dashboard/export-data', label: 'Export Data', icon: Download },
-  { to: '/utilities/import-items', label: 'Import Items', icon: Upload },
   { to: '/utilities/setup-business', label: 'Set Up My Business', icon: Building2 },
   { to: '/utilities/accountant-access', label: 'Accountant Access', icon: ShieldCheck },
   { to: '/utilities/barcode-generator', label: 'Barcode Generator', icon: ScanBarcode },
@@ -89,6 +89,14 @@ const utilitiesSubLinks = [
   { to: '/utilities/verify-data', label: 'Verify My Data', icon: ClipboardCheck },
   { to: '/currencies', label: 'Currencies', icon: Coins },
   { to: '/utilities/close-financial-year', label: 'Close Financial Year', icon: Calendar },
+];
+
+const syncBackupSubLinks = [
+  { to: '/sync-share', label: 'Sync & Share', icon: Share2 },
+  { to: '/backup/auto', label: 'Auto Backup', icon: Clock },
+  { to: '/backup/computer', label: 'Backup To Computer', icon: Save },
+  { to: '/backup/drive', label: 'Backup To Drive', icon: HardDrive },
+  { to: '/backup/restore', label: 'Restore Backup', icon: RotateCcw },
 ];
 
 const searchItems = [
@@ -136,8 +144,7 @@ const searchItems = [
   { name: 'Godown Transfer', path: '/godown-transfer' },
   { name: 'Stock Reconciliation', path: '/stock-reconciliation' },
   { name: 'User Management', path: '/user-management' },
-  { name: 'Utilities', path: '/utilities/import-items' },
-  { name: 'Import Items', path: '/utilities/import-items' },
+  { name: 'Utilities', path: '/utilities/setup-business' },
   { name: 'Set Up My Business', path: '/utilities/setup-business' },
   { name: 'Accountant Access', path: '/utilities/accountant-access' },
   { name: 'Barcode Generator', path: '/utilities/barcode-generator' },
@@ -150,6 +157,11 @@ const searchItems = [
   { name: 'Verify My Data', path: '/utilities/verify-data' },
   { name: 'Currencies', path: '/currencies' },
   { name: 'Close Financial Year', path: '/utilities/close-financial-year' },
+  { name: 'Sync & Share', path: '/sync-share' },
+  { name: 'Auto Backup', path: '/backup/auto' },
+  { name: 'Backup To Computer', path: '/backup/computer' },
+  { name: 'Backup To Drive', path: '/backup/drive' },
+  { name: 'Restore Backup', path: '/backup/restore' },
   { name: 'Calendar', path: '/calendar' },
   { name: 'Staff', path: '/staff' },
   { name: 'Reports', path: '/reports' },
@@ -251,6 +263,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
   const [itemsOpen, setItemsOpen] = useState(location.pathname.startsWith('/products') || location.pathname.startsWith('/godown') || location.pathname.startsWith('/stock'));
   const [accountingOpen, setAccountingOpen] = useState(location.pathname.startsWith('/journal-entry') || location.pathname.startsWith('/chart-of-accounts') || location.pathname.startsWith('/account-statements'));
   const [utilitiesOpen, setUtilitiesOpen] = useState(location.pathname.startsWith('/utilities'));
+  const [syncBackupOpen, setSyncBackupOpen] = useState(location.pathname.startsWith('/backup') || location.pathname.startsWith('/sync-share'));
   const [userManagementOpen, setUserManagementOpen] = useState(location.pathname.startsWith('/user-management') || location.pathname.startsWith('/staff'));
 
   useEffect(() => {
@@ -261,6 +274,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
     setItemsOpen(location.pathname.startsWith('/products') || location.pathname.startsWith('/godown') || location.pathname.startsWith('/stock'));
     setAccountingOpen(location.pathname.startsWith('/journal-entry') || location.pathname.startsWith('/chart-of-accounts') || location.pathname.startsWith('/account-statements'));
     setUtilitiesOpen(location.pathname.startsWith('/utilities'));
+    setSyncBackupOpen(location.pathname.startsWith('/backup') || location.pathname.startsWith('/sync-share'));
     setUserManagementOpen(location.pathname.startsWith('/user-management') || location.pathname.startsWith('/staff'));
   }, [location.pathname]);
 
@@ -647,7 +661,7 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
           {!collapsed && <div className="h-px bg-white/5 mx-4 my-1" />}
 
           {/* Utilities */}
-          <NavItem to="/utilities/import-items" label="Utilities" icon={Wrench} collapsed={collapsed} onClick={() => setUtilitiesOpen(!utilitiesOpen)}>
+          <NavItem to="/utilities/setup-business" label="Utilities" icon={Wrench} collapsed={collapsed} onClick={() => setUtilitiesOpen(!utilitiesOpen)}>
             <motion.div animate={{ rotate: utilitiesOpen ? 0 : -90 }} transition={{ duration: 0.2 }}>
               <ChevronDown size={16} className="text-[#C7D2FE]/70" />
             </motion.div>
@@ -665,6 +679,35 @@ const Sidebar = ({ open, setOpen, collapsed, setCollapsed }) => {
                 >
                   <div className="pb-1 space-y-0.5">
                     {utilitiesSubLinks.map((link) => (
+                      <SubNavItem key={link.to} to={link.to} label={link.label} icon={link.icon} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+
+          {/* Sync, Share & Backup */}
+          {canAccess.settings && (
+          <NavItem to="/sync-share" label="Sync, Share & Backup" icon={RefreshCw} collapsed={collapsed} onClick={() => setSyncBackupOpen(!syncBackupOpen)}>
+            <motion.div animate={{ rotate: syncBackupOpen ? 0 : -90 }} transition={{ duration: 0.2 }}>
+              <ChevronDown size={16} className="text-[#C7D2FE]/70" />
+            </motion.div>
+          </NavItem>
+          )}
+
+          {!collapsed && canAccess.settings && (
+            <AnimatePresence>
+              {syncBackupOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pb-1 space-y-0.5">
+                    {syncBackupSubLinks.map((link) => (
                       <SubNavItem key={link.to} to={link.to} label={link.label} icon={link.icon} collapsed={collapsed} onClick={() => { if (window.innerWidth < 1024) setOpen(false); }} />
                     ))}
                   </div>

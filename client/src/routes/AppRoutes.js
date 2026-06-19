@@ -125,8 +125,12 @@ const Manufacturing = LazyLoad(lazy(() => import('../pages/Manufacturing')));
 const GstFiling = LazyLoad(lazy(() => import('../pages/GstFiling')));
 const LoyaltyPoints = LazyLoad(lazy(() => import('../pages/LoyaltyPoints')));
 const Currencies = LazyLoad(lazy(() => import('../pages/Currencies')));
+const SyncShare = LazyLoad(lazy(() => import('../pages/SyncShare')));
+const AutoBackup = LazyLoad(lazy(() => import('../pages/backup/AutoBackup')));
+const BackupToComputer = LazyLoad(lazy(() => import('../pages/backup/BackupToComputer')));
+const BackupToDrive = LazyLoad(lazy(() => import('../pages/backup/BackupToDrive')));
+const RestoreBackup = LazyLoad(lazy(() => import('../pages/backup/RestoreBackup')));
 
-const ImportItems = LazyLoad(lazy(() => import('../pages/utilities/ImportItems')));
 const SetupMyBusiness = LazyLoad(lazy(() => import('../pages/utilities/SetupMyBusiness')));
 const AccountantAccess = LazyLoad(lazy(() => import('../pages/utilities/AccountantAccess')));
 const BarcodeGenerator = LazyLoad(lazy(() => import('../pages/utilities/BarcodeGenerator')));
@@ -237,8 +241,12 @@ const AppRoutes = () => {
         <Route path="/gst-filing" element={<GstFiling />} />
         <Route path="/loyalty-points" element={<LoyaltyPoints />} />
         <Route path="/currencies" element={<Currencies />} />
+        <Route path="/sync-share" element={<SyncShare />} />
+        <Route path="/backup/auto" element={<AutoBackup />} />
+        <Route path="/backup/computer" element={<BackupToComputer />} />
+        <Route path="/backup/drive" element={<BackupToDrive />} />
+        <Route path="/backup/restore" element={<RestoreBackup />} />
 
-        <Route path="/utilities/import-items" element={<ImportItems />} />
         <Route path="/utilities/setup-business" element={<SetupMyBusiness />} />
         <Route path="/utilities/accountant-access" element={<AccountantAccess />} />
         <Route path="/utilities/barcode-generator" element={<BarcodeGenerator />} />

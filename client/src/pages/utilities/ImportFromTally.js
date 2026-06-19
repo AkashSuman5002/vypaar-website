@@ -93,7 +93,8 @@ const ImportFromTally = () => {
     try {
       const res = await utilityAPI.importFromTally({ data: parsedData, type: 'tally' });
       const imp = res.data?.imported || {};
-      toast.success(`Imported ${imp.ledgers || 0} ledger(s) and ${imp.stockItems || 0} stock item(s)!`);
+      const skipped = res.data?.skippedCount || 0;
+      toast.success(`Imported ${imp.ledgers || 0} ledger(s) and ${imp.stockItems || 0} stock item(s)!${skipped ? ` ${skipped} skipped (duplicates).` : ''}`);
       setParsedData(null); setFile(null);
     } catch (err) { toast.error(err.response?.data?.message || 'Import failed'); }
     finally { setUploading(false); }

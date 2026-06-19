@@ -4,6 +4,7 @@ const Receipt = require('../models/Receipt');
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const Transaction = require('../models/Transaction');
+const Expense = require('../models/Expense');
 const Setting = require('../models/Setting');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 
@@ -176,7 +177,11 @@ const postJournalEntry = async (userId, entry, businessId) => {
     } else {
       balanceChange = line.credit - line.debit;
     }
-    await Account.findByIdAndUpdate({ _id: line.account, user: userId, business: businessId || undefined }, { $inc: { balance: balanceChange } });
+    // `account` was already resolved (and scoped) above; update it by its real _id.
+    // (The previous call passed a filter object to findByIdAndUpdate, which expects an
+    // id — Mongoose tried to cast the object to an ObjectId and threw, failing the
+    // whole journal entry and never updating account balances.)
+    await Account.updateOne({ _id: account._id }, { $inc: { balance: balanceChange } });
   }
 
   return je;
@@ -269,10 +274,18 @@ const calcProfitLoss = async (baseFilter, query, userId) => {
     journalFilter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
   }
 
-  const [incomeAccounts, expenseAccounts, entries] = await Promise.all([
+  const expenseFilter = { ...baseFilter };
+  if (startDate && endDate) {
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1);
+    expenseFilter.date = { $gte: new Date(startDate), $lt: end };
+  }
+
+  const [incomeAccounts, expenseAccounts, entries, expenses] = await Promise.all([
     Account.find({ ...baseFilter, type: 'income', isActive: true }),
     Account.find({ ...baseFilter, type: 'expense', isActive: true }),
     JournalEntry.find(journalFilter),
+    Expense.find(expenseFilter).lean(),
   ]);
 
   const calculateBalance = (acc) => {
@@ -289,13 +302,92 @@ const calcProfitLoss = async (baseFilter, query, userId) => {
     return totalCredit - totalDebit;
   };
 
-  const income = incomeAccounts.map((a) => ({ name: a.name, amount: calculateBalance(a) }));
-  const expense = expenseAccounts.map((a) => ({ name: a.name, amount: calculateBalance(a) }));
+  const income = incomeAccounts.map((a) => ({ name: a.name, amount: calculateBalance(a), category: a.category, parent: a.parent }));
+  const expense = expenseAccounts.map((a) => ({ name: a.name, amount: Math.abs(calculateBalance(a)), category: a.category, parent: a.parent }));
+
+  // Group Expense model records by category and merge with Account-based expenses
+  const expenseByCategory = {};
+  expenses.forEach((e) => {
+    const cat = (e.category || 'Other').trim();
+    if (!expenseByCategory[cat]) expenseByCategory[cat] = 0;
+    expenseByCategory[cat] += e.totalAmount || e.amount || 0;
+  });
+
+  // Map Expense model categories to expense accounts (add amounts not already covered by journal entries)
+  const accountNamesCovered = new Set(expense.map((a) => a.name.toLowerCase()));
+  Object.entries(expenseByCategory).forEach(([cat, total]) => {
+    const matchedAccount = expense.find((a) => a.name.toLowerCase() === cat.toLowerCase());
+    if (matchedAccount) {
+      // Already has journal entry balance — only add the difference if journal entry missed it
+      if (matchedAccount.amount === 0 && total > 0) {
+        matchedAccount.amount = total;
+      }
+    } else {
+      // No account exists for this category — add as a standalone expense item
+      expense.push({ name: cat, amount: total, category: 'indirect_expense', parent: null });
+    }
+  });
+
   const totalIncome = income.reduce((s, i) => s + i.amount, 0);
   const totalExpense = expense.reduce((s, e) => s + e.amount, 0);
   const netProfit = totalIncome - totalExpense;
 
-  return { income, expense, totalIncome, totalExpense, netProfit };
+  // Build hierarchical tree for Accounting view
+  const buildTree = (accounts) => {
+    const childMap = {};
+    accounts.forEach((a) => {
+      const pid = a.parent ? a.parent.toString() : null;
+      if (!childMap[pid]) childMap[pid] = [];
+      childMap[pid].push(a);
+    });
+    const traverse = (parentId) => {
+      const children = childMap[parentId] || [];
+      return children.map((c) => {
+        const subChildren = traverse(c._id.toString());
+        return { name: c.name, amount: c.amount, category: c.category, children: subChildren };
+      });
+    };
+    return traverse(null);
+  };
+
+  // If tree is empty (no Account hierarchy), build flat group tree from expense/income arrays
+  const buildFlatTree = (items, parentMap) => {
+    const roots = [];
+    items.forEach((item) => {
+      const pid = item.parent ? item.parent.toString() : null;
+      if (!parentMap[pid]) parentMap[pid] = [];
+      parentMap[pid].push(item);
+    });
+    return parentMap[null] || [];
+  };
+
+  const incomeTree = buildTree(incomeAccounts);
+  const expenseTree = buildTree(expenseAccounts);
+
+  // If accounting hierarchy is empty, build from flat expense/income data
+  const buildCategoryTree = (items) => {
+    const groups = {};
+    items.forEach((item) => {
+      const cat = item.category || 'other';
+      if (!groups[cat]) groups[cat] = { _id: cat, name: cat.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()), amount: 0, category: cat, children: [] };
+      groups[cat].amount += item.amount;
+      groups[cat].children.push({ name: item.name, amount: item.amount, category: item.category, children: [] });
+    });
+    return Object.values(groups);
+  };
+
+  const finalIncomeTree = incomeTree.length > 0 ? incomeTree : buildCategoryTree(income.filter((i) => i.amount !== 0));
+  const finalExpenseTree = expenseTree.length > 0 ? expenseTree : buildCategoryTree(expense.filter((e) => e.amount !== 0));
+
+  return {
+    income: income.filter((i) => i.amount !== 0),
+    expense: expense.filter((e) => e.amount !== 0),
+    totalIncome,
+    totalExpense,
+    netProfit,
+    incomeTree: finalIncomeTree,
+    expenseTree: finalExpenseTree,
+  };
 };
 
 const getProfitLoss = async (req, res) => {
@@ -338,6 +430,12 @@ const getBalanceSheet = async (req, res) => {
     const liabilities = accounts.filter((a) => a.type === 'liability').map((a) => ({ name: a.name, amount: getBalance(a) }));
     const equity = accounts.filter((a) => a.type === 'equity').map((a) => ({ name: a.name, amount: getBalance(a) }));
     const pl = await calcProfitLoss(baseFilter, req.query, req.user._id);
+
+    // The current-period net income (income - expense) is retained earnings and
+    // belongs in equity. Without it, Assets != Liabilities + Equity. Add it as an
+    // explicit equity line so the accounting equation balances.
+    const periodProfit = pl.netProfit || 0;
+    equity.push({ name: 'Retained Earnings (Current Period)', amount: periodProfit });
 
     const totalAssets = assets.reduce((s, a) => s + a.amount, 0);
     const totalLiabilities = liabilities.reduce((s, l) => s + l.amount, 0);
@@ -525,7 +623,7 @@ const getAccountStatement = async (req, res) => {
     const isCash = account.code === '1001' || account.category === 'cash';
     const isBank = account.category === 'bank' || (account.code >= '1002' && account.code <= '1099');
 
-    const allFilter = { user: req.user._id, isPosted: true, 'lines.account': req.params.id };
+    const allFilter = { ...baseFilter, isPosted: true, 'lines.account': req.params.id };
     const allEntries = await JournalEntry.find(allFilter).sort({ entryDate: 1 });
 
     let openingBalance = 0;
@@ -568,7 +666,7 @@ const getAccountStatement = async (req, res) => {
 
     // Also include Transaction records for cash/bank accounts
     if (isCash || isBank) {
-      const txnFilter = { user: req.user._id };
+      const txnFilter = { ...baseFilter };
       if (startDate || endDate) {
         txnFilter.date = {};
         if (startDate) txnFilter.date.$gte = new Date(startDate);

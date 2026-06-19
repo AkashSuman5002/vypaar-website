@@ -83,7 +83,7 @@ const createManufacturingOrder = async (req, res) => {
       orderNumber = `${prefix}${String(nextNum).padStart(6, '0')}`;
     }
 
-    const prod = await Product.findOne({ _id: finishedProduct, user: req.user._id });
+    const prod = await Product.findOne({ _id: finishedProduct, ...baseFilter });
     if (!prod) return res.status(400).json({ message: 'Finished product not found' });
 
     let totalBomCost = 0;
@@ -164,14 +164,14 @@ const completeManufacturingOrder = async (req, res) => {
 
     for (const bom of order.bomItems) {
       if (bom.product) {
-        const prod = await Product.findOne({ _id: bom.product, user: req.user._id });
+        const prod = await Product.findOne({ _id: bom.product, ...baseFilter });
         if (!prod) return res.status(400).json({ message: `Raw material not found: ${bom.productName}` });
         const qtyNeeded = bom.quantity * producedQty;
         if (prod.stock < qtyNeeded) {
           return res.status(400).json({ message: `Insufficient stock for ${prod.name}. Available: ${prod.stock}, Required: ${qtyNeeded}` });
         }
         const balBefore = prod.stock;
-        await Product.findOneAndUpdate({ _id: bom.product, user: req.user._id }, { $inc: { stock: -qtyNeeded } }, { new: true });
+        await Product.findOneAndUpdate({ _id: bom.product, ...baseFilter }, { $inc: { stock: -qtyNeeded } }, { new: true });
         await StockMovement.create({
           user: req.user._id,
           business: req.businessId,
@@ -192,10 +192,10 @@ const completeManufacturingOrder = async (req, res) => {
       }
     }
 
-    const finishedProd = await Product.findOne({ _id: order.finishedProduct, user: req.user._id });
+    const finishedProd = await Product.findOne({ _id: order.finishedProduct, ...baseFilter });
     if (finishedProd) {
       const balBefore = finishedProd.stock;
-      await Product.findOneAndUpdate({ _id: order.finishedProduct, user: req.user._id }, { $inc: { stock: producedQty } }, { new: true });
+      await Product.findOneAndUpdate({ _id: order.finishedProduct, ...baseFilter }, { $inc: { stock: producedQty } }, { new: true });
       await StockMovement.create({
         user: req.user._id,
         business: req.businessId,

@@ -607,6 +607,7 @@ const getScanHistory = async (req, res) => {
 
 const getDashboardStats = async (req, res) => {
   try {
+    const userId = req.user.id;
     const [totalImports, totalCreated, totalUpdated, lastImport] = await Promise.all([
       BarcodeImport.countDocuments({ user: userId }),
       BarcodeImport.aggregate([

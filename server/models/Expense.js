@@ -37,6 +37,7 @@ const expenseSchema = mongoose.Schema({
   rejectionReason: { type: String, trim: true },
 }, { timestamps: true });
 
+expenseSchema.index({ user: 1, date: -1 });
 expenseSchema.index({ business: 1, date: -1 });
 expenseSchema.index({ business: 1, category: 1 });
 

@@ -20,6 +20,8 @@ const preferencesSchema = new mongoose.Schema({
     printAmountOnDC: { type: Boolean, default: true },
     enableGodown: { type: Boolean, default: true },
     autoBackup: { type: Boolean, default: true },
+    backupFrequency: { type: String, default: 'daily' },
+    backupRetention: { type: Number, default: 7 },
     auditTrail: { type: Boolean, default: false },
     zoomLevel: { type: String, default: '100' },
     darkMode: { type: Boolean, default: false },
@@ -290,6 +292,7 @@ const preferencesSchema = new mongoose.Schema({
 
 const settingSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
+  ownerName: { type: String, default: '', trim: true },
   businessName: { type: String, default: '', trim: true },
   phone: { type: String, default: '', trim: true },
   email: { type: String, default: '', lowercase: true, trim: true },
@@ -311,6 +314,12 @@ const settingSchema = new mongoose.Schema({
   pincode: { type: String, default: '', trim: true },
   signature: { type: String, default: '' },
   accountBooksBeginningDate: { type: Date, default: Date.now },
+  financialYearLock: {
+    isLocked: { type: Boolean, default: false },
+    lockedUntil: { type: Date, default: null },
+    closedFY: { type: String, default: '' },
+    closedAt: { type: Date, default: null },
+  },
   sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   preferences: { type: preferencesSchema, default: () => ({}) },
 }, { timestamps: true });

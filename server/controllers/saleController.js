@@ -15,6 +15,120 @@ const { sendPushNotification } = require('../services/pushNotificationService');
 const Transaction = require('../models/Transaction');
 const { getBaseFilter, getSettingQuery, getCreateData } = require('../utils/queryHelper');
 const { withTransaction } = require('../utils/withTransaction');
+const { isDateLocked } = require('../utils/financialYearLock');
+
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * Recompute every monetary field server-side from authoritative inputs so the
+ * client cannot dictate invoice totals. Mirrors purchaseController.createPurchase:
+ * per line we derive taxable (qty*rate minus discount), split GST into CGST/SGST
+ * (intra-state) or IGST (inter-state), compute the line amount, then aggregate the
+ * invoice taxable/tax/total. Does NOT include TCS/TDS/round-off — those remain
+ * handled by the existing server-side logic downstream.
+ *
+ * @returns {{ items, taxableAmount, cgstTotal, sgstTotal, igstTotal, cessTotal, taxTotal, discountTotal, totalAmount }}
+ */
+const recomputeSaleTotals = (items, opts) => {
+  const {
+    enableGST = true,
+    isInterState = false,
+    inclusiveTax = false,
+    compositionScheme = false,
+    cessEnabled = false,
+    cessRate = 0,
+  } = opts || {};
+
+  let taxableAmount = 0, cgstTotal = 0, sgstTotal = 0, igstTotal = 0, cessTotal = 0, discountTotal = 0;
+
+  const computed = (items || []).map((item) => {
+    const qty = Number(item.quantity) || 0;
+    const rate = Number(item.rate) || 0;
+    const gross = qty * rate;
+
+    // Line discount: prefer explicit discountType/discountValue (Sale schema),
+    // else fall back to a flat numeric `discount` the client may send.
+    let discountAmount = 0;
+    if (item.discountType === 'percentage') {
+      discountAmount = gross * (Number(item.discountValue) || 0) / 100;
+    } else if (item.discountType === 'fixed') {
+      discountAmount = Number(item.discountValue) || 0;
+    } else if (item.discountAmount != null) {
+      discountAmount = Number(item.discountAmount) || 0;
+    } else if (item.discount != null) {
+      discountAmount = Number(item.discount) || 0;
+    }
+    discountAmount = Math.min(Math.max(discountAmount, 0), gross);
+    const netGross = gross - discountAmount;
+
+    const gstRate = compositionScheme ? 0 : (Number(item.gstRate) || 0);
+    let taxable;
+    if (inclusiveTax && enableGST && gstRate > 0) {
+      taxable = netGross / (1 + gstRate / 100);
+    } else {
+      taxable = netGross;
+    }
+    taxable = round2(taxable);
+
+    const gstHalf = enableGST && !isInterState ? round2(taxable * (gstRate / 100) / 2) : 0;
+    const igstAmt = enableGST && isInterState ? round2(taxable * (gstRate / 100)) : 0;
+    // Cess is server-derived only when enabled; never trust a client-supplied cess.
+    const cess = (cessEnabled && cessRate > 0) ? round2(taxable * cessRate / 100) : 0;
+
+    const lineAmount = round2(taxable + gstHalf + gstHalf + igstAmt + cess);
+
+    taxableAmount = round2(taxableAmount + taxable);
+    cgstTotal = round2(cgstTotal + gstHalf);
+    sgstTotal = round2(sgstTotal + gstHalf);
+    igstTotal = round2(igstTotal + igstAmt);
+    cessTotal = round2(cessTotal + cess);
+    discountTotal = round2(discountTotal + discountAmount);
+
+    return Object.assign({}, item, {
+      quantity: qty,
+      rate,
+      gstRate,
+      discountAmount,
+      taxableAmount: taxable,
+      cgst: gstHalf,
+      sgst: gstHalf,
+      igst: igstAmt,
+      cess,
+      amount: lineAmount,
+    });
+  });
+
+  const taxTotal = round2(cgstTotal + sgstTotal + igstTotal);
+  const totalAmount = round2(taxableAmount + taxTotal + cessTotal);
+
+  return { items: computed, taxableAmount, cgstTotal, sgstTotal, igstTotal, cessTotal, taxTotal, discountTotal, totalAmount };
+};
+
+/**
+ * Negative-stock guard that works regardless of the bulkWrite $inc validator bypass.
+ * Aggregates requested qty per stock-tracked product from `productMap` and checks
+ * against current stock. Returns an array of { name, available, requested } offenders
+ * (empty if none). Services and non-tracked products are skipped.
+ */
+const findNegativeStockOffenders = (items, productMap) => {
+  const requested = new Map();
+  for (const item of (items || [])) {
+    if (!item.product) continue;
+    const prod = productMap.get(item.product.toString());
+    if (!prod || prod.type === 'service') continue;
+    const key = item.product.toString();
+    requested.set(key, (requested.get(key) || 0) + (Number(item.quantity) || 0));
+  }
+  const offenders = [];
+  for (const [key, qty] of requested) {
+    const prod = productMap.get(key);
+    if (!prod) continue;
+    if ((prod.stock || 0) - qty < 0) {
+      offenders.push({ name: prod.name, available: prod.stock || 0, requested: qty });
+    }
+  }
+  return offenders;
+};
 
 const extractStateCode = (gstin) => {
   if (!gstin || gstin.length < 2) return '';
@@ -194,9 +308,12 @@ const createSale = async (req, res) => {
 
     const setting = await Setting.findOne(getSettingQuery(req));
 
+    // Block creating sales dated within a closed (locked) financial year.
+    if (isDateLocked(res, setting, date)) return;
+
     // Party settings enforcement
     if (customer) {
-      const party = await Customer.findOne({ _id: customer, user: req.user._id });
+      const party = await Customer.findOne({ ...baseFilter, _id: customer });
       if (party) {
         if (party.isActive === false) {
           return res.status(400).json({ message: `Cannot create sale for inactive party: ${party.name}. Re-enable the party first.` });
@@ -235,8 +352,39 @@ const createSale = async (req, res) => {
     const roundingMethod = roundingMethodInput || setting?.preferences?.transaction?.roundingMethod || 'nearest';
     const requireHSN = setting?.preferences?.taxes?.hsnSac === true;
     const productIds = items.filter(item => item.product).map(item => item.product);
-    const allProducts = await Product.find({ _id: { $in: productIds }, user: req.user._id });
+    const allProducts = await Product.find({ ...baseFilter, _id: { $in: productIds } });
     const productMap = new Map(allProducts.map(p => [p._id.toString(), p]));
+
+    // SERVER-SIDE TOTAL RECOMPUTE: never trust client aggregate totals. Recompute
+    // per-line taxable/tax/amount and invoice totals from authoritative inputs.
+    const inclusiveTax = (setting?.preferences?.transaction?.inclusiveExclusiveTax || '').toLowerCase() === 'inclusive';
+    {
+      const recomputed = recomputeSaleTotals(items, {
+        enableGST: setting?.preferences?.taxes?.enableGST !== false,
+        isInterState: !!isInterState,
+        inclusiveTax,
+        compositionScheme: setting?.preferences?.taxes?.compositionScheme === true,
+        cessEnabled: setting?.preferences?.taxes?.additionalCess === true,
+        cessRate: setting?.preferences?.taxes?.cessRate || 0,
+      });
+      items = recomputed.items;
+      taxableAmount = recomputed.taxableAmount;
+      cgstTotal = recomputed.cgstTotal;
+      sgstTotal = recomputed.sgstTotal;
+      igstTotal = recomputed.igstTotal;
+      cessTotal = recomputed.cessTotal;
+      taxTotal = recomputed.taxTotal;
+      discountTotal = recomputed.discountTotal;
+      // Invoice total = server taxable + tax + cess + server-side additional charges.
+      // (TCS/TDS and round-off are applied later by existing logic.)
+      const addlCharges = round2(
+        (Number(shippingCharge) || 0) + (Number(packingCharge) || 0) + (Number(freightCharge) || 0) +
+        (Number(loadingCharge) || 0) + (Number(otherCharge) || 0)
+      );
+      additionalChargesTotal = addlCharges;
+      const invoiceDiscount = Number(discountOnInvoice) || 0;
+      totalAmount = round2(recomputed.totalAmount + addlCharges - invoiceDiscount);
+    }
 
     const serialTrackingEnabled = setting?.preferences?.item?.serialNumberTracking === true;
     const stockTracked = (type || 'invoice') === 'invoice' && (status || 'confirmed') !== 'draft' && stockMaintenance;
@@ -244,13 +392,10 @@ const createSale = async (req, res) => {
       if (item.product) {
         const prod = productMap.get(item.product.toString());
         if (!prod) return res.status(400).json({ message: `Product not found: ${item.productName}` });
-        // Services never affect stock: skip negative-stock & serial validation.
+        // Services never affect stock: skip serial validation.
         if (prod.type === 'service') {
           if (requireHSN && !item.hsn && prod?.hsn) item.hsn = prod.hsn;
           continue;
-        }
-        if (stopOnNegative && prod.stock < item.quantity) {
-          return res.status(400).json({ message: `Insufficient stock for ${prod.name}. Available: ${prod.stock}, Requested: ${item.quantity}` });
         }
         if (requireHSN && !item.hsn && prod?.hsn) {
           item.hsn = prod.hsn;
@@ -264,22 +409,15 @@ const createSale = async (req, res) => {
       }
     }
 
-    // Composition scheme: no GST charged
-    if (compositionScheme) {
-      for (const item of items) {
-        item.gstRate = 0;
-        item.cgst = 0;
-        item.sgst = 0;
-        item.igst = 0;
-      }
-    }
-
-    // Additional Cess
-    const cessEnabled = setting?.preferences?.taxes?.additionalCess === true;
-    const cessRate = setting?.preferences?.taxes?.cessRate || 0;
-    if (cessEnabled && cessRate > 0) {
-      for (const item of items) {
-        item.cess = ((item.quantity || 0) * (item.rate || 0)) * cessRate / 100;
+    // NEGATIVE STOCK GUARD: reliable aggregate check against productMap (the
+    // schema min:0 validator is bypassed by the $inc bulkWrite). When the
+    // stopSaleOnNegativeStock setting is ON, block the sale; otherwise allow.
+    if (stockTracked) {
+      const offenders = findNegativeStockOffenders(items, productMap);
+      if (offenders.length > 0 && stopOnNegative) {
+        return res.status(400).json({
+          message: `Insufficient stock: ${offenders.map(o => `${o.name} (available ${o.available}, requested ${o.requested})`).join('; ')}`,
+        });
       }
     }
 
@@ -364,7 +502,9 @@ const createSale = async (req, res) => {
     // amount as outstanding on every fully-paid invoice (and inflated the customer's
     // ledger by the same amount). Compute outstanding = total - paid instead.
     const finalPaidAmount = paidAmount || 0;
-    const finalRemainingBalance = Math.round(((totalAmount || 0) - finalPaidAmount) * 100) / 100;
+    // Clamp to >= 0: an overpayment/advance must not store a negative balance (the Sale
+    // schema enforces min:0). The excess is a customer credit handled via their ledger.
+    const finalRemainingBalance = Math.max(0, Math.round(((totalAmount || 0) - finalPaidAmount) * 100) / 100);
     const finalPaymentStatus = finalRemainingBalance <= 0
       ? 'paid'
       : (finalPaidAmount > 0 ? 'partial' : 'unpaid');
@@ -415,7 +555,7 @@ const createSale = async (req, res) => {
           const balBefore = prod.stock;
           bulkStockOps.push({
             updateOne: {
-              filter: { _id: item.product, user: req.user._id },
+              filter: { ...baseFilter, _id: item.product },
               update: { $inc: { stock: -item.quantity } }
             }
           });
@@ -448,7 +588,7 @@ const createSale = async (req, res) => {
           if (serialTracking && item.serialNo) {
             serialNumberUpdates.push({
               updateOne: {
-                filter: { _id: item.product, user: req.user._id },
+                filter: { ...baseFilter, _id: item.product },
                 update: { $addToSet: { serialNumbers: item.serialNo } }
               }
             });
@@ -477,7 +617,7 @@ const createSale = async (req, res) => {
         .filter(item => item.product && item.rate)
         .map(item => ({
           updateOne: {
-            filter: { _id: item.product, user: req.user._id },
+            filter: { ...baseFilter, _id: item.product },
             update: { $set: { price: item.rate } }
           }
         }));
@@ -507,21 +647,8 @@ const createSale = async (req, res) => {
       await txn.save({ session });
     }
 
-    // Auto-create journal entry for the sale (if allowed)
-    if (allowJE) {
-    const salesRevenue = await Account.findOne({ ...baseFilter, code: '4001' });
-    const receivable = await Account.findOne({ ...baseFilter, code: '1101' });
-    if (salesRevenue && receivable) {
-      const debitLine = { account: receivable._id, accountName: receivable.name, accountType: receivable.type, debit: finalRemainingBalance, credit: 0 };
-      const creditLine = { account: salesRevenue._id, accountName: salesRevenue.name, accountType: salesRevenue.type, debit: 0, credit: totalAmount };
-      const lines = [debitLine, creditLine];
-      if (paidAmount > 0) {
-        const payCode = isCashPay ? '1001' : '1002';
-        let cash = await Account.findOne({ ...baseFilter, code: payCode });
-        if (!cash) cash = await Account.findOne({ ...baseFilter, code: '1001' });
-        if (cash) {
-          debitLine.debit = finalRemainingBalance;
-    // Calculate expiry date for estimates/quotations
+    // Calculate expiry date for estimates/quotations.
+    // (Computed independently of payment/JE — was previously nested in the cash branch.)
     if ((sale.type === 'estimate' || sale.type === 'quotation') && validityDays > 0) {
       const expiry = new Date(sale.date || new Date());
       expiry.setDate(expiry.getDate() + validityDays);
@@ -538,11 +665,67 @@ const createSale = async (req, res) => {
       }
     }
 
-    if (paidAmount > 0) {
-            lines.push({ account: cash._id, accountName: cash.name, accountType: cash.type, debit: paidAmount, credit: 0 });
-          }
-        }
+    // Auto-create BALANCED journal entry for the sale (if allowed).
+    // Debits: cash/bank for the paid portion + receivable for the unpaid portion (sum = totalAmount).
+    // Credits: tax payable (GST/cess), TCS payable, and sales revenue absorbing the
+    //          remainder. Debits MUST equal credits before the entry is saved.
+    if (allowJE) {
+    const salesRevenue = await Account.findOne({ ...baseFilter, code: '4001' });
+    const receivable = await Account.findOne({ ...baseFilter, code: '1101' });
+    if (salesRevenue && receivable) {
+      const lines = [];
+
+      // ---- DEBITS (cash/bank received + receivable) sum to totalAmount ----
+      const paid = round2(finalPaidAmount);
+      const unpaid = round2(finalRemainingBalance);
+      if (paid > 0) {
+        const payCode = isCashPay ? '1001' : '1002';
+        let cash = await Account.findOne({ ...baseFilter, code: payCode });
+        if (!cash) cash = await Account.findOne({ ...baseFilter, code: '1001' });
+        // Fall back to receivable so the debit leg is never dropped (keeps entry balanced).
+        const debitAcc = cash || receivable;
+        lines.push({ account: debitAcc._id, accountName: debitAcc.name, accountType: debitAcc.type, debit: paid, credit: 0 });
       }
+      if (unpaid > 0) {
+        lines.push({ account: receivable._id, accountName: receivable.name, accountType: receivable.type, debit: unpaid, credit: 0 });
+      }
+
+      const totalDebit = round2(paid + unpaid); // == totalAmount (incl. TCS - TDS)
+
+      // ---- CREDITS: GST payable, TCS payable, then revenue absorbs the rest ----
+      const gstPayable = round2(cgstTotal + sgstTotal + igstTotal + cessTotal);
+      let taxPayable = null;
+      if (gstPayable > 0) {
+        taxPayable = await Account.findOne({ ...baseFilter, code: '2102' })
+          || await Account.findOne({ ...baseFilter, code: '2101' });
+      }
+      let tcsPayable = null;
+      if (tcsAmount > 0) {
+        tcsPayable = await Account.findOne({ ...baseFilter, code: '2103' });
+      }
+
+      let creditedTax = 0;
+      if (taxPayable && gstPayable > 0) {
+        lines.push({ account: taxPayable._id, accountName: taxPayable.name, accountType: taxPayable.type, debit: 0, credit: gstPayable });
+        creditedTax = gstPayable;
+      }
+      let creditedTcs = 0;
+      if (tcsPayable && round2(tcsAmount) > 0) {
+        lines.push({ account: tcsPayable._id, accountName: tcsPayable.name, accountType: tcsPayable.type, debit: 0, credit: round2(tcsAmount) });
+        creditedTcs = round2(tcsAmount);
+      }
+      // Revenue absorbs the remainder so credits == debits exactly (covers TDS, round-off,
+      // additional charges, and any tax/TCS account that wasn't separately credited).
+      const revenueCredit = round2(totalDebit - creditedTax - creditedTcs);
+      lines.push({ account: salesRevenue._id, accountName: salesRevenue.name, accountType: salesRevenue.type, debit: 0, credit: revenueCredit });
+
+      const totalDebitSum = round2(lines.reduce((s, l) => s + l.debit, 0));
+      const totalCreditSum = round2(lines.reduce((s, l) => s + l.credit, 0));
+      // Guarantee balance before saving; never persist an unbalanced entry.
+      if (Math.abs(totalDebitSum - totalCreditSum) >= 0.01) {
+        throw new Error(`Sale journal entry unbalanced: debit ${totalDebitSum} != credit ${totalCreditSum}`);
+      }
+
       const je = new JournalEntry({
         user: req.user._id,
         business: req.businessId,
@@ -551,15 +734,15 @@ const createSale = async (req, res) => {
         referenceType: 'sale',
         referenceId: sale._id,
         lines,
-        totalDebit: lines.reduce((s, l) => s + l.debit, 0),
-        totalCredit: lines.reduce((s, l) => s + l.credit, 0),
+        totalDebit: totalDebitSum,
+        totalCredit: totalCreditSum,
         narration: `Sale ${invoiceNumber} - ${customerName || 'Walk-in'}`,
         isPosted: true,
         postedAt: new Date(),
       });
       await je.save({ session });
       const accountIds = lines.map(l => l.account);
-      const accounts = await Account.find({ _id: { $in: accountIds }, user: req.user._id });
+      const accounts = await Account.find({ ...baseFilter, _id: { $in: accountIds } });
       const accountMap = new Map(accounts.map(a => [a._id.toString(), a]));
       const bulkAccountOps = lines.map(line => {
         const acc = accountMap.get(line.account.toString());
@@ -569,7 +752,7 @@ const createSale = async (req, res) => {
           : line.credit - line.debit;
         return {
           updateOne: {
-            filter: { _id: line.account, user: req.user._id },
+            filter: { ...baseFilter, _id: line.account },
             update: { $inc: { balance: balanceChange } }
           }
         };
@@ -579,7 +762,7 @@ const createSale = async (req, res) => {
     }
 
     if (customer) {
-      await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $inc: { openingBalance: finalRemainingBalance } }, { new: true, session });
+      await Customer.findOneAndUpdate({ ...baseFilter, _id: customer }, { $inc: { openingBalance: finalRemainingBalance } }, { new: true, session });
     }
 
     // Earn loyalty points
@@ -601,7 +784,7 @@ const createSale = async (req, res) => {
             referenceNumber: invoiceNumber,
           });
           await loyaltyEntry.save({ session });
-          await Customer.findOneAndUpdate({ _id: customer, user: req.user._id }, { $set: { loyaltyPoints: currentBalance + pointsEarned } }, { new: true, session });
+          await Customer.findOneAndUpdate({ ...baseFilter, _id: customer }, { $set: { loyaltyPoints: currentBalance + pointsEarned } }, { new: true, session });
         }
       }
     }
@@ -676,9 +859,12 @@ const updateSale = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const setting = await Setting.findOne(getSettingQuery(req));
     const passcodeRequired = setting?.preferences?.transaction?.passcodeForEditDelete === true;
-    if (passcodeRequired && req.body.passcode) {
+    if (passcodeRequired) {
+      // A passcode MUST be supplied and valid — never skip the gate when omitted.
+      if (!req.body.passcode) {
+        return res.status(403).json({ message: 'Passcode required to edit this transaction.' });
+      }
       const User = require('../models/User');
-      const bcrypt = require('bcryptjs');
       const user = await User.findById(req.user._id);
       if (!user || !(await user.comparePassword(req.body.passcode))) {
         return res.status(403).json({ message: 'Invalid passcode. Edit requires passcode verification.' });
@@ -687,6 +873,10 @@ const updateSale = async (req, res) => {
 
     const sale = await Sale.findOne({ _id: req.params.id, ...getBaseFilter(req) });
     if (!sale) return res.status(404).json({ message: 'Sale not found' });
+
+    // Block editing a sale whose existing or new date falls in a closed FY.
+    if (isDateLocked(res, setting, sale.date)) return;
+    if (req.body.date && isDateLocked(res, setting, req.body.date)) return;
 
     const oldPaidAmount = sale.paidAmount;
     const normalizeItems = (arr) => (arr || []).map(i => ({
@@ -701,7 +891,7 @@ const updateSale = async (req, res) => {
     if (itemsChanged && (sale.type === 'invoice' || sale.type === 'challan') && sale.status !== 'draft') {
       // Fetch current stock so the reversal leg can be logged to the movement ledger.
       const oldProductIds = sale.items.filter(item => item.product).map(item => item.product);
-      const oldProducts = await Product.find({ _id: { $in: oldProductIds }, user: req.user._id });
+      const oldProducts = await Product.find({ ...baseFilter, _id: { $in: oldProductIds } });
       const oldProductMap = new Map(oldProducts.map(p => [p._id.toString(), p]));
 
       const restoreOps = [];
@@ -714,7 +904,7 @@ const updateSale = async (req, res) => {
           const balBefore = prod ? prod.stock : 0;
           restoreOps.push({
             updateOne: {
-              filter: { _id: item.product, user: req.user._id },
+              filter: { ...baseFilter, _id: item.product },
               update: { $inc: { stock: item.quantity } }
             }
           });
@@ -755,10 +945,68 @@ const updateSale = async (req, res) => {
     });
     sale.updatedBy = req.user.name || req.user.email;
 
+    // SERVER-SIDE TOTAL RECOMPUTE on edit: never trust client aggregate totals.
+    if (req.body.items !== undefined) {
+      const inclusiveTax = (setting?.preferences?.transaction?.inclusiveExclusiveTax || '').toLowerCase() === 'inclusive';
+      const recomputed = recomputeSaleTotals(sale.items, {
+        enableGST: setting?.preferences?.taxes?.enableGST !== false,
+        isInterState: !!sale.isInterState,
+        inclusiveTax,
+        compositionScheme: setting?.preferences?.taxes?.compositionScheme === true,
+        cessEnabled: setting?.preferences?.taxes?.additionalCess === true,
+        cessRate: setting?.preferences?.taxes?.cessRate || 0,
+      });
+      sale.items = recomputed.items;
+      sale.taxableAmount = recomputed.taxableAmount;
+      sale.cgstTotal = recomputed.cgstTotal;
+      sale.sgstTotal = recomputed.sgstTotal;
+      sale.igstTotal = recomputed.igstTotal;
+      sale.cessTotal = recomputed.cessTotal;
+      sale.taxTotal = recomputed.taxTotal;
+      sale.discountTotal = recomputed.discountTotal;
+      const addlCharges = round2(
+        (Number(sale.shippingCharge) || 0) + (Number(sale.packingCharge) || 0) + (Number(sale.freightCharge) || 0) +
+        (Number(sale.loadingCharge) || 0) + (Number(sale.otherCharge) || 0)
+      );
+      sale.additionalChargesTotal = addlCharges;
+      const invoiceDiscount = Number(sale.discountOnInvoice) || 0;
+      let newTotal = round2(recomputed.totalAmount + addlCharges - invoiceDiscount);
+      // Preserve any server-side TCS/TDS already stored on the sale, then apply round-off.
+      newTotal = round2(newTotal + (Number(sale.tcsAmount) || 0) - (Number(sale.tdsAmount) || 0));
+      if (sale.roundOffEnabled) {
+        const method = (sale.roundingMethod || 'Normal').toLowerCase();
+        let ro;
+        if (method === 'up') ro = Math.ceil(newTotal) - newTotal;
+        else if (method === 'down') ro = Math.floor(newTotal) - newTotal;
+        else ro = Math.round(newTotal) - newTotal;
+        sale.roundOff = round2(ro);
+        newTotal = round2(newTotal + ro);
+      }
+      sale.totalAmount = newTotal;
+      // Keep payment fields self-consistent with the recomputed total.
+      sale.remainingBalance = round2(Math.max(0, newTotal - (Number(sale.paidAmount) || 0)));
+      sale.paymentStatus = sale.remainingBalance <= 0 ? 'paid' : ((Number(sale.paidAmount) || 0) > 0 ? 'partial' : 'unpaid');
+    }
+
     if (itemsChanged && (sale.type === 'invoice' || sale.type === 'challan') && sale.status !== 'draft') {
       const newProductIds = sale.items.filter(item => item.product).map(item => item.product);
-      const newProducts = await Product.find({ _id: { $in: newProductIds }, user: req.user._id });
+      const newProducts = await Product.find({ ...baseFilter, _id: { $in: newProductIds } });
       const newProductMap = new Map(newProducts.map(p => [p._id.toString(), p]));
+
+      // NEGATIVE STOCK GUARD on edit: stock was just restored above, so newProductMap
+      // reflects pre-deduction levels. Block if the new lines would drive stock below 0.
+      const stopOnNegative = setting?.preferences?.general?.stopSaleOnNegativeStock === true;
+      if (stopOnNegative) {
+        const restoredMap = new Map();
+        for (const [k, p] of newProductMap) {
+          const restored = Object.assign(Object.create(Object.getPrototypeOf(p)), p.toObject ? p.toObject() : p);
+          restoredMap.set(k, restored);
+        }
+        const offenders = findNegativeStockOffenders(sale.items, restoredMap);
+        if (offenders.length > 0) {
+          throw Object.assign(new Error(`Insufficient stock: ${offenders.map(o => `${o.name} (available ${o.available}, requested ${o.requested})`).join('; ')}`), { statusCode: 400 });
+        }
+      }
 
       const adjustOps = [];
       const adjustMovements = [];
@@ -770,7 +1018,7 @@ const updateSale = async (req, res) => {
           const balBefore = prod ? prod.stock : 0;
           adjustOps.push({
             updateOne: {
-              filter: { _id: item.product, user: req.user._id },
+              filter: { ...baseFilter, _id: item.product },
               update: { $inc: { stock: -item.quantity } }
             }
           });
@@ -814,7 +1062,7 @@ const updateSale = async (req, res) => {
       await deltaTxn.save({ session });
       if (sale.customer) {
         // openingBalance tracks receivable: more paid -> lower balance, less paid -> higher.
-        await Customer.findOneAndUpdate({ _id: sale.customer, user: req.user._id }, { $inc: { openingBalance: -paidDelta } }, { session });
+        await Customer.findOneAndUpdate({ ...baseFilter, _id: sale.customer }, { $inc: { openingBalance: -paidDelta } }, { session });
       }
     }
 
@@ -826,7 +1074,7 @@ const updateSale = async (req, res) => {
     ).catch(() => {});
     res.json(sale);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 };
 
@@ -835,9 +1083,12 @@ const deleteSale = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const setting = await Setting.findOne(getSettingQuery(req));
     const passcodeRequired = setting?.preferences?.transaction?.passcodeForEditDelete === true;
-    if (passcodeRequired && req.body.passcode) {
+    if (passcodeRequired) {
+      // A passcode MUST be supplied and valid — never skip the gate when omitted.
+      if (!req.body.passcode) {
+        return res.status(403).json({ message: 'Passcode required to delete this transaction.' });
+      }
       const User = require('../models/User');
-      const bcrypt = require('bcryptjs');
       const user = await User.findById(req.user._id);
       if (!user || !(await user.comparePassword(req.body.passcode))) {
         return res.status(403).json({ message: 'Invalid passcode. Delete requires passcode verification.' });
@@ -849,7 +1100,7 @@ const deleteSale = async (req, res) => {
 
     await withTransaction(async (session) => {
     const deleteProductIds = sale.items.filter(item => item.product).map(item => item.product);
-    const deleteProducts = await Product.find({ _id: { $in: deleteProductIds }, user: req.user._id });
+    const deleteProducts = await Product.find({ ...baseFilter, _id: { $in: deleteProductIds } });
     const deleteProductMap = new Map(deleteProducts.map(p => [p._id.toString(), p]));
     const deleteStockOps = [];
     const deleteMovements = [];
@@ -861,7 +1112,7 @@ const deleteSale = async (req, res) => {
         const balBefore = prod ? prod.stock : 0;
         deleteStockOps.push({
           updateOne: {
-            filter: { _id: item.product, user: req.user._id },
+            filter: { ...baseFilter, _id: item.product },
             update: { $inc: { stock: item.quantity } }
           }
         });
@@ -888,27 +1139,32 @@ const deleteSale = async (req, res) => {
     if (deleteMovements.length > 0) await StockMovement.insertMany(deleteMovements, { session });
 
     if (sale.customer) {
-      await Customer.findOneAndUpdate({ _id: sale.customer, user: req.user._id }, { $inc: { openingBalance: -sale.remainingBalance } }, { new: true, session });
+      await Customer.findOneAndUpdate({ ...baseFilter, _id: sale.customer }, { $inc: { openingBalance: -sale.remainingBalance } }, { new: true, session });
     }
 
     // Reverse journal entry if one was created
-    const journalEntry = await JournalEntry.findOne({ referenceType: 'sale', referenceId: sale._id, user: req.user._id });
+    const journalEntry = await JournalEntry.findOne({ ...baseFilter, referenceType: 'sale', referenceId: sale._id });
     if (journalEntry) {
       const reverseAccountIds = journalEntry.lines.filter(l => l.account).map(l => l.account);
-      const reverseAccounts = await Account.find({ _id: { $in: reverseAccountIds }, user: req.user._id });
+      const reverseAccounts = await Account.find({ ...baseFilter, _id: { $in: reverseAccountIds } });
       const reverseAccountMap = new Map(reverseAccounts.map(a => [a._id.toString(), a]));
       const reverseOps = journalEntry.lines.filter(l => l.account).map(line => {
         const acc = reverseAccountMap.get(line.account.toString());
         if (!acc) return null;
+        // Reverse exactly the balance change applied at creation (type-aware), so multi-line
+        // (tax/TCS) entries unwind correctly.
+        const appliedChange = ['asset', 'expense'].includes(acc.type)
+          ? line.debit - line.credit
+          : line.credit - line.debit;
         return {
           updateOne: {
-            filter: { _id: line.account, user: req.user._id },
-            update: { $inc: { balance: line.debit ? -line.debit : line.credit } }
+            filter: { ...baseFilter, _id: line.account },
+            update: { $inc: { balance: -appliedChange } }
           }
         };
       }).filter(Boolean);
       if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
-      await JournalEntry.findOneAndDelete({ _id: journalEntry._id, user: req.user._id }, { session });
+      await JournalEntry.findOneAndDelete({ ...baseFilter, _id: journalEntry._id }, { session });
     }
 
     sale.status = 'cancelled';
@@ -1007,9 +1263,19 @@ const convertToReturn = async (req, res) => {
     returnData.business = req.businessId;
     const creditNote = new Sale(returnData);
 
+    // Return economics: refund only what was actually received, and credit the
+    // customer only for the receivable that was actually outstanding.
+    const returnValue = round2(original.totalAmount || 0);
+    const origPaid = round2(original.paidAmount || 0);
+    const origOwed = round2(original.remainingBalance != null
+      ? original.remainingBalance
+      : ((original.totalAmount || 0) - (original.paidAmount || 0)));
+    const refundAmount = round2(Math.min(origPaid, returnValue));   // cash actually refunded
+    const balanceCredit = round2(Math.min(origOwed, returnValue));  // receivable cancelled
+
     await withTransaction(async (session) => {
     const returnProductIds = returnData.items.filter(item => item.product).map(item => item.product);
-    const returnProducts = await Product.find({ _id: { $in: returnProductIds }, user: req.user._id });
+    const returnProducts = await Product.find({ ...baseFilter, _id: { $in: returnProductIds } });
     const returnProductMap = new Map(returnProducts.map(p => [p._id.toString(), p]));
     const returnStockOps = [];
     const returnMovements = [];
@@ -1021,7 +1287,7 @@ const convertToReturn = async (req, res) => {
         const balBefore = prod ? prod.stock : 0;
         returnStockOps.push({
           updateOne: {
-            filter: { _id: item.product, user: req.user._id },
+            filter: { ...baseFilter, _id: item.product },
             update: { $inc: { stock: item.quantity } }
           }
         });
@@ -1052,39 +1318,58 @@ const convertToReturn = async (req, res) => {
     // Mark the SOURCE as converted so it can't be returned/converted twice.
     // isConverted/convertedTo are not in the Sale schema; { strict: false } persists them.
     await Sale.updateOne(
-      { _id: original._id, user: req.user._id },
+      { ...baseFilter, _id: original._id },
       { $set: { isConverted: true, convertedTo: creditNoteNumber } },
       { strict: false, session }
     );
 
-    const cnTxn = new Transaction({
-      user: req.user._id,
-      business: req.businessId,
-      type: 'cash_out',
-      amount: original.totalAmount,
-      description: `Credit note ${creditNoteNumber} - Return against ${original.invoiceNumber}`,
-      date: new Date(),
-      reference: creditNoteNumber,
-      referenceModel: 'Sale',
-      referenceId: creditNote._id,
-      partyName: original.customerName || 'Walk-in',
-      partyType: 'customer',
-    });
-    await cnTxn.save({ session });
-
-    if (creditNote.customer) {
-      await Customer.findOneAndUpdate({ _id: creditNote.customer, user: req.user._id }, { $inc: { openingBalance: -original.totalAmount } }, { session });
+    // Refund cash only for what was actually PAID on the original (capped at the return value).
+    if (refundAmount > 0) {
+      const cnTxn = new Transaction({
+        user: req.user._id,
+        business: req.businessId,
+        type: 'cash_out',
+        amount: refundAmount,
+        description: `Credit note ${creditNoteNumber} - Refund against ${original.invoiceNumber}`,
+        date: new Date(),
+        reference: creditNoteNumber,
+        referenceModel: 'Sale',
+        referenceId: creditNote._id,
+        partyName: original.customerName || 'Walk-in',
+        partyType: 'customer',
+      });
+      await cnTxn.save({ session });
     }
 
-    // Create journal entry for credit note
+    // Credit the customer's receivable only by the portion that was actually owed.
+    if (creditNote.customer && balanceCredit > 0) {
+      await Customer.findOneAndUpdate({ ...baseFilter, _id: creditNote.customer }, { $inc: { openingBalance: -balanceCredit } }, { session });
+    }
+
+    // Create BALANCED journal entry for the credit note.
+    // Debit sales revenue for the returned value; credit cash (refund) + receivable (owed).
     const cnBaseFilter = getBaseFilter(req);
     const custAcc = await Account.findOne({ ...cnBaseFilter, code: '1101' });
     const salesAcc = await Account.findOne({ ...cnBaseFilter, code: '4001' });
     if (custAcc && salesAcc) {
+      let cashAcc = await Account.findOne({ ...cnBaseFilter, code: '1001' });
       const cnLines = [
-        { account: salesAcc._id, accountName: salesAcc.name, accountType: salesAcc.type, debit: original.totalAmount, credit: 0 },
-        { account: custAcc._id, accountName: custAcc.name, accountType: custAcc.type, debit: 0, credit: original.totalAmount },
+        { account: salesAcc._id, accountName: salesAcc.name, accountType: salesAcc.type, debit: returnValue, credit: 0 },
       ];
+      if (refundAmount > 0 && cashAcc) {
+        cnLines.push({ account: cashAcc._id, accountName: cashAcc.name, accountType: cashAcc.type, debit: 0, credit: refundAmount });
+      }
+      // Whatever is not refunded in cash unwinds the receivable. (Falls back to receivable
+      // for the full value if no cash account exists, so the entry stays balanced.)
+      const receivableCredit = round2(returnValue - (refundAmount > 0 && cashAcc ? refundAmount : 0));
+      if (receivableCredit > 0) {
+        cnLines.push({ account: custAcc._id, accountName: custAcc.name, accountType: custAcc.type, debit: 0, credit: receivableCredit });
+      }
+      const cnTotalDebit = round2(cnLines.reduce((s, l) => s + l.debit, 0));
+      const cnTotalCredit = round2(cnLines.reduce((s, l) => s + l.credit, 0));
+      if (Math.abs(cnTotalDebit - cnTotalCredit) >= 0.01) {
+        throw new Error(`Credit note journal entry unbalanced: debit ${cnTotalDebit} != credit ${cnTotalCredit}`);
+      }
       const cnJe = new JournalEntry(
         getCreateData(req, {
           entryNumber: `JE-CN-${creditNoteNumber}`,
@@ -1092,8 +1377,8 @@ const convertToReturn = async (req, res) => {
           referenceType: 'Sale',
           referenceId: creditNote._id,
           lines: cnLines,
-          totalDebit: original.totalAmount,
-          totalCredit: original.totalAmount,
+          totalDebit: cnTotalDebit,
+          totalCredit: cnTotalCredit,
           narration: `Credit note ${creditNoteNumber} against ${original.invoiceNumber}`,
           isPosted: true,
           postedAt: new Date(),
@@ -1101,13 +1386,13 @@ const convertToReturn = async (req, res) => {
       );
       await cnJe.save({ session });
       const cnAccIds = cnLines.map(l => l.account);
-      const cnAccounts = await Account.find({ _id: { $in: cnAccIds }, user: req.user._id });
+      const cnAccounts = await Account.find({ ...cnBaseFilter, _id: { $in: cnAccIds } });
       const cnAccMap = new Map(cnAccounts.map(a => [a._id.toString(), a]));
       const cnBalanceOps = cnLines.map(line => {
         const acc = cnAccMap.get(line.account.toString());
         if (!acc) return null;
         const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-        return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+        return { updateOne: { filter: { ...cnBaseFilter, _id: line.account }, update: { $inc: { balance: change } } } };
       }).filter(Boolean);
       if (cnBalanceOps.length > 0) await Account.bulkWrite(cnBalanceOps, { session });
     }
@@ -1287,7 +1572,7 @@ const convertToInvoice = async (req, res) => {
     invoiceData.status = 'confirmed';
 
     const convProductIds = invoiceData.items.filter(item => item.product).map(item => item.product);
-    const convProducts = await Product.find({ _id: { $in: convProductIds }, user: req.user._id });
+    const convProducts = await Product.find({ ...baseFilter, _id: { $in: convProductIds } });
     const convProductMap = new Map(convProducts.map(p => [p._id.toString(), p]));
 
     for (const item of invoiceData.items) {
@@ -1315,7 +1600,7 @@ const convertToInvoice = async (req, res) => {
         const balBefore = prod ? prod.stock : 0;
         convStockOps.push({
           updateOne: {
-            filter: { _id: item.product, user: req.user._id },
+            filter: { ...baseFilter, _id: item.product },
             update: { $inc: { stock: -item.quantity } }
           }
         });
@@ -1342,13 +1627,13 @@ const convertToInvoice = async (req, res) => {
     // (which would double-count stock & customer balance). isConverted/convertedTo are
     // not in the Sale schema, so { strict: false } is required to persist them.
     await Sale.updateOne(
-      { _id: original._id, user: req.user._id },
+      { ...baseFilter, _id: original._id },
       { $set: { isConverted: true, convertedTo: invoiceNumber } },
       { strict: false, session }
     );
 
     if (invoiceData.customer) {
-      await Customer.findOneAndUpdate({ _id: invoiceData.customer, user: req.user._id }, { $inc: { openingBalance: (invoiceData.remainingBalance != null ? invoiceData.remainingBalance : ((invoiceData.totalAmount || 0) - (invoiceData.paidAmount || 0))) } }, { new: true, session });
+      await Customer.findOneAndUpdate({ ...baseFilter, _id: invoiceData.customer }, { $inc: { openingBalance: (invoiceData.remainingBalance != null ? invoiceData.remainingBalance : ((invoiceData.totalAmount || 0) - (invoiceData.paidAmount || 0))) } }, { new: true, session });
     }
 
     // Create journal entry for converted invoice
@@ -1376,13 +1661,13 @@ const convertToInvoice = async (req, res) => {
       );
       await invJe.save({ session });
       const invAccIds = invLines.map(l => l.account);
-      const invAccounts = await Account.find({ _id: { $in: invAccIds }, user: req.user._id });
+      const invAccounts = await Account.find({ ...invBaseFilter, _id: { $in: invAccIds } });
       const invAccMap = new Map(invAccounts.map(a => [a._id.toString(), a]));
       const invBalanceOps = invLines.map(line => {
         const acc = invAccMap.get(line.account.toString());
         if (!acc) return null;
         const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-        return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+        return { updateOne: { filter: { ...invBaseFilter, _id: line.account }, update: { $inc: { balance: change } } } };
       }).filter(Boolean);
       if (invBalanceOps.length > 0) await Account.bulkWrite(invBalanceOps, { session });
     }
@@ -1467,7 +1752,7 @@ const receivePayment = async (req, res) => {
     await sale.save({ session });
 
     if (sale.customer) {
-      await Customer.findOneAndUpdate({ _id: sale.customer, user: req.user._id }, { $inc: { openingBalance: -Number(amount) } }, { session });
+      await Customer.findOneAndUpdate({ ...baseFilter, _id: sale.customer }, { $inc: { openingBalance: -Number(amount) } }, { session });
     }
 
     await receipt.save({ session });
@@ -1508,13 +1793,13 @@ const receivePayment = async (req, res) => {
       );
       await payJe.save({ session });
       const payAccIds = payLines.map(l => l.account);
-      const payAccounts = await Account.find({ _id: { $in: payAccIds }, user: req.user._id });
+      const payAccounts = await Account.find({ ...baseFilter, _id: { $in: payAccIds } });
       const payAccMap = new Map(payAccounts.map(a => [a._id.toString(), a]));
       const payBalanceOps = payLines.map(line => {
         const acc = payAccMap.get(line.account.toString());
         if (!acc) return null;
         const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-        return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+        return { updateOne: { filter: { ...baseFilter, _id: line.account }, update: { $inc: { balance: change } } } };
       }).filter(Boolean);
       if (payBalanceOps.length > 0) await Account.bulkWrite(payBalanceOps, { session });
     }

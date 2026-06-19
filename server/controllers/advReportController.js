@@ -7,11 +7,30 @@ const { getBaseFilter } = require('../utils/queryHelper');
 const getCustomerReport = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const customers = await Customer.find({ ...baseFilter });
-    const report = await Promise.all(customers.map(async (c) => {
-      const sales = await Sale.find({ customer: c._id, ...baseFilter });
-      const totalSales = sales.reduce((s, x) => s + x.totalAmount, 0);
-      const totalPayments = sales.reduce((s, x) => s + x.paidAmount, 0);
+    // Two queries instead of N+1: one for all customers, one aggregation that
+    // sums sales totals/payments grouped by customer. Joined in memory below.
+    const [customers, salesByCustomer] = await Promise.all([
+      Customer.find({ ...baseFilter }),
+      Sale.aggregate([
+        { $match: { ...baseFilter, customer: { $ne: null } } },
+        {
+          $group: {
+            _id: '$customer',
+            totalSales: { $sum: { $ifNull: ['$totalAmount', 0] } },
+            totalPayments: { $sum: { $ifNull: ['$paidAmount', 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    const totalsByCustomer = new Map(
+      salesByCustomer.map((s) => [String(s._id), s])
+    );
+
+    const report = customers.map((c) => {
+      const totals = totalsByCustomer.get(String(c._id));
+      const totalSales = totals ? totals.totalSales : 0;
+      const totalPayments = totals ? totals.totalPayments : 0;
       return {
         _id: c._id,
         name: c.name,
@@ -20,7 +39,7 @@ const getCustomerReport = async (req, res) => {
         totalPayments,
         outstandingBalance: totalSales - totalPayments + (c.openingBalance || 0),
       };
-    }));
+    });
     res.json(report);
   } catch (error) {
     res.status(500).json({ message: error.message });

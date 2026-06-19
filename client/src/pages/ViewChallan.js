@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI, BASE_URL } from '../services/api';
+import { saleAPI, settingAPI, BASE_URL, mediaUrl } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate, numberToWords } from '../utils/format';
@@ -83,7 +83,7 @@ const ViewChallan = () => {
   const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 16;
   const invoiceHeadingSize = parseInt(printPrefs.invoiceTextSize) || 14;
   const fmt = (amt) => formatCurrency(amt, currencyPref, decimalPref);
-  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? mediaUrl(settings.logo) : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[210mm] mx-auto">

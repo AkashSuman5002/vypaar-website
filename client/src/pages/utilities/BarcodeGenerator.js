@@ -5,6 +5,49 @@ import { toast } from 'react-toastify';
 import { Info, Printer, Settings2, Plus, Trash2 } from 'lucide-react';
 import { productAPI, barcodeLabelAPI } from '../../services/api';
 
+// Canonical Code 128 module patterns (values 0..106). Mirrors the server-side
+// generator so the preview matches the printed PDF and is genuinely scannable.
+const CODE128_PATTERNS = [
+  '11011001100','11001101100','11001100110','10010011000','10010001100','10001001100',
+  '10011001000','10011000100','10001100100','11001001000','11001000100','11000100100',
+  '10110011100','10011011100','10011001110','10111001100','10011101100','10011100110',
+  '11001110010','11001011100','11001001110','11011100100','11001110100','11101101110',
+  '11101001100','11100101100','11100100110','11101100100','11100110100','11100110010',
+  '11011011000','11011000110','11000110110','10100011000','10001011000','10001000110',
+  '10110001000','10001101000','10001100010','11010001000','11000101000','11000100010',
+  '10110111000','10110001110','10001101110','10111011000','10111000110','10001110110',
+  '11101110110','11010001110','11000101110','11011101000','11011100010','11011101110',
+  '11101011000','11101000110','11100010110','11101101000','11101100010','11100011010',
+  '11101111010','11001000010','11110001010','10100110000','10100001100','10010110000',
+  '10010000110','10000101100','10000100110','10110010000','10110000100','10011010000',
+  '10011000010','10000110100','10000110010','11000010010','11001010000','11110111010',
+  '11000010100','10001111010','10100111100','10010111100','10010011110','10111100100',
+  '10011110100','10011110010','11110100100','11110010100','11110010010','11011011110',
+  '11011110110','11110110110','10101111000','10100011110','10001011110','10111101000',
+  '10111100010','11110101000','11110100010','10111011110','10111101110','11101011110',
+  '11110101110','11010000100','11010010000','11010011100','1100011101011'
+];
+const CODE128_START_B = 104;
+const CODE128_STOP = 106;
+
+function encodeCode128B(text) {
+  if (!text) text = '000000000000';
+  const values = [];
+  for (let i = 0; i < text.length; i++) {
+    let code = text.charCodeAt(i);
+    if (code < 32 || code > 126) code = 32;
+    values.push(code - 32);
+  }
+  let checksum = CODE128_START_B;
+  for (let i = 0; i < values.length; i++) checksum += values[i] * (i + 1);
+  checksum = checksum % 103;
+  let bits = CODE128_PATTERNS[CODE128_START_B];
+  for (const v of values) bits += CODE128_PATTERNS[v];
+  bits += CODE128_PATTERNS[checksum];
+  bits += CODE128_PATTERNS[CODE128_STOP];
+  return bits;
+}
+
 const BarcodeGenerator = () => {
   const [products, setProducts] = useState([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -69,6 +112,37 @@ const BarcodeGenerator = () => {
     } finally { setSubmitting(false); }
   };
 
+  const PreviewBarcode = ({ code }) => {
+    // Render a REAL Code 128 Set B barcode (matches the backend PDF output) so the
+    // preview reflects what actually prints and is itself scannable.
+    const pattern = encodeCode128B(String(code || '000000000000').replace(/[^\x20-\x7E]/g, '').slice(0, 30));
+    const moduleW = 1;
+    const quiet = 10;
+    const totalModules = pattern.length + quiet * 2;
+    const width = totalModules * moduleW;
+    const height = 40;
+    const bars = [];
+    let i = 0;
+    while (i < pattern.length) {
+      if (pattern[i] === '1') {
+        let run = 1;
+        while (i + run < pattern.length && pattern[i + run] === '1') run++;
+        bars.push(
+          <rect key={i} x={(quiet + i) * moduleW} y={0} width={run * moduleW} height={height} fill="#1e293b" />
+        );
+        i += run;
+      } else {
+        i++;
+      }
+    }
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full">
+        <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
+        {bars}
+      </svg>
+    );
+  };
+
   if (loading) return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" /></div>;
 
   return (
@@ -121,10 +195,8 @@ const BarcodeGenerator = () => {
           <h3 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC] mb-4 text-center">Preview</h3>
           <div className="border border-slate-200 dark:border-[#334155] rounded-xl p-6 bg-slate-50/50 dark:bg-[#0F172A]/40 flex flex-col items-center">
             <p className="text-xs font-semibold text-slate-700 dark:text-[#E2E8F0] mb-2">{header || 'Header'}</p>
-            <div className="w-40 h-12 bg-slate-200 dark:bg-[#334155] rounded flex items-center justify-center mb-2 overflow-hidden">
-              <svg viewBox="0 0 120 40" className="w-full h-full">
-                {Array.from({ length: 40 }, (_, i) => <rect key={i} x={i * 3} y={0} width={i % 3 === 0 ? 2 : 1} height={40} fill="#1e293b" />)}
-              </svg>
+            <div className="w-48 h-12 bg-white dark:bg-[#1E293B] rounded flex items-center justify-center mb-2 overflow-hidden border border-slate-200 dark:border-[#334155]">
+              <PreviewBarcode code={itemCode || selectedItem?.sku || '123456789012'} />
             </div>
             <p className="text-[10px] text-slate-500 dark:text-[#64748B] mb-1">{itemCode || selectedItem?.sku || 'Item Code'}</p>
             {line1 && <p className="text-[10px] text-slate-500 dark:text-[#64748B]">{line1}</p>}

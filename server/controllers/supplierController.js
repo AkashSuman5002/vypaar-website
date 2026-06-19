@@ -5,8 +5,42 @@ const { createNotification } = require('../controllers/notificationController');
 const getSuppliers = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const suppliers = await Supplier.find({ ...baseFilter }).sort({ name: 1 });
-    res.json(suppliers);
+    const { page, limit, search } = req.query;
+
+    const filter = { ...baseFilter };
+    if (search) {
+      const escaped = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { phone: { $regex: escaped, $options: 'i' } },
+        { email: { $regex: escaped, $options: 'i' } },
+      ];
+    }
+
+    // Backward compatible: when no pagination params are supplied, return the
+    // bare sorted array exactly as before (the Suppliers.js UI expects an
+    // array). Pagination is strictly opt-in via ?page / ?limit, in which case
+    // we return a { suppliers, total, page, pages } envelope.
+    if (page === undefined && limit === undefined) {
+      const suppliers = await Supplier.find(filter).sort({ name: 1 });
+      return res.json(suppliers);
+    }
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.max(parseInt(limit, 10) || 50, 1);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [suppliers, total] = await Promise.all([
+      Supplier.find(filter).sort({ name: 1 }).skip(skip).limit(limitNum),
+      Supplier.countDocuments(filter),
+    ]);
+
+    res.json({
+      suppliers,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

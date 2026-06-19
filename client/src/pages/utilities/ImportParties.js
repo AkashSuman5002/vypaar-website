@@ -101,7 +101,8 @@ const ImportParties = () => {
     try {
       const res = await utilityAPI.importFromTally({ data: parsedData, type: 'parties' });
       const imp = res.data?.imported || {};
-      toast.success(`Imported ${imp.ledgers || 0} part${(imp.ledgers || 0) === 1 ? 'y' : 'ies'} successfully!`);
+      const skipped = res.data?.skippedCount || 0;
+      toast.success(`Imported ${imp.ledgers || 0} part${(imp.ledgers || 0) === 1 ? 'y' : 'ies'} (${imp.customers || 0} customer(s), ${imp.suppliers || 0} supplier(s))!${skipped ? ` ${skipped} skipped (duplicates).` : ''}`);
       setParsedData(null); setFile(null);
     } catch (err) { toast.error(err.response?.data?.message || 'Import failed'); }
     finally { setUploading(false); }

@@ -3,12 +3,14 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Info, LogIn, Users, CheckCircle, Trash2, Send } from 'lucide-react';
 import useSettings from '../../hooks/useSettings';
-import { utilityAPI } from '../../services/api';
+import API, { utilityAPI } from '../../services/api';
 import { validateEmail } from '../../utils/validation';
 
 const AccountantAccess = () => {
   const { business } = useSettings();
   const [loggedIn, setLoggedIn] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [company, setCompany] = useState(null);
   const [accessList, setAccessList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -25,7 +27,25 @@ const AccountantAccess = () => {
 
   useEffect(() => { if (loggedIn) loadAccess(); }, [loggedIn, loadAccess]);
 
-  const handleLogin = () => { setLoggedIn(true); toast.success('Logged in successfully!'); };
+  // Real authenticated backend call: confirms the logged-in user + active business
+  // and returns the current shared-access state. No fake client-only flag.
+  const handleLogin = async () => {
+    setSyncing(true);
+    try {
+      const res = await API.post('/utilities/accountant-access/sync');
+      if (res.data?.connected) {
+        setCompany(res.data.company || null);
+        setLoggedIn(true);
+        toast.success('Sync connected. Data sharing is now enabled.');
+      } else {
+        toast.error('Could not connect Sync. Please try again.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Sync connection failed. Please log in again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -65,7 +85,7 @@ const AccountantAccess = () => {
           <div className="w-32 h-32 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center mb-6"><Users className="w-12 h-12 text-amber-500" /></div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC] mb-2">Sync Logged out!</h2>
           <p className="text-sm text-slate-500 dark:text-[#64748B] text-center max-w-md mb-6">You have not logged in Sync. Data sharing is not possible without logging in. Please log in and return to this screen.</p>
-          <button onClick={handleLogin} className="px-6 py-2.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors inline-flex items-center gap-2"><LogIn className="w-4 h-4" /> Log in</button>
+          <button onClick={handleLogin} disabled={syncing} className="px-6 py-2.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><LogIn className="w-4 h-4" /> {syncing ? 'Connecting...' : 'Log in'}</button>
         </div>
       </motion.div>
     );
@@ -76,7 +96,7 @@ const AccountantAccess = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC] flex items-center gap-2">Accountant Access <Info className="w-5 h-5 text-slate-400 dark:text-[#64748B]" /></h1>
-          <p className="text-sm text-slate-400 dark:text-[#64748B] mt-0.5">Manage who can access your business data.</p>
+          <p className="text-sm text-slate-400 dark:text-[#64748B] mt-0.5">Sync connected{company?.name ? ` for ${company.name}` : ''}. Manage who can access your business data.</p>
         </div>
         <button onClick={() => setShowInvite(true)} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2">
           <Users className="w-4 h-4" /> Invite Accountant

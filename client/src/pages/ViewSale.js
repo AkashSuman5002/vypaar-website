@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI, whatsappAPI, BASE_URL } from '../services/api';
+import { saleAPI, settingAPI, whatsappAPI, BASE_URL, mediaUrl } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import Modal from '../components/UI/Modal';
 import Badge from '../components/UI/Badge';
@@ -126,7 +126,7 @@ const ViewSale = () => {
   const companyNameSize = parseInt(printPrefs.companyNameTextSize) || 16;
   const invoiceHeadingSize = parseInt(printPrefs.invoiceTextSize) || 14;
 
-  const bizLogo = settings?.logo ? `${BASE_URL}/${settings.logo}` : null;
+  const bizLogo = settings?.logo ? mediaUrl(settings.logo) : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[210mm] mx-auto">

@@ -223,8 +223,8 @@ const apiMap = {
   'GSTR 3B': (params) => reportAPI.getGSTR3B(params).then(r => {
     const d = r.data.gstr3b;
     return [
-      {supply:'Taxable Supply',value:d.supply.taxableValue,cgst:d.supply.centralTax,sgst:d.supply.stateTax,igst:0},
-      {supply:'ITC Claimed',value:d.itc.eligible,cgst:d.itc.centralTax,sgst:d.itc.stateTax,igst:0},
+      {supply:'Taxable Supply',value:d.supply.taxableValue,cgst:d.supply.centralTax,sgst:d.supply.stateTax,igst:d.supply.integratedTax||0},
+      {supply:'ITC Claimed',value:d.itc.eligible,cgst:d.itc.centralTax,sgst:d.itc.stateTax,igst:d.itc.integratedTax||0},
     ];
   }),
   'GSTR 9': (params) => reportAPI.getGSTR9(params).then(r => {
@@ -239,7 +239,7 @@ const apiMap = {
   'Discount Report': (params) => reportAPI.getDiscountReport(params).then(r => (r.data.entries||[]).map(d => ({invoice:d.invoiceNo||'-',customer:d.partyName||'-',discount:d.discountAmount||0,net:d.netAmount||0}))),
   'Expense': (params) => reportAPI.getExpenseReport(params).then(r => (r.data.entries||[]).map(e => ({date:e.date?new Date(e.date).toLocaleDateString('en-IN'):'-',category:e.category||'General',description:e.description||'-',amount:e.totalAmount||0}))),
   'Expense Category Report': (params) => reportAPI.getExpenseCategoryReport(params).then(r => (r.data.categories||[]).map(c => ({category:c.categoryName,count:c.totalTransactions,cgst:0,total:c.totalAmount}))),
-  'Expense Item Report': (params) => reportAPI.getExpenseItemReport(params).then(r => (r.data.entries||[]).map(e => ({item:e.description||'-',category:e.category||'-',total:e.totalAmount||0}))),
+  'Expense Item Report': (params) => reportAPI.getExpenseItemReport(params).then(r => (r.data.entries||[]).map(e => ({item:e.itemName||'-',category:e.category||'-',qty:e.quantity||0,total:e.amount||0}))),
   'Sale Orders': (params) => reportAPI.getSaleOrders(params).then(r => (r.data.orders||[]).map(o => ({date:o.date?new Date(o.date).toLocaleDateString('en-IN'):'-',order:o.orderNo||o._id?.slice(-6),customer:o.customerName||'-',amount:o.totalAmount||0,status:o.status||'Draft'}))),
   'Loan Statement': (params) => reportAPI.getLoanStatement(params).then(r => (r.data.entries||[]).map(l => ({date:l.date?new Date(l.date).toLocaleDateString('en-IN'):'-',particular:l.description||'-',payment:l.credit||0,balance:l.balance||0}))),
   'GST Report': (params) => reportAPI.getGST(params).then(r => (r.data.gstSummary||[]).map(g => ({gstin:'-',party:'-',value:g.taxableAmount,tax:(g.cgst||0)+(g.sgst||0)+(g.igst||0)}))),

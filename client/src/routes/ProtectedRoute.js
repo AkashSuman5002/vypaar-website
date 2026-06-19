@@ -13,6 +13,8 @@ const SEGMENT_PERMISSION = {
   'settings': 'settings',
   'company': 'settings',
   'utilities': 'settings',
+  'sync-share': 'settings',
+  'backup': 'settings',
   'journal-entry': 'accounting',
   'chart-of-accounts': 'accounting',
   'account-statements': 'accounting',

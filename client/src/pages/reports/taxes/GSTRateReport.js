@@ -50,7 +50,10 @@ const GSTRateReport = () => {
   }, [dateFrom, dateTo]);
 
   const mappedData = rateRows.map(rate => {
-    const entry = data.find(d => d.gstRate === rate) || {};
+    // Backend (getGSTReport -> gstSummary) returns numeric `rate` (e.g. 18),
+    // while rateRows are display strings like '18%'. Match on the numeric value.
+    const rateNum = parseFloat(rate);
+    const entry = data.find(d => Number(d.rate) === rateNum) || {};
     return {
       gstRate: rate,
       taxableAmount: entry.taxableAmount || 0,

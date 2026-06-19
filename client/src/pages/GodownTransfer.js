@@ -72,23 +72,39 @@ const GodownTransfer = () => {
 
   useEffect(() => { searchProducts(itemSearch); }, [itemSearch, searchProducts]);
 
+  // Available quantity of a product in the selected source godown. Falls back to the
+  // global stock when the product has no per-godown distribution yet (legacy data).
+  const availableInSource = (product) => {
+    if (!form.fromGodown) return product.stock ?? 0;
+    const gs = product.godownStock || [];
+    if (gs.length === 0) {
+      // Legacy: whole stock is treated as residing in its current warehouse.
+      return product.warehouse === form.fromGodown ? (product.stock ?? 0) : 0;
+    }
+    const entry = gs.find(e => (e.godown?._id || e.godown) === form.fromGodown);
+    return entry ? entry.quantity : 0;
+  };
+
   const addItem = (product) => {
     if (form.items.find(i => i.product === product._id)) {
       toast.warn('Item already added');
       return;
     }
+    const maxStock = availableInSource(product);
     setForm(prev => ({
       ...prev,
-      items: [...prev.items, { product: product._id, productName: product.name, quantity: 1, unit: product.unit || 'pcs', maxStock: product.stock }],
+      items: [...prev.items, { product: product._id, productName: product.name, quantity: 1, unit: product.unit || 'pcs', maxStock }],
     }));
     setItemSearch('');
     setProductDropdown([]);
   };
 
   const updateItemQty = (idx, qty) => {
-    const q = Math.max(1, parseInt(qty) || 1);
     setForm(prev => {
       const items = [...prev.items];
+      const max = items[idx].maxStock;
+      let q = Math.max(1, parseInt(qty) || 1);
+      if (Number.isFinite(max) && max > 0 && q > max) q = max;
       items[idx].quantity = q;
       return { ...prev, items };
     });

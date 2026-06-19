@@ -109,7 +109,7 @@ const createExpense = async (req, res) => {
       const month = expenseDate.getMonth() + 1;
       const year = expenseDate.getFullYear();
       await Budget.findOneAndUpdate(
-        { user: req.user._id, business: req.businessId, category: category || 'Other', month, year, isActive: true },
+        { ...baseFilter, category: category || 'Other', month, year, isActive: true },
         { $inc: { spent: totalAmount } },
         { session }
       );
@@ -156,7 +156,7 @@ const updateExpense = async (req, res) => {
 
     const txnType = (paymentMethod || expense.paymentMethod) === 'cash' ? 'cash_out' : 'bank_out';
     await Transaction.findOneAndUpdate(
-      { referenceModel: 'Expense', referenceId: expense._id, user: req.user._id },
+      { referenceModel: 'Expense', referenceId: expense._id, ...baseFilter },
       {
         ...getCreateData(req, { type: txnType, amount: totalAmount,
           description: `Expense - ${category || expense.category || 'Other'}: ${description || expense.description || ''}`,
@@ -170,19 +170,19 @@ const updateExpense = async (req, res) => {
 
     // Update journal entry
     try {
-      const oldJE = await JournalEntry.findOne({ referenceType: 'expense', referenceId: expense._id, user: req.user._id });
+      const oldJE = await JournalEntry.findOne({ referenceType: 'expense', referenceId: expense._id, ...baseFilter });
       if (oldJE) {
         const jeAccIds = oldJE.lines.filter(l => l.account).map(l => l.account);
-        const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, user: req.user._id });
+        const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, ...baseFilter });
         const jeAccMap = new Map(jeAccounts.map(a => [a._id.toString(), a]));
         const reverseOps = oldJE.lines.filter(l => l.account).map(line => {
           const acc = jeAccMap.get(line.account.toString());
           if (!acc) return null;
           const change = ['asset', 'expense'].includes(acc.type) ? -(line.debit - line.credit) : -(line.credit - line.debit);
-          return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+          return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: change } } } };
         }).filter(Boolean);
         if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
-        await JournalEntry.findOneAndDelete({ _id: oldJE._id, user: req.user._id }, { session });
+        await JournalEntry.findOneAndDelete({ _id: oldJE._id, ...baseFilter }, { session });
       }
 
       const baseFilterJE = getBaseFilter(req);
@@ -235,23 +235,23 @@ const deleteExpense = async (req, res) => {
 
     await withTransaction(async (session) => {
     await Expense.findOneAndDelete({ _id: req.params.id, ...baseFilter }, { session });
-    await Transaction.deleteMany({ referenceModel: 'Expense', referenceId: expense._id, user: req.user._id }, { session });
+    await Transaction.deleteMany({ referenceModel: 'Expense', referenceId: expense._id, ...baseFilter }, { session });
 
     // Reverse journal entry if one was created
     try {
-      const oldJE = await JournalEntry.findOne({ referenceType: 'expense', referenceId: expense._id, user: req.user._id });
+      const oldJE = await JournalEntry.findOne({ referenceType: 'expense', referenceId: expense._id, ...baseFilter });
       if (oldJE) {
         const jeAccIds = oldJE.lines.filter(l => l.account).map(l => l.account);
-        const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, user: req.user._id });
+        const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, ...baseFilter });
         const jeAccMap = new Map(jeAccounts.map(a => [a._id.toString(), a]));
         const reverseOps = oldJE.lines.filter(l => l.account).map(line => {
           const acc = jeAccMap.get(line.account.toString());
           if (!acc) return null;
           const change = ['asset', 'expense'].includes(acc.type) ? -(line.debit - line.credit) : -(line.credit - line.debit);
-          return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+          return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: change } } } };
         }).filter(Boolean);
         if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
-        await JournalEntry.findOneAndDelete({ _id: oldJE._id, user: req.user._id }, { session });
+        await JournalEntry.findOneAndDelete({ _id: oldJE._id, ...baseFilter }, { session });
       }
     } catch (jeErr) {
       console.error('Failed to reverse journal entry for expense:', jeErr.message);

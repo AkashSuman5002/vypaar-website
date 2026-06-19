@@ -118,7 +118,7 @@ const updateBusiness = async (req, res) => {
     setting.gstNumber = req.body.gstNumber !== undefined ? req.body.gstNumber : setting.gstNumber;
     setting.state = req.body.state !== undefined ? req.body.state : setting.state;
     setting.businessType = req.body.businessType !== undefined ? req.body.businessType : setting.businessType;
-    setting.businessCategory = req.body.businessCategory !== undefined ? req.body.businessCategory : setting.businessCategory;
+    setting.businessCategory = req.body.businessCategory || req.body.category || setting.businessCategory;
     setting.pincode = req.body.pincode !== undefined ? req.body.pincode : setting.pincode;
     if (business.logo) setting.logo = business.logo;
     if (business.signature) setting.signature = business.signature;
@@ -182,7 +182,8 @@ const switchBusiness = async (req, res) => {
       setting.businessCategory = business.businessCategory || setting.businessCategory;
       setting.pincode = business.pincode || setting.pincode;
       if (business.logo) setting.logo = business.logo;
-      await setting.save();
+    setting.ownerName = req.body.ownerName || setting.ownerName;
+    await setting.save();
     }
 
     res.json({ message: 'Switched to ' + business.name, business });

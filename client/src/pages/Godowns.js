@@ -149,6 +149,18 @@ const Godowns = () => {
     } catch (err) { toast.error(err.response?.data?.message || 'Failed to remove product'); }
   };
 
+  // Quantity of a product physically located in the given godown. Uses the per-godown
+  // distribution (godownStock); falls back to global stock for legacy data where the
+  // product is assigned to this godown via `warehouse` but has no godownStock entries.
+  const godownQty = (product, godownId) => {
+    const gs = product.godownStock || [];
+    if (gs.length === 0) {
+      return product.warehouse === godownId ? (product.stock || 0) : 0;
+    }
+    const entry = gs.find(e => (e.godown?._id || e.godown) === godownId);
+    return entry ? entry.quantity : (product.stock || 0);
+  };
+
   const filtered = godowns.filter(g =>
     !search || g.name?.toLowerCase().includes(search.toLowerCase()) ||
     g.code?.toLowerCase().includes(search.toLowerCase()) ||
@@ -290,7 +302,7 @@ const Godowns = () => {
                                   <tr key={p._id} className="hover:bg-white dark:hover:bg-gray-800">
                                     <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-200">{p.name}</td>
                                     <td className="px-3 py-2 text-gray-500">{p.sku || '-'}</td>
-                                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{p.stock || 0} {p.unit || 'pcs'}</td>
+                                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{godownQty(p, g._id)} {p.unit || 'pcs'}</td>
                                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatCurrency(p.price || 0)}</td>
                                     <td className="px-3 py-2">
                                       <button onClick={() => removeProductFromGodown(p)}

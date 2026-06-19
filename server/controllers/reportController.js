@@ -11,6 +11,16 @@ const Expense = require('../models/Expense');
 const PurchaseReturn = require('../models/PurchaseReturn');
 const { getBaseFilter, getSettingQuery } = require('../utils/queryHelper');
 
+// Frontend report pages are inconsistent: some send `dateFrom`/`dateTo`, others
+// send `startDate`/`endDate`. Normalize both onto `req.query.startDate`/`endDate`
+// so every handler below (which reads startDate/endDate) honours the date range.
+const normalizeDateQuery = (req) => {
+  if (!req || !req.query) return;
+  const q = req.query;
+  if (q.startDate == null && q.dateFrom != null) q.startDate = q.dateFrom;
+  if (q.endDate == null && q.dateTo != null) q.endDate = q.dateTo;
+};
+
 const getSalesReport = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
@@ -91,29 +101,26 @@ const getProfitReport = async (req, res) => {
     }
 
     const sales = await Sale.find({ ...filter, type: 'invoice' }).lean();
+    const creditNotes = await Sale.find({ ...filter, type: 'credit_note' }).lean();
+    const debitNotes = await Purchase.find({ ...filter, type: 'debit_note' }).lean();
     const purchases = await Purchase.find(filter).lean();
     const products = await Product.find({ ...baseFilter }).lean();
-
-    // Build a product map once for COGS fallback lookups (and to avoid O(n^2) find()).
+    const expenses = await Expense.find({ ...baseFilter }).lean();
     const productMap = new Map(products.map((p) => [p._id.toString(), p]));
 
-    // Output GST collected on sales and input GST paid on purchases.
     const totalGST = sales.reduce((s, sale) => s + (sale.cgstTotal || 0) + (sale.sgstTotal || 0) + (sale.igstTotal || 0), 0);
     const purchaseGST = purchases.reduce((s, p) => s + (p.cgstTotal || 0) + (p.sgstTotal || 0) + (p.igstTotal || 0), 0);
 
-    // totalSales/totalPurchases are reported gross (GST-inclusive) as before for display,
-    // but profit must be computed net of GST since collected output GST is a liability, not revenue.
     const totalSales = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
     const totalPurchases = purchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
-
-    // Net-of-GST revenue (revenue excluding output GST we owe to the govt).
+    const totalCreditNotes = creditNotes.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    const totalDebitNotes = debitNotes.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+    const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
     const netSales = totalSales - totalGST;
 
     let totalCOGS = 0;
     sales.forEach((s) => {
       (s.items || []).forEach((item) => {
-        // Prefer the line's own costPrice; fall back to the Product master's
-        // costPrice/purchasePrice so deleted/zeroed line costs don't make COGS 0.
         let unitCost = item.costPrice || 0;
         if (!unitCost && item.product) {
           const prod = productMap.get(item.product.toString());
@@ -123,12 +130,71 @@ const getProfitReport = async (req, res) => {
       });
     });
 
-    // Gross profit = net-of-output-GST revenue minus COGS (COGS is already net of input GST,
-    // since product cost prices are recorded exclusive of recoverable input GST).
     const grossProfit = netSales - totalCOGS;
 
-    const expenses = await Expense.find({ ...baseFilter }).lean();
-    const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+    // Categorize expenses
+    const expenseBreakdown = {
+      directExpenses: 0,
+      indirectExpenses: 0,
+      items: [],
+    };
+    expenses.forEach((e) => {
+      const cat = (e.category || 'other').toLowerCase();
+      const item = { name: e.description || e.category || 'Expense', amount: e.amount || 0 };
+      expenseBreakdown.items.push(item);
+      if (cat.includes('direct') || cat.includes('manufactur') || cat.includes('petrol') || cat.includes('discount')) {
+        expenseBreakdown.directExpenses += e.amount || 0;
+      } else {
+        expenseBreakdown.indirectExpenses += e.amount || 0;
+      }
+    });
+
+    // Build Vyapar-style flat line items
+    const lineItems = [
+      { label: 'Sale (+)', amount: totalSales, type: 'income' },
+      { label: 'Credit Note (-)', amount: totalCreditNotes, type: 'expense' },
+      { label: 'Sale FA (+)', amount: 0, type: 'income' },
+      { label: 'Purchase (-)', amount: totalPurchases, type: 'expense' },
+      { label: 'Debit Note (+)', amount: totalDebitNotes, type: 'income' },
+      { label: 'Purchase FA (-)', amount: 0, type: 'expense' },
+    ];
+
+    // Add sub-items under Direct Expenses
+    lineItems.push({ label: 'Direct Expenses(-)', amount: expenseBreakdown.directExpenses, type: 'section', children: expenseBreakdown.items.filter((e) => e.amount > 0) });
+
+    // Tax items
+    lineItems.push(
+      { label: 'Tax Payable (-)', amount: totalGST, type: 'section', children: [
+        { label: 'GST Payable (-)', amount: totalGST, type: 'expense' },
+        { label: 'TCS Payable (-)', amount: 0, type: 'expense' },
+      ]},
+      { label: 'Tax Receivable (+)', amount: purchaseGST, type: 'section', children: [
+        { label: 'GST Receivable (+)', amount: purchaseGST, type: 'income' },
+        { label: 'TCS Receivable (+)', amount: 0, type: 'income' },
+        { label: 'TDS Receivable (+)', amount: 0, type: 'income' },
+      ]},
+    );
+
+    // Stock items
+    lineItems.push(
+      { label: 'Opening Stock (-)', amount: 0, type: 'expense' },
+      { label: 'Closing Stock (+)', amount: 0, type: 'income' },
+      { label: 'Opening Stock FA (-)', amount: 0, type: 'expense' },
+      { label: 'Closing Stock FA (+)', amount: 0, type: 'income' },
+    );
+
+    lineItems.push({ label: 'Gross Profit', amount: grossProfit, type: 'total' });
+    lineItems.push({ label: 'Other Income (+)', amount: 0, type: 'income' });
+
+    // Indirect Expenses
+    lineItems.push({
+      label: 'Indirect Expenses(-)',
+      amount: expenseBreakdown.indirectExpenses,
+      type: 'section',
+      children: expenseBreakdown.items.filter((e) => e.amount > 0),
+    });
+
+    lineItems.push({ label: 'Net Profit', amount: grossProfit - totalExpenses, type: 'total' });
 
     res.json({
       totalSales,
@@ -141,6 +207,7 @@ const getProfitReport = async (req, res) => {
       netProfit: grossProfit - totalExpenses,
       salesCount: sales.length,
       purchasesCount: purchases.length,
+      lineItems,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1128,8 +1195,38 @@ const getExpenseItemReport = async (req, res) => {
       end.setDate(end.getDate() + 1);
       filter.date = { $gte: new Date(startDate), $lt: end };
     }
-    const entries = await Expense.find(filter).sort({ date: -1 });
-    res.json({ entries });
+    const expenses = await Expense.find(filter).sort({ date: -1 }).lean();
+
+    // Item-level data lives inside each expense's items[] array. Aggregate per
+    // item (grouped by item name + parent category) so the report breaks down
+    // by item instead of rendering blank flat fields.
+    const itemMap = {};
+    for (const exp of expenses) {
+      const category = exp.category || 'Uncategorized';
+      const lineItems = Array.isArray(exp.items) ? exp.items : [];
+      if (lineItems.length === 0) {
+        // Expense with no line items: fall back to the expense as a single row.
+        const name = exp.description || exp.category || 'Expense';
+        const key = `${name}||${category}`;
+        if (!itemMap[key]) itemMap[key] = { itemName: name, category, quantity: 0, amount: 0 };
+        itemMap[key].quantity += 1;
+        itemMap[key].amount += exp.totalAmount || exp.amount || 0;
+        continue;
+      }
+      for (const it of lineItems) {
+        const name = it.item || it.name || 'Unnamed Item';
+        const key = `${name}||${category}`;
+        if (!itemMap[key]) itemMap[key] = { itemName: name, category, quantity: 0, amount: 0 };
+        itemMap[key].quantity += it.quantity || 0;
+        const lineAmount = it.amount || ((it.rate || it.price || 0) * (it.quantity || 0));
+        itemMap[key].amount += lineAmount;
+      }
+    }
+
+    const entries = Object.values(itemMap).sort((a, b) => b.amount - a.amount);
+    const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
+    const totalQuantity = entries.reduce((s, e) => s + e.quantity, 0);
+    res.json({ entries, totalAmount, totalQuantity });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2118,7 +2215,15 @@ const getItemWiseDiscount = async (req, res) => {
   }
 };
 
-module.exports = {
+// Wrap every handler so dateFrom/dateTo are normalized to startDate/endDate
+// before the handler runs. This guarantees consistent date-range filtering
+// regardless of which query-param names a given frontend report page sends.
+const withDateNormalization = (fn) => async (req, res, next) => {
+  normalizeDateQuery(req);
+  return fn(req, res, next);
+};
+
+const handlers = {
   getSalesReport,
   getPurchaseReport,
   getProfitReport,
@@ -2167,3 +2272,10 @@ module.exports = {
   getStockSummaryByItemCategory,
   getItemWiseDiscount,
 };
+
+const wrapped = {};
+for (const [name, fn] of Object.entries(handlers)) {
+  wrapped[name] = withDateNormalization(fn);
+}
+
+module.exports = wrapped;

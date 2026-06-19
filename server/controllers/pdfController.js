@@ -37,6 +37,14 @@ const getThermalThemeStyle = (printPrefs) => {
   return thermalThemeStyles.thermalTheme1;
 };
 
+// Format a date safely — values like '06/2027' are not parseable by `new Date`, so show
+// the original string rather than rendering "Invalid Date" on the document.
+const safeDate = (d) => {
+  if (!d) return '';
+  const x = new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleDateString('en-IN');
+};
+
 const getThemeColor = (printPrefs) => {
   const isThermal = (printPrefs.printerType === 'thermal') || (printPrefs.makeThermalDefault && !printPrefs.printerType);
   if (isThermal) return getThermalThemeStyle(printPrefs).accent;
@@ -295,20 +303,24 @@ const generateInvoicePDF = async (req, res) => {
     }
 
     doc.fontSize(isThermal ? 8 : 9).font('Helvetica').fillColor('#000000');
-    if (showAddress && bizAddr) { doc.text(bizAddr, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
-    if (showPhone && bizPhone) { doc.text(isThermal ? `Ph.No.: ${bizPhone}` : `Phone: ${bizPhone}`, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
-    if (showEmail && bizEmail) { doc.text(`Email: ${bizEmail}`, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
-    if (showGSTIN && bizGst) { doc.text(`GST: ${bizGst}`, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
+    // Constrain the header column width and advance by the ACTUAL rendered height
+    // (doc.y) so multi-line values (e.g. a multi-line address) are not overprinted by
+    // the phone/email/GST lines below them.
+    const headColW = isThermal ? contentWidth : Math.round(contentWidth * 0.6);
+    if (showAddress && bizAddr) { doc.text(bizAddr, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+    if (showPhone && bizPhone) { doc.text(isThermal ? `Ph.No.: ${bizPhone}` : `Phone: ${bizPhone}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+    if (showEmail && bizEmail) { doc.text(`Email: ${bizEmail}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+    if (showGSTIN && bizGst) { doc.text(`GST: ${bizGst}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
 
-    if (!isThermal && settings?.invoiceNote) { doc.text(`Note: ${settings.invoiceNote}`, companyNameX, headerY); headerY += 13; }
+    if (!isThermal && settings?.invoiceNote) { doc.text(`Note: ${settings.invoiceNote}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
 
     if (!isThermal && showBankDetails && (settings?.bankName || settings?.bankAccountNumber || settings?.upiId)) {
       headerY += 4;
-      if (settings?.bankName) { doc.text(`Bank: ${settings.bankName}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.bankAccountNumber) { doc.text(`A/C: ${settings.bankAccountNumber}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.bankIfsc) { doc.text(`IFSC: ${settings.bankIfsc}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.bankBranch) { doc.text(`Branch: ${settings.bankBranch}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.upiId) { doc.text(`UPI: ${settings.upiId}`, companyNameX, headerY); headerY += 12; }
+      if (settings?.bankName) { doc.text(`Bank: ${settings.bankName}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.bankAccountNumber) { doc.text(`A/C: ${settings.bankAccountNumber}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.bankIfsc) { doc.text(`IFSC: ${settings.bankIfsc}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.bankBranch) { doc.text(`Branch: ${settings.bankBranch}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.upiId) { doc.text(`UPI: ${settings.upiId}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
     }
 
     doc.moveTo(marginLeft, headerY + 4).lineTo(pageWidth - marginRight, headerY + 4).dash(3, { space: 3 }).stroke().undash();
@@ -327,40 +339,30 @@ const generateInvoicePDF = async (req, res) => {
     headerY += 8;
 
     doc.fontSize(isThermal ? 8 : 10).font('Helvetica').fillColor('#000000');
-    doc.text(`Invoice: ${sale.invoiceNumber}`, marginLeft, headerY);
+    // Single running Y for the whole invoice-meta / party block so each line stacks
+    // below the previous one (multi-line address included) and the item table starts
+    // cleanly below it — no fixed offsets that overprint.
+    let infoY = headerY;
+    const partyW = isThermal ? contentWidth : Math.round(contentWidth * 0.6);
+    doc.text(`Invoice: ${sale.invoiceNumber}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2;
     const saleDateStr = settings?.preferences?.transaction?.addTimeOnTransactions !== false
       ? new Date(sale.date).toLocaleString('en-IN')
       : new Date(sale.date).toLocaleDateString('en-IN');
-    doc.text(`Date: ${saleDateStr}`, marginLeft, headerY + (isThermal ? 10 : 14));
-    doc.text(`Customer: ${sale.customerName || 'Walk-in'}`, marginLeft, headerY + (isThermal ? 20 : 28));
-
-    let partyInfoY = headerY + (isThermal ? 30 : 42);
+    doc.text(`Date: ${saleDateStr}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2;
+    doc.text(`Customer: ${sale.customerName || 'Walk-in'}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2;
     if (!isThermal) {
-      if (showPartyPhone && sale.customerPhone) {
-        doc.text(`Phone: ${sale.customerPhone}`, marginLeft, partyInfoY);
-        partyInfoY += 13;
+      if (showPartyPhone && sale.customerPhone) { doc.text(`Phone: ${sale.customerPhone}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2; }
+      if (showPartyGSTIN && sale.customerGst) { doc.text(`GSTIN: ${sale.customerGst}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2; }
+      if (showPartyAddress && sale.billingAddress) { doc.text(`Address: ${sale.billingAddress}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2; }
+      if (settings?.preferences?.party?.printShippingAddress !== false && sale.shippingAddress) {
+        const ship = typeof sale.shippingAddress === 'string' ? sale.shippingAddress : (sale.shippingAddress.address || sale.shippingAddress.fullAddress || '');
+        if (ship) { doc.text(`Ship To: ${ship}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2; }
       }
-      if (showPartyGSTIN && sale.customerGst) {
-        doc.text(`GSTIN: ${sale.customerGst}`, marginLeft, partyInfoY);
-        partyInfoY += 13;
-      }
-      if (showPartyAddress && sale.billingAddress) {
-        doc.text(`Address: ${sale.billingAddress}`, marginLeft, partyInfoY, { width: contentWidth });
-        partyInfoY += 13;
-      }
+      if (showTransportDetails && sale.transportMode) { doc.text(`Transport: ${sale.transportMode}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2; }
+      if (showTransportDetails && sale.vehicleNo) { doc.text(`Vehicle: ${sale.vehicleNo}`, marginLeft, infoY, { width: partyW }); infoY = doc.y + 2; }
     }
 
-    if (!isThermal && settings?.preferences?.party?.printShippingAddress !== false && sale.shippingAddress) {
-      doc.text(`Ship To: ${typeof sale.shippingAddress === 'string' ? sale.shippingAddress : sale.shippingAddress.address || sale.shippingAddress.fullAddress || ''}`, marginLeft, headerY + 42);
-    }
-
-    if (!isThermal && showTransportDetails && (sale.transportMode || sale.vehicleNo)) {
-      let transportY = headerY + (isThermal ? 24 : 56);
-      if (sale.transportMode) { doc.text(`Transport: ${sale.transportMode}`, marginLeft, transportY); transportY += 13; }
-      if (sale.vehicleNo) { doc.text(`Vehicle: ${sale.vehicleNo}`, marginLeft, transportY); transportY += 13; }
-    }
-
-    let tableTop = headerY + (isThermal ? 32 : 55);
+    let tableTop = infoY + (isThermal ? 8 : 10);
     const hasTax = printPrefs.taxDetails !== false;
 
     if (isThermal) {
@@ -425,8 +427,8 @@ const generateInvoicePDF = async (req, res) => {
         }
         if (showBatchNo && item.batchNumber) metaParts.push(`Batch: ${item.batchNumber}`);
         if (showModelNo && item.modelNumber) metaParts.push(`Model: ${item.modelNumber}`);
-        if (showExpDate && item.expiryDate) metaParts.push(`Exp: ${new Date(item.expiryDate).toLocaleDateString('en-IN')}`);
-        if (showMfgDate && item.manufacturingDate) metaParts.push(`Mfg: ${new Date(item.manufacturingDate).toLocaleDateString('en-IN')}`);
+        if (showExpDate && item.expiryDate) metaParts.push(`Exp: ${safeDate(item.expiryDate)}`);
+        if (showMfgDate && item.manufacturingDate) metaParts.push(`Mfg: ${safeDate(item.manufacturingDate)}`);
         if (showSize && item.size) metaParts.push(`Size: ${item.size}`);
         if (metaParts.length > 0) {
           doc.fontSize(7).fillColor('#666666').text(metaParts.join(', '), marginLeft + 5, y, { width: contentWidth - 10 });
@@ -439,7 +441,11 @@ const generateInvoicePDF = async (req, res) => {
         const hsnSuffix = (showItemHSN && item.hsn) ? ` HSN:${item.hsn}` : '';
         const name = snoPrefix + item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '') + hsnSuffix;
         const serialInfo = (showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '';
-        doc.fillColor('#000000').text(name + serialInfo, marginLeft, y, { width: 120 });
+        const fullName = name + serialInfo;
+        // Product name may wrap to several lines — measure its height so the row grows
+        // to fit and the next row never overprints it.
+        const nameH = doc.heightOfString(fullName, { width: 118 });
+        doc.fillColor('#000000').text(fullName, marginLeft, y, { width: 118 });
         const qtyText = String(item.quantity) + (showItemUOM && item.unit ? ` ${item.unit}` : '');
         doc.text(qtyText, (hasTax ? marginLeft + 210 : marginLeft + 180), y, { width: 70, align: 'right' });
         if (showAmount) {
@@ -454,21 +460,23 @@ const generateInvoicePDF = async (req, res) => {
           }
           doc.text(formatAmount(item.amount, printPrefs, currency), marginLeft + (hasTax ? 500 : 360), y, { width: 60, align: 'right' });
         }
-        // Optional per-item details (batch/model/exp/mfg/size) shown as a sub-line under
-        // the product name when their respective toggles are enabled.
+        // The row's height is the tallest cell — usually the wrapped product-name column.
+        let rowBottom = y + Math.max(nameH, 12);
+        // Optional per-item details (batch/model/exp/mfg/size) shown as a sub-line below.
         const metaParts = [];
         if (showBatchNo && item.batchNumber) metaParts.push(`Batch: ${item.batchNumber}`);
         if (showModelNo && item.modelNumber) metaParts.push(`Model: ${item.modelNumber}`);
-        if (showExpDate && item.expiryDate) metaParts.push(`Exp: ${new Date(item.expiryDate).toLocaleDateString('en-IN')}`);
-        if (showMfgDate && item.manufacturingDate) metaParts.push(`Mfg: ${new Date(item.manufacturingDate).toLocaleDateString('en-IN')}`);
+        if (showExpDate && item.expiryDate) metaParts.push(`Exp: ${safeDate(item.expiryDate)}`);
+        if (showMfgDate && item.manufacturingDate) metaParts.push(`Mfg: ${safeDate(item.manufacturingDate)}`);
         if (showSize && item.size) metaParts.push(`Size: ${item.size}`);
         if (metaParts.length > 0) {
-          y += 11;
-          doc.font('Helvetica-Oblique').fontSize(7).fillColor('#666666').text(metaParts.join(', '), marginLeft, y, { width: 120 });
+          doc.font('Helvetica-Oblique').fontSize(7).fillColor('#666666').text(metaParts.join(', '), marginLeft, rowBottom, { width: contentWidth - 5 });
+          rowBottom = doc.y;
           doc.font('Helvetica').fontSize(9).fillColor('#000000');
         }
+        y = rowBottom;
       }
-      y += isThermal ? 4 : 16;
+      y += isThermal ? 4 : 6;
     });
 
     y += 6;
@@ -547,16 +555,16 @@ const generateInvoicePDF = async (req, res) => {
 
       totals.forEach((t) => {
         doc.font('Helvetica').fontSize(10).fillColor('#000000');
-        doc.text(t.label, marginLeft + 310, y);
-        doc.text(formatAmount(t.value, printPrefs, currency), marginLeft + contentWidth - 50, y, { width: 60, align: 'right' });
+        doc.text(t.label, marginLeft + 300, y, { width: 110 });
+        doc.text(formatAmount(t.value, printPrefs, currency), marginLeft + contentWidth - 110, y, { width: 115, align: 'right' });
         y += 16;
       });
 
       doc.moveTo(marginLeft + 310, y).lineTo(marginLeft + contentWidth + 5, y).stroke();
       y += 6;
       doc.font('Helvetica-Bold').fontSize(12).fillColor('#000000');
-      doc.text('Grand Total:', marginLeft + 310, y);
-      doc.text(formatAmount(sale.totalAmount, printPrefs, currency), marginLeft + contentWidth - 50, y, { width: 60, align: 'right' });
+      doc.text('Grand Total:', marginLeft + 300, y, { width: 110 });
+      doc.text(formatAmount(sale.totalAmount, printPrefs, currency), marginLeft + contentWidth - 110, y, { width: 115, align: 'right' });
       y += 20;
 
       if (showReceivedAmount) {
@@ -779,20 +787,24 @@ const generatePurchasePDF = async (req, res) => {
     }
 
     doc.fontSize(isThermal ? 8 : 9).font('Helvetica').fillColor('#000000');
-    if (showAddress && bizAddr) { doc.text(bizAddr, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
-    if (showPhone && bizPhone) { doc.text(isThermal ? `Ph.No.: ${bizPhone}` : `Phone: ${bizPhone}`, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
-    if (showEmail && bizEmail) { doc.text(`Email: ${bizEmail}`, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
-    if (showGSTIN && bizGst) { doc.text(`GST: ${bizGst}`, companyNameX, headerY); headerY += isThermal ? 10 : 13; }
+    // Constrain the header column width and advance by the ACTUAL rendered height
+    // (doc.y) so multi-line values (e.g. a multi-line address) are not overprinted by
+    // the phone/email/GST lines below them.
+    const headColW = isThermal ? contentWidth : Math.round(contentWidth * 0.6);
+    if (showAddress && bizAddr) { doc.text(bizAddr, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+    if (showPhone && bizPhone) { doc.text(isThermal ? `Ph.No.: ${bizPhone}` : `Phone: ${bizPhone}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+    if (showEmail && bizEmail) { doc.text(`Email: ${bizEmail}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+    if (showGSTIN && bizGst) { doc.text(`GST: ${bizGst}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
 
-    if (!isThermal && settings?.invoiceNote) { doc.text(`Note: ${settings.invoiceNote}`, companyNameX, headerY); headerY += 13; }
+    if (!isThermal && settings?.invoiceNote) { doc.text(`Note: ${settings.invoiceNote}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
 
     if (!isThermal && showBankDetails && (settings?.bankName || settings?.bankAccountNumber || settings?.upiId)) {
       headerY += 4;
-      if (settings?.bankName) { doc.text(`Bank: ${settings.bankName}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.bankAccountNumber) { doc.text(`A/C: ${settings.bankAccountNumber}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.bankIfsc) { doc.text(`IFSC: ${settings.bankIfsc}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.bankBranch) { doc.text(`Branch: ${settings.bankBranch}`, companyNameX, headerY); headerY += 12; }
-      if (settings?.upiId) { doc.text(`UPI: ${settings.upiId}`, companyNameX, headerY); headerY += 12; }
+      if (settings?.bankName) { doc.text(`Bank: ${settings.bankName}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.bankAccountNumber) { doc.text(`A/C: ${settings.bankAccountNumber}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.bankIfsc) { doc.text(`IFSC: ${settings.bankIfsc}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.bankBranch) { doc.text(`Branch: ${settings.bankBranch}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
+      if (settings?.upiId) { doc.text(`UPI: ${settings.upiId}`, companyNameX, headerY, { width: headColW }); headerY = doc.y + 1; }
     }
 
     doc.moveTo(marginLeft, headerY + 4).lineTo(pageWidth - marginRight, headerY + 4).dash(3, { space: 3 }).stroke().undash();
@@ -913,16 +925,16 @@ const generatePurchasePDF = async (req, res) => {
 
       totals.forEach((t) => {
         doc.font('Helvetica').fontSize(10).fillColor('#000000');
-        doc.text(t.label, marginLeft + 310, y);
-        doc.text(formatAmount(t.value, printPrefs, currency), marginLeft + contentWidth - 50, y, { width: 60, align: 'right' });
+        doc.text(t.label, marginLeft + 300, y, { width: 110 });
+        doc.text(formatAmount(t.value, printPrefs, currency), marginLeft + contentWidth - 110, y, { width: 115, align: 'right' });
         y += 16;
       });
 
       doc.moveTo(marginLeft + 310, y).lineTo(marginLeft + contentWidth + 5, y).stroke();
       y += 6;
       doc.font('Helvetica-Bold').fontSize(12).fillColor('#000000');
-      doc.text('Grand Total:', marginLeft + 310, y);
-      doc.text(formatAmount(purchase.totalAmount, printPrefs, currency), marginLeft + contentWidth - 50, y, { width: 60, align: 'right' });
+      doc.text('Grand Total:', marginLeft + 300, y, { width: 110 });
+      doc.text(formatAmount(purchase.totalAmount, printPrefs, currency), marginLeft + contentWidth - 110, y, { width: 115, align: 'right' });
       y += 20;
 
       doc.font('Helvetica').fontSize(10).fillColor('#000000');

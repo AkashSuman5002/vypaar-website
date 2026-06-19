@@ -54,6 +54,7 @@ const excelExport = async (req, res) => {
     const userId = req.user._id;
     const workbook = XLSX.utils.book_new();
     const results = {};
+    const BATCH_SIZE = 1000; // Process records in batches for memory efficiency
 
     const dateFilter = {};
     if (dateFrom) dateFilter.$gte = new Date(dateFrom);
@@ -74,40 +75,65 @@ const excelExport = async (req, res) => {
           break;
         }
         case 'Items': {
-          const products = await Product.find({ ...baseFilter }).lean();
-          data = products.map(p => ({ Name: p.name, Category: p.category, Price: p.price, 'Cost Price': p.costPrice, Stock: p.stock, 'GST Rate': p.gstRate, Unit: p.unit, HSN: p.hsn, Active: p.isActive ? 'Yes' : 'No' }));
+          const cursor = Product.find({ ...baseFilter }).lean().cursor();
+          let batch = [];
+          for await (const doc of cursor) {
+            batch.push({ Name: doc.name, Category: doc.category, Price: doc.price, 'Cost Price': doc.costPrice, Stock: doc.stock, 'GST Rate': doc.gstRate, Unit: doc.unit, HSN: doc.hsn, Active: doc.isActive ? 'Yes' : 'No' });
+            if (batch.length >= BATCH_SIZE) { data.push(...batch); batch = []; }
+          }
+          if (batch.length > 0) data.push(...batch);
           results[mod] = data.length;
           break;
         }
         case 'Sales': {
           const query = { ...baseFilter };
           if (dateFrom || dateTo) query.date = dateFilter;
-          const sales = await Sale.find(query).lean();
-          data = sales.map(s => ({ 'Invoice No': s.invoiceNumber, Customer: s.customerName, Date: s.date, 'Total Amount': s.totalAmount, Paid: s.paidAmount, Balance: s.remainingBalance, 'Payment Method': s.paymentMethod, Status: s.paymentStatus }));
+          const cursor = Sale.find(query).lean().cursor();
+          let batch = [];
+          for await (const doc of cursor) {
+            batch.push({ 'Invoice No': doc.invoiceNumber, Customer: doc.customerName, Date: doc.date, 'Total Amount': doc.totalAmount, Paid: doc.paidAmount, Balance: doc.remainingBalance, 'Payment Method': doc.paymentMethod, Status: doc.paymentStatus });
+            if (batch.length >= BATCH_SIZE) { data.push(...batch); batch = []; }
+          }
+          if (batch.length > 0) data.push(...batch);
           results[mod] = data.length;
           break;
         }
         case 'Purchases': {
           const query = { ...baseFilter };
           if (dateFrom || dateTo) query.date = dateFilter;
-          const purchases = await Purchase.find(query).lean();
-          data = purchases.map(p => ({ 'Invoice No': p.invoiceNumber, Supplier: p.supplierName, Date: p.date, 'Total Amount': p.totalAmount, Paid: p.paidAmount, Balance: p.remainingBalance, 'Payment Method': p.paymentMethod }));
+          const cursor = Purchase.find(query).lean().cursor();
+          let batch = [];
+          for await (const doc of cursor) {
+            batch.push({ 'Invoice No': doc.invoiceNumber, Supplier: doc.supplierName, Date: doc.date, 'Total Amount': doc.totalAmount, Paid: doc.paidAmount, Balance: doc.remainingBalance, 'Payment Method': doc.paymentMethod });
+            if (batch.length >= BATCH_SIZE) { data.push(...batch); batch = []; }
+          }
+          if (batch.length > 0) data.push(...batch);
           results[mod] = data.length;
           break;
         }
         case 'Expenses': {
           const query = { ...baseFilter, type: 'expense' };
           if (dateFrom || dateTo) query.date = dateFilter;
-          const expenses = await Transaction.find(query).lean();
-          data = expenses.map(e => ({ Date: e.date, Category: e.category, Amount: e.amount, Description: e.description, 'Payment Method': e.paymentMethod }));
+          const cursor = Transaction.find(query).lean().cursor();
+          let batch = [];
+          for await (const doc of cursor) {
+            batch.push({ Date: doc.date, Category: doc.category, Amount: doc.amount, Description: doc.description, 'Payment Method': doc.paymentMethod });
+            if (batch.length >= BATCH_SIZE) { data.push(...batch); batch = []; }
+          }
+          if (batch.length > 0) data.push(...batch);
           results[mod] = data.length;
           break;
         }
         case 'Stock': {
           const query = { ...baseFilter };
           if (dateFrom || dateTo) query.date = dateFilter;
-          const movements = await StockMovement.find(query).lean();
-          data = movements.map(m => ({ 'Product Name': m.productName, Type: m.type, Quantity: m.quantity, Date: m.date, Reference: m.referenceNumber }));
+          const cursor = StockMovement.find(query).lean().cursor();
+          let batch = [];
+          for await (const doc of cursor) {
+            batch.push({ 'Product Name': doc.productName, Type: doc.type, Quantity: doc.quantity, Date: doc.date, Reference: doc.referenceNumber });
+            if (batch.length >= BATCH_SIZE) { data.push(...batch); batch = []; }
+          }
+          if (batch.length > 0) data.push(...batch);
           results[mod] = data.length;
           break;
         }

@@ -96,7 +96,7 @@ const createPurchaseReturn = async (req, res) => {
 
       const productIds = processedItems.filter(item => item.product).map(item => item.product);
       if (productIds.length > 0) {
-        const products = await Product.find({ _id: { $in: productIds }, user: req.user._id });
+        const products = await Product.find({ _id: { $in: productIds }, ...baseFilter });
         const productMap = new Map(products.map(p => [p._id.toString(), p]));
 
         const stockOps = [];
@@ -105,16 +105,20 @@ const createPurchaseReturn = async (req, res) => {
           if (item.product) {
             const prod = productMap.get(item.product.toString());
             const balBefore = prod ? prod.stock : 0;
+            // Returning goods to the supplier decrements our stock. Guard against going
+            // negative: bulkWrite's $inc bypasses the schema's min:0, so clamp the
+            // decrement to the available balance to avoid silently negative stock.
+            const decQty = Math.min(item.quantity, balBefore);
             stockOps.push({
               updateOne: {
-                filter: { _id: item.product, user: req.user._id },
-                update: { $inc: { stock: -item.quantity } }
+                filter: { _id: item.product, ...baseFilter },
+                update: { $inc: { stock: -decQty } }
               }
             });
             movements.push({
               user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
-              type: 'purchase_return', quantity: -item.quantity,
-              balanceBefore: balBefore, balanceAfter: balBefore - item.quantity,
+              type: 'purchase_return', quantity: -decQty,
+              balanceBefore: balBefore, balanceAfter: balBefore - decQty,
               rate: item.rate, totalAmount: item.amount,
               referenceType: 'PurchaseReturn', referenceId: created._id,
               referenceNumber: returnNumber || created._id,
@@ -127,12 +131,17 @@ const createPurchaseReturn = async (req, res) => {
         if (movements.length > 0) await StockMovement.insertMany(movements, { session });
       }
 
-      // A purchase return (debit note) reduces what we owe the supplier
+      // A purchase return (debit note) reduces what we owe the supplier.
+      // Scope the lookup by business (not just user) so staff/member users of a
+      // multi-user business can adjust the owner-owned supplier balance.
       if (created.supplier && created.totalAmount > 0) {
-        await Supplier.findByIdAndUpdate(created.supplier, { $inc: { openingBalance: -created.totalAmount } }, { session });
+        await Supplier.findOneAndUpdate({ _id: created.supplier, ...baseFilter }, { $inc: { openingBalance: -created.totalAmount } }, { session });
+      } else if (!created.supplier && created.totalAmount > 0) {
+        // Intentional skip: no linked supplier doc (supplierName is free text and not a
+        // reliable key), so there is no balance to adjust. Skipping here is correct and
+        // does NOT overstate any supplier balance because none was identified.
+        console.warn(`Purchase return ${returnNumber || created._id}: no linked supplier (free-text supplierName only) - payable balance left untouched.`);
       }
-      // NOTE: if created.supplier is not set we cannot safely identify the supplier
-      // (supplierName is free text and not a reliable key), so the balance is left untouched.
 
       // Post a journal entry that REVERSES the original purchase posting.
       // Original purchase: Dr Purchase (5002) / Cr Payable (2001).
@@ -159,13 +168,13 @@ const createPurchaseReturn = async (req, res) => {
               postedAt: new Date(),
             })], { session });
             const accIds = lines.map(l => l.account);
-            const accounts = await Account.find({ _id: { $in: accIds }, user: req.user._id });
+            const accounts = await Account.find({ _id: { $in: accIds }, ...baseFilter });
             const accMap = new Map(accounts.map(a => [a._id.toString(), a]));
             const balanceOps = lines.map(line => {
               const acc = accMap.get(line.account.toString());
               if (!acc) return null;
               const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-              return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+              return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: change } } } };
             }).filter(Boolean);
             if (balanceOps.length > 0) await Account.bulkWrite(balanceOps, { session });
           }
@@ -227,15 +236,14 @@ const updatePurchaseReturn = async (req, res) => {
       if (itemsChanged) {
         const restoreOps = ret.items.filter(item => item.product).map(item => ({
           updateOne: {
-            filter: { _id: item.product, user: req.user._id },
+            filter: { _id: item.product, ...baseFilter },
             update: { $inc: { stock: item.quantity } }
           }
         }));
         if (restoreOps.length > 0) await Product.bulkWrite(restoreOps, { session });
 
         await StockMovement.deleteMany({
-          user: req.user._id,
-          business: req.businessId,
+          ...baseFilter,
           referenceType: 'PurchaseReturn',
           referenceId: ret._id,
           type: 'purchase_return',
@@ -244,7 +252,7 @@ const updatePurchaseReturn = async (req, res) => {
         const newItems = filtered.items;
         const newProductIds = newItems.filter(item => item.product).map(item => item.product);
         const allProductIds = [...new Set([...ret.items.filter(i => i.product).map(i => i.product), ...newProductIds])];
-        const allProducts = await Product.find({ _id: { $in: allProductIds }, user: req.user._id });
+        const allProducts = await Product.find({ _id: { $in: allProductIds }, ...baseFilter });
         const productMap = new Map(allProducts.map(p => [p._id.toString(), p]));
 
         const adjustOps = [];
@@ -253,16 +261,18 @@ const updatePurchaseReturn = async (req, res) => {
           if (item.product) {
             const prod = productMap.get(item.product.toString());
             const balBefore = prod ? prod.stock : 0;
+            // Guard against negative stock: bulkWrite bypasses schema min:0.
+            const decQty = Math.min(item.quantity, balBefore);
             adjustOps.push({
               updateOne: {
-                filter: { _id: item.product, user: req.user._id },
-                update: { $inc: { stock: -item.quantity } }
+                filter: { _id: item.product, ...baseFilter },
+                update: { $inc: { stock: -decQty } }
               }
             });
             adjustMovements.push({
               user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
-              type: 'purchase_return', quantity: -item.quantity,
-              balanceBefore: balBefore, balanceAfter: balBefore - item.quantity,
+              type: 'purchase_return', quantity: -decQty,
+              balanceBefore: balBefore, balanceAfter: balBefore - decQty,
               rate: item.rate, totalAmount: item.amount,
               referenceType: 'PurchaseReturn', referenceId: ret._id,
               referenceNumber: filtered.returnNumber || ret.returnNumber || ret._id,
@@ -282,19 +292,19 @@ const updatePurchaseReturn = async (req, res) => {
       const newTotal = result.totalAmount || 0;
       if (newTotal !== (ret.totalAmount || 0)) {
         try {
-          const existingJe = await JournalEntry.findOne({ referenceType: 'PurchaseReturn', referenceId: ret._id, user: req.user._id });
+          const existingJe = await JournalEntry.findOne({ referenceType: 'PurchaseReturn', referenceId: ret._id, ...baseFilter });
           if (existingJe) {
             const revAccIds = existingJe.lines.filter(l => l.account).map(l => l.account);
-            const revAccounts = await Account.find({ _id: { $in: revAccIds }, user: req.user._id });
+            const revAccounts = await Account.find({ _id: { $in: revAccIds }, ...baseFilter });
             const revAccMap = new Map(revAccounts.map(a => [a._id.toString(), a]));
             const revOps = existingJe.lines.filter(l => l.account).map(line => {
               const acc = revAccMap.get(line.account.toString());
               if (!acc) return null;
               const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-              return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: -change } } } };
+              return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: -change } } } };
             }).filter(Boolean);
             if (revOps.length > 0) await Account.bulkWrite(revOps, { session });
-            await JournalEntry.findOneAndDelete({ _id: existingJe._id, user: req.user._id }, { session });
+            await JournalEntry.findOneAndDelete({ _id: existingJe._id, ...baseFilter }, { session });
           }
           if (newTotal > 0) {
             const payable = await Account.findOne({ ...baseFilter, code: '2001' });
@@ -316,13 +326,13 @@ const updatePurchaseReturn = async (req, res) => {
                 isPosted: true,
                 postedAt: new Date(),
               })], { session });
-              const accounts = await Account.find({ _id: { $in: lines.map(l => l.account) }, user: req.user._id });
+              const accounts = await Account.find({ _id: { $in: lines.map(l => l.account) }, ...baseFilter });
               const accMap = new Map(accounts.map(a => [a._id.toString(), a]));
               const balanceOps = lines.map(line => {
                 const acc = accMap.get(line.account.toString());
                 if (!acc) return null;
                 const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-                return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+                return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: change } } } };
               }).filter(Boolean);
               if (balanceOps.length > 0) await Account.bulkWrite(balanceOps, { session });
             }
@@ -351,9 +361,9 @@ const deletePurchaseReturn = async (req, res) => {
       // Restore stock that was decremented during creation
       for (const item of ret.items) {
         if (item.product) {
-          const prod = await Product.findOne({ _id: item.product, user: req.user._id });
+          const prod = await Product.findOne({ _id: item.product, ...baseFilter });
           const balBefore = prod ? prod.stock : 0;
-          await Product.findOneAndUpdate({ _id: item.product, user: req.user._id }, { $inc: { stock: item.quantity } }, { session });
+          await Product.findOneAndUpdate({ _id: item.product, ...baseFilter }, { $inc: { stock: item.quantity } }, { session });
           const movement = new StockMovement({
             user: req.user._id, business: req.businessId, product: item.product, productName: item.productName,
             type: 'return', quantity: item.quantity,
@@ -370,25 +380,25 @@ const deletePurchaseReturn = async (req, res) => {
 
       // Reverse the supplier payable reduction applied at creation
       if (ret.supplier && ret.totalAmount > 0) {
-        await Supplier.findByIdAndUpdate(ret.supplier, { $inc: { openingBalance: ret.totalAmount } }, { session });
+        await Supplier.findOneAndUpdate({ _id: ret.supplier, ...baseFilter }, { $inc: { openingBalance: ret.totalAmount } }, { session });
       }
       // NOTE: if ret.supplier is not set, nothing was decremented at creation, so nothing to reverse.
 
       // Reverse the journal entry created for this purchase return, if any.
       try {
-        const journalEntry = await JournalEntry.findOne({ referenceType: 'PurchaseReturn', referenceId: ret._id, user: req.user._id });
+        const journalEntry = await JournalEntry.findOne({ referenceType: 'PurchaseReturn', referenceId: ret._id, ...baseFilter });
         if (journalEntry) {
           const delAccIds = journalEntry.lines.filter(l => l.account).map(l => l.account);
-          const delAccounts = await Account.find({ _id: { $in: delAccIds }, user: req.user._id });
+          const delAccounts = await Account.find({ _id: { $in: delAccIds }, ...baseFilter });
           const delAccMap = new Map(delAccounts.map(a => [a._id.toString(), a]));
           const delReverseOps = journalEntry.lines.filter(l => l.account).map(line => {
             const acc = delAccMap.get(line.account.toString());
             if (!acc) return null;
             const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-            return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: -change } } } };
+            return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: -change } } } };
           }).filter(Boolean);
           if (delReverseOps.length > 0) await Account.bulkWrite(delReverseOps, { session });
-          await JournalEntry.findOneAndDelete({ _id: journalEntry._id, user: req.user._id }, { session });
+          await JournalEntry.findOneAndDelete({ _id: journalEntry._id, ...baseFilter }, { session });
         }
       } catch (jeErr) {
         console.error('Failed to reverse journal entry on purchase return delete:', jeErr.message);

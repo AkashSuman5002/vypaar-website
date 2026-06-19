@@ -52,13 +52,13 @@ const GSTR3B = () => {
   if (loading && dates.start) return <div className="bg-white dark:bg-[#0F172A] min-h-full"><LoadingSpinner /></div>;
 
   const supplyData = gstr3b ? [
-    { nature: '(a) Outward taxable supplies', taxableValue: gstr3b.supply.taxableValue, igst: 0, cgst: gstr3b.supply.centralTax, sgst: gstr3b.supply.stateTax },
-    { nature: 'Total', taxableValue: gstr3b.supply.taxableValue, igst: 0, cgst: gstr3b.supply.centralTax, sgst: gstr3b.supply.stateTax },
+    { nature: '(a) Outward taxable supplies', taxableValue: gstr3b.supply.taxableValue, igst: gstr3b.supply.integratedTax || 0, cgst: gstr3b.supply.centralTax, sgst: gstr3b.supply.stateTax },
+    { nature: 'Total', taxableValue: gstr3b.supply.taxableValue, igst: gstr3b.supply.integratedTax || 0, cgst: gstr3b.supply.centralTax, sgst: gstr3b.supply.stateTax },
   ] : [];
 
   const itcData = gstr3b ? [
-    { nature: 'ITC Available', igst: 0, cgst: gstr3b.itc.centralTax, sgst: gstr3b.itc.stateTax },
-    { nature: 'Total ITC', igst: 0, cgst: gstr3b.itc.centralTax, sgst: gstr3b.itc.stateTax },
+    { nature: 'ITC Available', igst: gstr3b.itc.integratedTax || 0, cgst: gstr3b.itc.centralTax, sgst: gstr3b.itc.stateTax },
+    { nature: 'Total ITC', igst: gstr3b.itc.integratedTax || 0, cgst: gstr3b.itc.centralTax, sgst: gstr3b.itc.stateTax },
   ] : [];
 
   return (

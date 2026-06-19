@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Building2, ArrowRight, FileText, Save } from 'lucide-react';
-import { businessAPI, settingAPI, BASE_URL } from '../../services/api';
+import { businessAPI, settingAPI, mediaUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { validateMobile, validateEmail, validateGST, formatMobile, formatGST } from '../../utils/validation';
 import StateDropdown from '../../components/UI/StateDropdown';
@@ -34,16 +34,16 @@ const SetupMyBusiness = () => {
         const biz = data.business || data;
         setForm(prev => ({
           ...prev,
-          businessName: biz.name || user?.businessName || '',
+          businessName: biz.businessName || user?.businessName || '',
           phone: biz.phone || user?.phone || '',
           email: biz.email || user?.email || '',
           ownerName: biz.ownerName || user?.name || '',
           gstNumber: biz.gstNumber || '',
           address: biz.address || '',
           state: biz.state || '',
-          category: biz.category || 'Mobile & Accessories',
+          category: biz.businessCategory || 'Mobile & Accessories',
         }));
-        if (biz.logo) setLogoPreview(biz.logo.startsWith('http') ? biz.logo : `${BASE_URL}${biz.logo}`);
+        if (biz.logo) setLogoPreview(mediaUrl(biz.logo));
       } catch {
         if (user) {
           setForm(prev => ({ ...prev, ownerName: user.name || '', email: user.email || '', phone: user.phone || '' }));
@@ -81,7 +81,7 @@ const SetupMyBusiness = () => {
       fd.append('gstNumber', form.gstNumber);
       fd.append('address', form.address);
       fd.append('state', form.state);
-      fd.append('category', form.category);
+      fd.append('businessCategory', form.category);
       if (fileRef.current?.files[0]) fd.append('logo', fileRef.current.files[0]);
       await businessAPI.updateProfile(fd);
       toast.success('Business details updated successfully!');

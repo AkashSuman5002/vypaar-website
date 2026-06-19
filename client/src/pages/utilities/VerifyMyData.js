@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { CheckCircle, AlertTriangle, RefreshCw, Database, Users, Package, ShoppingCart, Receipt, FileText, BookOpen, Wallet, BarChart3 } from 'lucide-react';
+import { CheckCircle, AlertTriangle, RefreshCw, Database, Users, Package, ShoppingCart, Receipt, FileText, BookOpen, Wallet, BarChart3, AlertCircle } from 'lucide-react';
 import { utilityAPI } from '../../services/api';
 
 const MODULE_CONFIG = {
-  customers: { label: 'Customers', icon: Users, color: 'blue' },
-  products: { label: 'Items', icon: Package, color: 'emerald' },
-  sales: { label: 'Sales', icon: ShoppingCart, color: 'purple' },
-  purchases: { label: 'Purchases', icon: Receipt, color: 'amber' },
-  expenses: { label: 'Expenses', icon: FileText, color: 'red' },
-  journalEntries: { label: 'Journal Entries', icon: BookOpen, color: 'indigo' },
-  accounts: { label: 'Chart of Accounts', icon: BarChart3, color: 'cyan' },
-  stock: { label: 'Stock Movements', icon: Database, color: 'orange' },
-  transactions: { label: 'Transactions', icon: Wallet, color: 'teal' },
+  customers: { label: 'Customers', icon: Users, color: 'blue', checks: ['Missing names', 'Invalid GSTIN format', 'Duplicate name+phone'] },
+  products: { label: 'Items', icon: Package, color: 'emerald', checks: ['Zero prices', 'Negative stock', 'Duplicate names'] },
+  sales: { label: 'Sales', icon: ShoppingCart, color: 'purple', checks: ['Unpaid invoices', 'Broken customer references'] },
+  purchases: { label: 'Purchases', icon: Receipt, color: 'amber', checks: ['Unpaid purchases'] },
+  expenses: { label: 'Expenses', icon: FileText, color: 'red', checks: ['Basic validation'] },
+  journalEntries: { label: 'Journal Entries', icon: BookOpen, color: 'indigo', checks: ['Unbalanced entries', 'Missing entries for sales'] },
+  accounts: { label: 'Chart of Accounts', icon: BarChart3, color: 'cyan', checks: ['Account existence'] },
+  stock: { label: 'Stock Movements', icon: Database, color: 'orange', checks: ['Missing history', 'Low stock', 'Negative stock'] },
+  transactions: { label: 'Transactions', icon: Wallet, color: 'teal', checks: ['Cash in/out balance'] },
 };
 
 const VerifyMyData = () => {
@@ -31,7 +31,7 @@ const VerifyMyData = () => {
       const newResults = [];
       for (let i = 0; i < keys.length; i++) {
         setProgress(((i + 1) / keys.length) * 100);
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 150));
         const key = keys[i];
         const info = data[key] || { count: 0, status: 'warning', issues: [] };
         newResults.push({ id: key, ...MODULE_CONFIG[key], count: info.count || 0, status: info.status || 'warning', issues: info.issues || [] });
@@ -56,7 +56,22 @@ const VerifyMyData = () => {
           <div className="text-center py-12">
             <div className="w-20 h-20 rounded-full bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center mx-auto mb-6"><Database className="w-10 h-10 text-blue-600" /></div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-[#F8FAFC] mb-2">Data Verification</h2>
-            <p className="text-sm text-slate-500 dark:text-[#64748B] mb-8 max-w-md mx-auto">This will check all your business data for consistency, missing fields, and potential issues across {Object.keys(MODULE_CONFIG).length} modules.</p>
+            <p className="text-sm text-slate-500 dark:text-[#64748B] mb-8 max-w-md mx-auto">This will check all your business data for consistency, missing fields, invalid formats, duplicates, and potential issues across {Object.keys(MODULE_CONFIG).length} modules.</p>
+            <div className="grid grid-cols-3 gap-3 max-w-lg mx-auto mb-8 text-left">
+              {[
+                { label: 'GSTIN Validation', desc: 'Verify 15-char GST format' },
+                { label: 'Duplicate Detection', desc: 'Find duplicate customers/items' },
+                { label: 'Broken References', desc: 'Detect orphaned records' },
+                { label: 'Negative Stock', desc: 'Find items with negative stock' },
+                { label: 'Unbalanced Entries', desc: 'Verify debit = credit' },
+                { label: 'Cash Balance', desc: 'Verify cash in = cash out' },
+              ].map((check, i) => (
+                <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-[#0F172A]/40">
+                  <AlertCircle className="w-3.5 h-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <div><p className="text-xs font-semibold text-slate-700 dark:text-[#E2E8F0]">{check.label}</p><p className="text-[10px] text-slate-400 dark:text-[#64748B]">{check.desc}</p></div>
+                </div>
+              ))}
+            </div>
             {verifying && (
               <div className="max-w-xs mx-auto mb-6">
                 <div className="h-2 bg-slate-100 dark:bg-[#334155] rounded-full overflow-hidden">
@@ -88,7 +103,7 @@ const VerifyMyData = () => {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">{r.label}</p>
-                    <p className="text-xs text-slate-500 dark:text-[#64748B]">{r.count} record(s){r.issues.length > 0 ? ` — ${r.issues.join(', ')}` : ''}</p>
+                    <p className="text-xs text-slate-500 dark:text-[#64748B]">{r.count} record(s){r.issues.length > 0 ? ` — ${r.issues.join('; ')}` : ' — All checks passed'}</p>
                   </div>
                   <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${r.status === 'pass' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>
                     {r.status === 'pass' ? 'Passed' : `${r.issues.length} Issue(s)`}

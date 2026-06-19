@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import { Camera, Upload, Building2, ArrowLeft, Save } from 'lucide-react';
-import { businessAPI, settingAPI, BASE_URL } from '../services/api';
+import { businessAPI, settingAPI, mediaUrl as apiMediaUrl } from '../services/api';
 import useSettings from '../hooks/useSettings';
 import { validateMobile, validateEmail, validateGST, validatePincode, formatMobile, formatGST, formatPincode } from '../utils/validation';
 import StateDropdown from '../components/UI/StateDropdown';
@@ -107,11 +107,9 @@ const EditProfile = () => {
   // They are served by the API server (BASE_URL), not the client origin, so they
   // must be resolved against BASE_URL. Freshly-picked files are data:/blob: URLs
   // (from FileReader) and must be left as-is.
-  const mediaUrl = (val) => {
-    if (!val) return null;
-    if (/^(https?:|data:|blob:)/i.test(val)) return val;
-    return `${BASE_URL}/${String(val).replace(/^\//, '')}`;
-  };
+  // Delegate to the shared helper so logo/signature previews include the auth token
+  // (the /uploads route is now auth-protected and <img> can't send a header).
+  const mediaUrl = (val) => apiMediaUrl(val) || null;
 
   useEffect(() => {
     if (settings) {

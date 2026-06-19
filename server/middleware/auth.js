@@ -52,7 +52,51 @@ const sseAuthMiddleware = async (req, res, next) => {
       token = authHeader.split(' ')[1];
     }
 
-    // EventSource cannot set headers — the token arrives as a query-string param.
+    // EventSource cannot set an Authorization header, so the token may arrive as a
+    // query-string param. RESIDUAL RISK: a JWT in the query string can leak into
+    // access logs / proxy logs / browser history. To minimise that exposure, only
+    // accept the query token for genuine SSE requests — i.e. those that advertise
+    // the SSE Accept header (text/event-stream), exactly like authMiddleware. A
+    // normal API/XHR caller (which can set Authorization) gets no query-token path.
+    if (!token && req.query && req.query.token &&
+        typeof req.headers.accept === 'string' && req.headers.accept.includes('text/event-stream')) {
+      token = req.query.token;
+    }
+
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    if (!user.isActive) {
+      return res.status(401).json({ message: 'Account deactivated' });
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+// Auth for the static /uploads route. Uploaded logos/signatures are referenced from
+// plain <img src="/uploads/..."> tags, which cannot send an Authorization header, so a
+// valid token must be accepted from the query string as well. This is intentionally
+// permissive about token transport (header OR query) but still REQUIRES a valid token,
+// so uploads are no longer world-readable by guessing Date.now() filenames.
+// RESIDUAL RISK: like SSE, a query-string token can leak into logs; callers should
+// append the short-lived access token (e.g. /uploads/x.png?token=<jwt>). Full per-tenant
+// file-ownership checks are out of scope here — this guarantees authentication only.
+const uploadsAuthMiddleware = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    let token = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
     if (!token && req.query && req.query.token) {
       token = req.query.token;
     }
@@ -75,4 +119,4 @@ const sseAuthMiddleware = async (req, res, next) => {
   }
 };
 
-module.exports = { authMiddleware, sseAuthMiddleware, JWT_SECRET };
+module.exports = { authMiddleware, sseAuthMiddleware, uploadsAuthMiddleware, JWT_SECRET };

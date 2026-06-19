@@ -1,6 +1,21 @@
 import axios from 'axios';
 
 export const BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+
+// Resolve a server-stored media path (e.g. "/uploads/logo-123.png") to a full URL.
+// /uploads is now auth-protected on the server, so we append the JWT as a query param
+// (an <img> tag cannot send an Authorization header). data:/blob:/http(s) values pass through.
+export const mediaUrl = (val) => {
+  if (!val) return '';
+  const s = String(val);
+  if (/^(https?:|data:|blob:)/.test(s)) return s;
+  let token = '';
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user?.token) token = `?token=${encodeURIComponent(user.token)}`;
+  } catch (_) { /* ignore */ }
+  return `${BASE_URL}/${s.replace(/^\//, '')}${token}`;
+};
 const API = axios.create({ baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api', withCredentials: true });
 const CSRF_STORAGE_KEY = 'vyapar_csrf_token';
 
@@ -431,9 +446,21 @@ export const currencyAPI = {
 };
 
 export const backupAPI = {
-  getHistory: () => API.get('/backup/history'),
+  getConfig: () => API.get('/backup/config'),
+  saveConfig: (data) => API.put('/backup/config', data),
   create: () => API.post('/backup/create'),
+  getHistory: () => API.get('/backup/history'),
   download: (filename) => API.get(`/backup/download/${filename}`, { responseType: 'blob' }),
+  restorePreview: (formData) => API.post('/backup/restore/preview', formData, { timeout: 600000 }),
+  restoreExecute: (data) => API.post('/backup/restore/execute', data, { timeout: 600000 }),
+};
+
+export const driveAPI = {
+  getStatus: () => API.get('/backup/drive/status'),
+  getAuthUrl: () => API.get('/backup/drive/auth-url'),
+  connect: (code) => API.post('/backup/drive/connect', { code }),
+  disconnect: () => API.post('/backup/drive/disconnect'),
+  backupNow: () => API.post('/backup/drive/backup'),
 };
 
 export const utilityAPI = {

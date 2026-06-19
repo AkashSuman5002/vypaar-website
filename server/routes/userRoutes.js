@@ -2,9 +2,70 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Role = require('../models/Role');
-const { authorize, authorizeAdmin } = require('../middleware/authorize');
+const { authorize, authorizeAdmin, ROLE_PERMISSIONS } = require('../middleware/authorize');
 const { getBaseFilter } = require('../utils/queryHelper');
 const { apiLimiter } = require('../middleware/rateLimit');
+
+// Built-in role names that map to a fixed permission set (see authorize.js).
+// 'admin'/'Admin' grant '*' (full access) and so are owner-only privileges.
+const BUILTIN_ROLES = ['user', 'Manager', 'Accountant', 'Staff'];
+const ADMIN_ROLES = ['admin', 'Admin'];
+
+// The complete set of known permission keys: every permission referenced by any
+// built-in role definition. Any permission outside this set (including the
+// full-access wildcard '*') is rejected for non-owners.
+const KNOWN_PERMISSIONS = new Set(
+  Object.values(ROLE_PERMISSIONS).flat().filter((p) => p !== '*')
+);
+
+// Validate a requested role/permissions assignment against an allow-list, blocking
+// privilege escalation. Returns { error } on rejection, or { role, permissions } on
+// success. `isOwner` is the ACTING user's ownership flag — only the business owner
+// may mint admin/'*'/full-access accounts.
+const validateRoleAndPermissions = async (req, { role, permissions }) => {
+  const isOwner = !!req.user?.isOwner;
+  const businessId = req.businessId || req.user?.business;
+
+  let resolvedRole;
+  if (role !== undefined && role !== null && role !== '') {
+    if (ADMIN_ROLES.includes(role)) {
+      // Granting admin (=> '*') is reserved for the business owner.
+      if (!isOwner) return { error: 'Only the business owner may assign the admin role' };
+      resolvedRole = role;
+    } else if (BUILTIN_ROLES.includes(role)) {
+      resolvedRole = role;
+    } else {
+      // Not a built-in role — must be one of the business's own defined roles.
+      if (!businessId) return { error: `Unknown role: ${role}` };
+      const exists = await Role.findOne({ name: role, business: businessId });
+      if (!exists) return { error: `Unknown role: ${role}` };
+      resolvedRole = role;
+    }
+  }
+
+  let resolvedPermissions;
+  if (permissions !== undefined) {
+    if (!Array.isArray(permissions)) {
+      return { error: 'permissions must be an array' };
+    }
+    for (const perm of permissions) {
+      if (typeof perm !== 'string') {
+        return { error: 'Invalid permission entry' };
+      }
+      if (perm === '*') {
+        // Wildcard/full-access can only be granted by the owner.
+        if (!isOwner) return { error: 'Only the business owner may grant full access (*)' };
+        continue;
+      }
+      if (!KNOWN_PERMISSIONS.has(perm)) {
+        return { error: `Unknown permission: ${perm}` };
+      }
+    }
+    resolvedPermissions = permissions;
+  }
+
+  return { role: resolvedRole, permissions: resolvedPermissions };
+};
 
 // GET /api/users - List all users for the business
 router.get('/', authorizeAdmin, async (req, res) => {
@@ -69,14 +130,19 @@ router.post('/', authorizeAdmin, apiLimiter, async (req, res) => {
     if (existing) {
       return res.status(400).json({ message: 'Email already exists' });
     }
+    // Block privilege escalation: validate role/permissions against the allow-list.
+    const checked = await validateRoleAndPermissions(req, { role, permissions });
+    if (checked.error) {
+      return res.status(403).json({ message: checked.error });
+    }
     const businessId = req.businessId || req.user?.business;
     const user = new User({
       name,
       email,
       password,
       phone: phone || '',
-      role: role || 'Staff',
-      permissions: permissions || [],
+      role: checked.role || 'Staff',
+      permissions: checked.permissions || [],
       business: businessId,
       isActive: isActive !== false,
     });
@@ -97,12 +163,17 @@ router.put('/:id', authorizeAdmin, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    // Block privilege escalation: validate any role/permissions change before applying.
+    const checked = await validateRoleAndPermissions(req, { role, permissions });
+    if (checked.error) {
+      return res.status(403).json({ message: checked.error });
+    }
     if (name !== undefined) user.name = name;
     if (email !== undefined) user.email = email.toLowerCase();
     if (phone !== undefined) user.phone = phone;
-    if (role !== undefined) user.role = role;
+    if (role !== undefined) user.role = checked.role;
     if (isActive !== undefined) user.isActive = isActive;
-    if (permissions !== undefined) user.permissions = permissions;
+    if (permissions !== undefined) user.permissions = checked.permissions;
     if (password && password.trim()) {
       user.password = password;
     }

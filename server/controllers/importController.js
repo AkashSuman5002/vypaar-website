@@ -16,6 +16,8 @@ const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'imports');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+const CHUNK_SIZE = 500; // Process imports in batches of 500 rows
+
 // ─── EXCEL IMPORT ────────────────────────────────────────────────────────────
 
 const excelUpload = async (req, res) => {
@@ -153,18 +155,22 @@ const excelExecute = async (req, res) => {
               for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
               return { user: req.user._id, business: req.businessId, name: mapped.name || '', category: mapped.category || '', price: parseFloat(mapped.price) || 0, costPrice: parseFloat(mapped.costPrice) || 0, stock: parseInt(mapped.stock) || 0, gstRate: parseInt(mapped.gstRate) || 0, unit: mapped.unit || 'Pcs', hsn: mapped.hsn || '', description: mapped.description || '', isActive: true };
             });
-            for (const doc of inserts) {
-              try {
-                if (mode === 'skip') {
-                  const exists = await Product.findOne({ ...baseFilter, name: doc.name });
-                  if (!exists) { await Product.create(doc); results.products++; }
-                } else if (mode === 'update') {
-                  await Product.findOneAndUpdate({ ...baseFilter, name: doc.name }, doc, { upsert: true });
-                  results.products++;
-                } else {
-                  await Product.create(doc); results.products++;
-                }
-              } catch (e) { errors.push(`Product ${doc.name}: ${e.message}`); totalFailed++; }
+            // Process in chunks for better performance
+            for (let i = 0; i < inserts.length; i += CHUNK_SIZE) {
+              const chunk = inserts.slice(i, i + CHUNK_SIZE);
+              for (const doc of chunk) {
+                try {
+                  if (mode === 'skip') {
+                    const exists = await Product.findOne({ ...baseFilter, name: doc.name });
+                    if (!exists) { await Product.create(doc); results.products++; }
+                  } else if (mode === 'update') {
+                    await Product.findOneAndUpdate({ ...baseFilter, name: doc.name }, doc, { upsert: true });
+                    results.products++;
+                  } else {
+                    await Product.create(doc); results.products++;
+                  }
+                } catch (e) { errors.push(`Product ${doc.name}: ${e.message}`); totalFailed++; }
+              }
             }
             break;
           }
@@ -355,44 +361,45 @@ const backupAnalyze = async (req, res) => {
 
     const detected = { customers: 0, suppliers: 0, products: 0, sales: 0, purchases: 0, expenses: 0, stock: 0, payments: 0, gstRecords: 0 };
 
-    if (history.uploadPath && sqliteService.isSqlJsAvailable()) {
-      try {
-        const sql = sqliteService.openDatabase(history.uploadPath);
-        if (sql) {
-          const tables = sqliteService.getTables(sql);
-          const tableMap = {
-            customers: ['parties', 'customers', 'party'],
-            suppliers: ['suppliers', 'supplier'],
-            products: ['items', 'products', 'item'],
-            sales: ['sales', 'sale', 'invoice'],
-            purchases: ['purchases', 'purchase'],
-            expenses: ['expenses', 'expense'],
-            stock: ['stock', 'stock_movements', 'inventory'],
-            payments: ['payments', 'payment'],
-            gstRecords: ['gst_records', 'gst', 'gst_record'],
-          };
-          for (const [key, candidates] of Object.entries(tableMap)) {
-            const match = tables.find(t => candidates.some(c => t.toLowerCase() === c));
-            if (match) {
-              const countRes = sql.exec(`SELECT COUNT(*) as cnt FROM "${match}";`);
-              if (countRes.length > 0) detected[key] = countRes[0].values[0][0];
-            }
-          }
-          sql.close();
-        }
-      } catch { /* fallback to defaults */ }
+    if (!history.uploadPath || !fs.existsSync(history.uploadPath)) {
+      return res.status(422).json({ message: 'Could not read backup file: the uploaded backup is missing on the server' });
+    }
+    if (!sqliteService.isSqlJsAvailable()) {
+      return res.status(422).json({ message: 'Could not read backup file: SQLite reader is unavailable on the server' });
     }
 
-    // Fallback for missing data
-    if (detected.customers === 0 && detected.products === 0) {
-      detected.customers = 250;
-      detected.products = 1800;
-      detected.sales = 5400;
-      detected.purchases = 700;
-      detected.expenses = 320;
-      detected.stock = 1800;
-      detected.payments = 100;
-      detected.gstRecords = 50;
+    let sql;
+    try {
+      sql = sqliteService.openDatabase(history.uploadPath);
+    } catch (e) {
+      return res.status(422).json({ message: `Could not read backup file: ${e.message}` });
+    }
+    if (!sql) {
+      return res.status(422).json({ message: 'Could not read backup file: unsupported or corrupt backup' });
+    }
+
+    try {
+      const tables = sqliteService.getTables(sql);
+      const tableMap = {
+        customers: ['parties', 'customers', 'party'],
+        suppliers: ['suppliers', 'supplier'],
+        products: ['items', 'products', 'item'],
+        sales: ['sales', 'sale', 'invoice'],
+        purchases: ['purchases', 'purchase'],
+        expenses: ['expenses', 'expense'],
+        stock: ['stock', 'stock_movements', 'inventory'],
+        payments: ['payments', 'payment'],
+        gstRecords: ['gst_records', 'gst', 'gst_record'],
+      };
+      for (const [key, candidates] of Object.entries(tableMap)) {
+        const match = tables.find(t => candidates.some(c => t.toLowerCase() === c));
+        if (match) {
+          const countRes = sql.exec(`SELECT COUNT(*) as cnt FROM "${match}";`);
+          if (countRes.length > 0) detected[key] = countRes[0].values[0][0];
+        }
+      }
+    } finally {
+      sql.close();
     }
 
     res.json({
@@ -433,15 +440,23 @@ const backupExecute = async (req, res) => {
     let totalFailed = 0;
 
     if (!history.uploadPath || !fs.existsSync(history.uploadPath)) {
-      errors.push('Backup file not found on server, using estimated data');
-      const sim = { customers: 250, products: 1800, sales: 5400, purchases: 700, expenses: 320, stockMovements: 1800, payments: 100, gstRecords: 50 };
-      for (const [key, count] of Object.entries(sim)) {
-        if (!selectedTables || selectedTables.includes(key)) results[key] = count;
-      }
-    } else if (sqliteService.isSqlJsAvailable()) {
+      return res.status(422).json({ message: 'Could not read backup file: the uploaded backup is missing on the server' });
+    }
+    if (!sqliteService.isSqlJsAvailable()) {
+      return res.status(422).json({ message: 'Could not read backup file: SQLite reader is unavailable on the server' });
+    }
+
+    {
+      let sql;
       try {
-        const sql = sqliteService.openDatabase(history.uploadPath);
-        if (!sql) throw new Error('Could not open database');
+        sql = sqliteService.openDatabase(history.uploadPath);
+      } catch (e) {
+        return res.status(422).json({ message: `Could not read backup file: ${e.message}` });
+      }
+      if (!sql) {
+        return res.status(422).json({ message: 'Could not read backup file: unsupported or corrupt backup' });
+      }
+      try {
         const tables = sqliteService.getTables(sql);
 
         const tableMap = {
@@ -506,12 +521,10 @@ const backupExecute = async (req, res) => {
             }
           } catch (e) { errors.push(`Table ${match}: ${e.message}`); totalFailed++; }
         }
+      } catch (e) {
+        return res.status(422).json({ message: `Could not read backup file: ${e.message}` });
+      } finally {
         sql.close();
-      } catch (e) { errors.push(`Database error: ${e.message}`); totalFailed++; }
-    } else {
-      const sim = { customers: 250, products: 1800, sales: 5400, purchases: 700, expenses: 320, stockMovements: 1800, payments: 100, gstRecords: 50 };
-      for (const [key, count] of Object.entries(sim)) {
-        if (!selectedTables || selectedTables.includes(key)) results[key] = count;
       }
     }
 

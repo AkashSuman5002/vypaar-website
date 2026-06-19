@@ -1,12 +1,47 @@
 const GodownTransfer = require('../models/GodownTransfer');
 const Godown = require('../models/Godown');
 const Product = require('../models/Product');
+const StockMovement = require('../models/StockMovement');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { withTransaction } = require('../utils/withTransaction');
 
 const getNextTransferNumber = async (req) => {
   const baseFilter = getBaseFilter(req);
   const count = await GodownTransfer.countDocuments(baseFilter);
   return `GT-${String(count + 1).padStart(4, '0')}`;
+};
+
+// Find a product's godownStock entry for a given godown id (or undefined).
+const findGodownEntry = (product, godownId) =>
+  (product.godownStock || []).find(e => e.godown && e.godown.toString() === godownId.toString());
+
+// Ensure the product has godownStock entries that account for its full global stock.
+// When a product has no godownStock yet, treat its entire global `stock` as residing in
+// its current `warehouse` so existing data behaves sensibly under the new model.
+const ensureGodownStock = (product) => {
+  if (!product.godownStock) product.godownStock = [];
+  if (product.godownStock.length === 0 && product.warehouse) {
+    product.godownStock.push({ godown: product.warehouse, quantity: product.stock || 0 });
+  }
+};
+
+// Read the available quantity in a given godown for a product.
+const availableInGodown = (product, godownId) => {
+  const entry = findGodownEntry(product, godownId);
+  return entry ? entry.quantity : 0;
+};
+
+// Move `qty` of a product from one godown to another (in-memory; caller saves).
+const moveBetweenGodowns = (product, fromGodown, toGodown, qty) => {
+  const fromEntry = findGodownEntry(product, fromGodown);
+  fromEntry.quantity -= qty;
+
+  let toEntry = findGodownEntry(product, toGodown);
+  if (!toEntry) {
+    product.godownStock.push({ godown: toGodown, quantity: qty });
+  } else {
+    toEntry.quantity += qty;
+  }
 };
 
 const getTransfers = async (req, res) => {
@@ -78,43 +113,105 @@ const createTransfer = async (req, res) => {
     const products = await Product.find({ _id: { $in: productIds }, ...baseFilter });
     const productMap = new Map(products.map(p => [p._id.toString(), p]));
 
+    // Validate every line item up-front (product exists, quantity > 0 and available
+    // in the source godown) before mutating anything.
     for (const item of items) {
       const product = productMap.get(item.product.toString());
       if (!product) return res.status(404).json({ message: `Product not found: ${item.productName || item.product}` });
+
+      const qty = Number(item.quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        return res.status(400).json({ message: `Quantity must be greater than 0 for ${product.name}` });
+      }
+
+      ensureGodownStock(product);
+      const available = availableInGodown(product, fromGodown);
+      if (qty > available) {
+        return res.status(400).json({
+          message: `Insufficient stock for ${product.name} in ${fromG.name}: requested ${qty}, available ${available}`,
+        });
+      }
     }
 
     const transferNumber = await getNextTransferNumber(req);
-    const processedItems = [];
 
-    // A product belongs to a single godown via its `warehouse` reference, so a transfer
-    // moves each selected product from the source godown to the destination godown.
-    for (const item of items) {
-      const product = productMap.get(item.product.toString());
+    const transfer = await withTransaction(async (session) => {
+      const processedItems = [];
 
-      product.warehouse = toGodown;
-      await product.save();
+      for (const item of items) {
+        const product = productMap.get(item.product.toString());
+        const qty = Number(item.quantity);
+        ensureGodownStock(product);
 
-      processedItems.push({
-        product: product._id,
-        productName: product.name,
-        quantity: item.quantity,
-        unit: product.unit || 'pcs',
-      });
-    }
+        const balanceBefore = product.stock;
 
-    const transfer = await GodownTransfer.create({
-      ...getCreateData(req, {
-        transferNumber,
-        fromGodown,
-        fromGodownName: fromG.name,
-        toGodown,
-        toGodownName: toG.name,
-        items: processedItems,
-        totalItems: processedItems.length,
-        date: date || new Date(),
-        notes,
-        status: 'completed',
-      }),
+        // Redistribute quantity between godowns. Global `stock` is intentionally
+        // left unchanged — a transfer only moves location, not total quantity.
+        moveBetweenGodowns(product, fromGodown, toGodown, qty);
+        await product.save({ session });
+
+        // Ledger: record both legs of the move for an audit trail. The StockMovement
+        // `type` enum only has 'transfer', so we use a sign convention (out = negative,
+        // in = positive) and the description/referenceNumber to identify each leg.
+        await StockMovement.create([{
+          ...getCreateData(req, {
+            product: product._id,
+            productName: product.name,
+            type: 'transfer',
+            quantity: -qty,
+            balanceBefore,
+            balanceAfter: balanceBefore,
+            referenceType: 'GodownTransfer',
+            referenceNumber: transferNumber,
+            description: `Transfer out to ${toG.name}`,
+          }),
+        }], { session });
+
+        await StockMovement.create([{
+          ...getCreateData(req, {
+            product: product._id,
+            productName: product.name,
+            type: 'transfer',
+            quantity: qty,
+            balanceBefore,
+            balanceAfter: balanceBefore,
+            referenceType: 'GodownTransfer',
+            referenceNumber: transferNumber,
+            description: `Transfer in from ${fromG.name}`,
+          }),
+        }], { session });
+
+        processedItems.push({
+          product: product._id,
+          productName: product.name,
+          quantity: qty,
+          unit: product.unit || 'pcs',
+        });
+      }
+
+      const created = await GodownTransfer.create([{
+        ...getCreateData(req, {
+          transferNumber,
+          fromGodown,
+          fromGodownName: fromG.name,
+          toGodown,
+          toGodownName: toG.name,
+          items: processedItems,
+          totalItems: processedItems.length,
+          date: date || new Date(),
+          notes,
+          status: 'completed',
+        }),
+      }], { session });
+
+      // Backfill the StockMovement referenceId now that the transfer doc exists.
+      await StockMovement.updateMany(
+        { ...baseFilter, referenceType: 'GodownTransfer', referenceNumber: transferNumber, referenceId: { $exists: false } },
+        { $set: { referenceId: created[0]._id } },
+        { session }
+      );
+
+      return created[0];
     });
 
     res.status(201).json(transfer);
@@ -130,15 +227,46 @@ const deleteTransfer = async (req, res) => {
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
 
     if (transfer.status === 'completed') {
-      // Move the products back to the source godown.
       const productIds = transfer.items.map(item => item.product);
-      await Product.updateMany(
-        { ...baseFilter, _id: { $in: productIds }, warehouse: transfer.toGodown },
-        { $set: { warehouse: transfer.fromGodown } }
-      );
+      const products = await Product.find({ _id: { $in: productIds }, ...baseFilter });
+      const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
+      // Guard: ensure the destination godown still holds enough quantity to reverse,
+      // i.e. the stock has not been moved onward to another godown.
+      for (const item of transfer.items) {
+        const product = productMap.get(item.product.toString());
+        if (!product) continue;
+        ensureGodownStock(product);
+        const available = availableInGodown(product, transfer.toGodown);
+        if (item.quantity > available) {
+          return res.status(400).json({
+            message: `Cannot reverse: ${product.name} only has ${available} in ${transfer.toGodownName}, but the transfer moved ${item.quantity}. It may have been moved onward.`,
+          });
+        }
+      }
+
+      await withTransaction(async (session) => {
+        for (const item of transfer.items) {
+          const product = productMap.get(item.product.toString());
+          if (!product) continue;
+          ensureGodownStock(product);
+          // Reverse the move: destination -> source.
+          moveBetweenGodowns(product, transfer.toGodown, transfer.fromGodown, item.quantity);
+          await product.save({ session });
+        }
+
+        // Remove the ledger entries created for this transfer.
+        await StockMovement.deleteMany(
+          { ...baseFilter, referenceType: 'GodownTransfer', referenceId: transfer._id },
+          { session }
+        );
+
+        await GodownTransfer.deleteOne({ _id: transfer._id, ...baseFilter }, { session });
+      });
+    } else {
+      await GodownTransfer.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     }
 
-    await GodownTransfer.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Transfer deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

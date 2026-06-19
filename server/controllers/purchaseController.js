@@ -4,6 +4,7 @@ const Supplier = require('../models/Supplier');
 const Transaction = require('../models/Transaction');
 const Account = require('../models/Account');
 const JournalEntry = require('../models/JournalEntry');
+const StockMovement = require('../models/StockMovement');
 const Setting = require('../models/Setting');
 const { withTransaction } = require('../utils/withTransaction');
 const { recordStockMovement } = require('./stockController');
@@ -112,7 +113,7 @@ const createPurchase = async (req, res) => {
 
     if (requireHSN) {
       const hsnProductIds = processedItems.filter(item => item.product).map(item => item.product);
-      const hsnProducts = await Product.find({ _id: { $in: hsnProductIds }, user: req.user._id });
+      const hsnProducts = await Product.find({ _id: { $in: hsnProductIds }, ...baseFilter });
       const hsnProductMap = new Map(hsnProducts.map(p => [p._id.toString(), p]));
       for (const item of processedItems) {
         const prod = item.product ? hsnProductMap.get(item.product.toString()) : undefined;
@@ -215,7 +216,7 @@ const createPurchase = async (req, res) => {
       // Update stock + collect movements
       if (stockMaintenance) {
       const purchaseProductIds = processedItems.filter(item => item.product).map(item => item.product);
-      const purchaseProducts = await Product.find({ _id: { $in: purchaseProductIds }, user: req.user._id });
+      const purchaseProducts = await Product.find({ _id: { $in: purchaseProductIds }, ...baseFilter });
       const purchaseProductMap = new Map(purchaseProducts.map(p => [p._id.toString(), p]));
 
       const productNamesWithoutId = [...new Set(processedItems.filter(item => !item.product && item.productName).map(item => item.productName))];
@@ -367,7 +368,7 @@ const createPurchase = async (req, res) => {
             postedAt: new Date(),
           }], { session });
           const purchaseAccountIds = lines.map(l => l.account);
-          const purchaseAccounts = await Account.find({ _id: { $in: purchaseAccountIds }, user: req.user._id });
+          const purchaseAccounts = await Account.find({ _id: { $in: purchaseAccountIds }, ...baseFilter });
           const purchaseAccountMap = new Map(purchaseAccounts.map(a => [a._id.toString(), a]));
           const purchaseBalanceOps = lines.map(line => {
             const acc = purchaseAccountMap.get(line.account.toString());
@@ -377,7 +378,7 @@ const createPurchase = async (req, res) => {
               : line.credit - line.debit;
             return {
               updateOne: {
-                filter: { _id: line.account, user: req.user._id },
+                filter: { _id: line.account, ...baseFilter },
                 update: { $inc: { balance: balanceChange } }
               }
             };
@@ -444,25 +445,44 @@ const updatePurchase = async (req, res) => {
       ['paidAmount', 'paymentMethod', 'paymentDate', 'paymentStatus'].includes(k)
     );
 
-    // Build update set with whitelist
-    const allowedFields = ['date', 'invoiceNumber', 'supplier', 'supplierName', 'items', 'totalAmount', 'taxAmount', 'discount', 'roundOff', 'paidAmount', 'paymentMethod', 'description', 'status'];
+    // Build update set with whitelist. Only fields that actually exist on the
+    // Purchase schema are allowed through; bogus fields (invoiceNumber, taxAmount,
+    // discount, description) silently corrupted nothing but advertised a contract
+    // the model never honoured, so they are removed.
+    const allowedFields = ['date', 'supplier', 'supplierName', 'billNumber', 'items', 'totalAmount', 'paidAmount', 'paymentMethod', 'paymentStatus', 'notes', 'isInterState'];
     const setFields = {};
     for (const field of allowedFields) {
       if (body[field] !== undefined) setFields[field] = body[field];
     }
-    // Capture old remaining balance BEFORE recomputing, to adjust supplier payable by the delta
+
+    // Capture pre-edit totals so we can compute deltas for stock ledger, the
+    // purchase journal entry and the purchase/payable account balances.
+    const oldTotalAmount = purchase.totalAmount || 0;
+    const oldPaidAmount = purchase.paidAmount || 0;
     const oldRemainingBalance = purchase.remainingBalance || 0;
-    if (body.paidAmount !== undefined) {
-      const total = purchase.totalAmount || body.totalAmount || 0;
-      setFields.remainingBalance = Math.max(0, total - body.paidAmount);
-      if (body.paidAmount >= total) setFields.paymentStatus = 'paid';
-      else if (body.paidAmount > 0) setFields.paymentStatus = 'partial';
-      else setFields.paymentStatus = 'unpaid';
-      setFields.paymentDate = new Date();
-    }
+
+    // Recompute the (server-side) total and payment fields. The total comes from
+    // the incoming value when items/total change; otherwise it stays as stored.
+    const newTotalAmount = setFields.totalAmount !== undefined ? (setFields.totalAmount || 0) : oldTotalAmount;
+    const newPaidAmount = body.paidAmount !== undefined ? (body.paidAmount || 0) : oldPaidAmount;
+    // Always recompute remaining balance + payment status whenever the total OR
+    // the paid amount could have changed, not only when paidAmount is supplied,
+    // so item edits flow through to the supplier payable delta.
+    setFields.remainingBalance = Math.max(0, newTotalAmount - newPaidAmount);
+    if (newPaidAmount >= newTotalAmount) setFields.paymentStatus = 'paid';
+    else if (newPaidAmount > 0) setFields.paymentStatus = 'partial';
+    else setFields.paymentStatus = 'unpaid';
+    if (body.paidAmount !== undefined) setFields.paymentDate = new Date();
+
+    // Business-aware scope for all sub-queries: staff/member users carry a
+    // businessId (not their own _id), so filtering by user: req.user._id would
+    // silently match nothing. Mirror the primary fetch's getBaseFilter scope.
+    const scope = getBaseFilter(req);
 
     // Load products referenced by the existing and incoming items so we can skip
-    // services (type === 'service') from any stock adjustment.
+    // services (type === 'service') from any stock adjustment, and so we have the
+    // names/current balances needed to write StockMovement ledger rows.
+    let updateProductMap = new Map();
     let updateServiceIds = new Set();
     if (!isPaymentOnly) {
       const updateProductIds = [
@@ -470,19 +490,22 @@ const updatePurchase = async (req, res) => {
         ...((body.items || []).filter(item => item && item.product).map(item => item.product)),
       ];
       if (updateProductIds.length > 0) {
-        const updateProducts = await Product.find({ _id: { $in: updateProductIds }, user: req.user._id }).select('type');
+        const updateProducts = await Product.find({ _id: { $in: updateProductIds }, ...scope }).select('type name stock');
+        updateProductMap = new Map(updateProducts.map(p => [p._id.toString(), p]));
         updateServiceIds = new Set(updateProducts.filter(p => p.type === 'service').map(p => p._id.toString()));
       }
     }
 
     const updated = await withTransaction(async (session) => {
+      // Reverse the old stock movements first; skip services.
+      const oldItems = isPaymentOnly ? [] : purchase.items;
       if (!isPaymentOnly) {
         // Restore old stock (only when items may have changed); skip services.
         const updateRestoreOps = purchase.items
           .filter(item => item.product && !updateServiceIds.has(item.product.toString()))
           .map(item => ({
             updateOne: {
-              filter: { _id: item.product, user: req.user._id },
+              filter: { _id: item.product, ...scope },
               update: { $inc: { stock: -item.quantity } }
             }
           }));
@@ -490,30 +513,177 @@ const updatePurchase = async (req, res) => {
       }
 
       const updated = await Purchase.findOneAndUpdate(
-        { _id: req.params.id, ...getBaseFilter(req) },
+        { _id: req.params.id, ...scope },
         { $set: setFields },
         { new: true, runValidators: true, session }
       );
 
+      const newItems = isPaymentOnly ? [] : updated.items;
       if (!isPaymentOnly) {
         // Apply new stock; skip services.
         const updateApplyOps = updated.items
           .filter(item => item.product && !updateServiceIds.has(item.product.toString()))
           .map(item => ({
             updateOne: {
-              filter: { _id: item.product, user: req.user._id },
+              filter: { _id: item.product, ...scope },
               update: { $inc: { stock: item.quantity } }
             }
           }));
         if (updateApplyOps.length > 0) await Product.bulkWrite(updateApplyOps, { session });
       }
 
-      // Adjust supplier opening balance by the change in remaining (unpaid) balance
+      // Write StockMovement ledger rows for both legs so the ledger stays complete
+      // on edit. recordStockMovement cannot take a session, so we build the rows
+      // here (computing balanceBefore/After against the running stock per product)
+      // and insert them inside the transaction. The reversal leg subtracts the old
+      // quantity (type 'purchase_return'); the re-application leg adds the new
+      // quantity (type 'purchase').
+      const movementRows = [];
+      const runningStock = new Map();
+      const stockNow = (id) => {
+        const key = id.toString();
+        if (!runningStock.has(key)) {
+          const prod = updateProductMap.get(key);
+          runningStock.set(key, prod ? (prod.stock || 0) : 0);
+        }
+        return runningStock.get(key);
+      };
+      const pushMovement = (item, type, qtyDelta) => {
+        const key = item.product.toString();
+        const prod = updateProductMap.get(key);
+        if (!prod || prod.type === 'service') return;
+        const balanceBefore = stockNow(item.product);
+        const balanceAfter = Math.max(0, balanceBefore + qtyDelta);
+        runningStock.set(key, balanceAfter);
+        movementRows.push({
+          user: req.user._id,
+          business: req.businessId,
+          product: item.product,
+          productName: prod.name || item.productName || '',
+          type,
+          quantity: qtyDelta,
+          balanceBefore,
+          balanceAfter,
+          rate: item.rate || 0,
+          totalAmount: item.amount || 0,
+          referenceType: 'purchase',
+          referenceId: updated._id,
+          referenceNumber: updated.billNumber || String(updated._id),
+          description: `Purchase edit reversal/re-apply for ${updated.supplierName || ''}`.trim(),
+          date: new Date(),
+        });
+      };
+      for (const item of oldItems) {
+        if (item.product) pushMovement(item, 'purchase_return', -item.quantity);
+      }
+      for (const item of newItems) {
+        if (item.product) pushMovement(item, 'purchase', item.quantity);
+      }
+      if (movementRows.length > 0) await StockMovement.insertMany(movementRows, { session });
+
+      // Adjust supplier opening balance by the change in remaining (unpaid) balance.
+      // Now recomputed whenever the total changes (item edits included), not only
+      // when paidAmount is supplied.
       if (updated.supplier) {
         const newRemainingBalance = updated.remainingBalance || 0;
         const remainingDelta = newRemainingBalance - oldRemainingBalance;
         if (remainingDelta !== 0) {
           await Supplier.findByIdAndUpdate(updated.supplier, { $inc: { openingBalance: remainingDelta } }, { session });
+        }
+      }
+
+      // Adjust the purchase journal entry + purchase/payable/cash account balances
+      // by the delta so accounting stays consistent on edit. Strategy: reverse the
+      // old JE's effect on every account balance, rebuild the lines from the new
+      // totals, re-post them, and rewrite the JE document in place.
+      const totalsChanged = newTotalAmount !== oldTotalAmount || newPaidAmount !== oldPaidAmount;
+      if (totalsChanged) {
+        try {
+          const journalEntry = await JournalEntry.findOne({ referenceType: 'purchase', referenceId: updated._id, ...scope }).session(session);
+
+          // Reverse the existing JE's balance effect (asset/expense: debit-credit; else credit-debit).
+          if (journalEntry && journalEntry.lines.length > 0) {
+            const oldAccIds = journalEntry.lines.filter(l => l.account).map(l => l.account);
+            const oldAccounts = await Account.find({ _id: { $in: oldAccIds }, ...scope }).session(session);
+            const oldAccMap = new Map(oldAccounts.map(a => [a._id.toString(), a]));
+            const reverseOps = journalEntry.lines.filter(l => l.account).map(line => {
+              const acc = oldAccMap.get(line.account.toString());
+              if (!acc) return null;
+              const balanceChange = ['asset', 'expense'].includes(acc.type)
+                ? line.debit - line.credit
+                : line.credit - line.debit;
+              return {
+                updateOne: {
+                  filter: { _id: line.account, ...scope },
+                  update: { $inc: { balance: -balanceChange } }
+                }
+              };
+            }).filter(Boolean);
+            if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
+          }
+
+          // Rebuild lines from the new totals (mirrors createPurchase).
+          const purchaseAccount = await Account.findOne({ ...scope, code: '5002' }).session(session);
+          const payable = await Account.findOne({ ...scope, code: '2001' }).session(session);
+          if (purchaseAccount && payable) {
+            const newRemaining = Math.max(0, newTotalAmount - newPaidAmount);
+            const lines = [
+              { account: purchaseAccount._id, accountName: purchaseAccount.name, accountType: purchaseAccount.type, debit: newTotalAmount, credit: 0 },
+              { account: payable._id, accountName: payable.name, accountType: payable.type, debit: 0, credit: newRemaining },
+            ];
+            if (newPaidAmount > 0) {
+              const payCode = (updated.paymentMethod || 'cash') === 'cash' ? '1001' : '1002';
+              let cash = await Account.findOne({ ...scope, code: payCode }).session(session);
+              if (!cash) cash = await Account.findOne({ ...scope, code: '1001' }).session(session);
+              if (cash) {
+                lines.push({ account: cash._id, accountName: cash.name, accountType: cash.type, debit: 0, credit: newPaidAmount });
+              }
+            }
+
+            // Post the new lines' effect on account balances.
+            const newAccIds = lines.map(l => l.account);
+            const newAccounts = await Account.find({ _id: { $in: newAccIds }, ...scope }).session(session);
+            const newAccMap = new Map(newAccounts.map(a => [a._id.toString(), a]));
+            const postOps = lines.map(line => {
+              const acc = newAccMap.get(line.account.toString());
+              if (!acc) return null;
+              const balanceChange = ['asset', 'expense'].includes(acc.type)
+                ? line.debit - line.credit
+                : line.credit - line.debit;
+              return {
+                updateOne: {
+                  filter: { _id: line.account, ...scope },
+                  update: { $inc: { balance: balanceChange } }
+                }
+              };
+            }).filter(Boolean);
+            if (postOps.length > 0) await Account.bulkWrite(postOps, { session });
+
+            const jePayload = {
+              lines,
+              totalDebit: lines.reduce((s, l) => s + l.debit, 0),
+              totalCredit: lines.reduce((s, l) => s + l.credit, 0),
+              entryDate: updated.date || new Date(),
+              narration: `Purchase ${updated.billNumber || ''} - ${updated.supplierName}`,
+              isPosted: true,
+              postedAt: new Date(),
+            };
+            if (journalEntry) {
+              await JournalEntry.updateOne({ _id: journalEntry._id, ...scope }, { $set: jePayload }, { session });
+            } else {
+              // No JE existed (e.g. created before chart-of-accounts setup); create one.
+              await JournalEntry.create([{
+                user: req.user._id,
+                business: req.businessId,
+                entryNumber: `JE-PUR-${updated.billNumber || updated._id}`,
+                referenceType: 'purchase',
+                referenceId: updated._id,
+                ...jePayload,
+              }], { session });
+            }
+          }
+        } catch (jeErr) {
+          console.error('Failed to adjust journal entry on purchase update:', jeErr.message);
         }
       }
 
@@ -551,7 +721,7 @@ const deletePurchase = async (req, res) => {
     const deleteProductIds = purchase.items.filter(item => item.product).map(item => item.product);
     let deleteServiceIds = new Set();
     if (deleteProductIds.length > 0) {
-      const deleteProducts = await Product.find({ _id: { $in: deleteProductIds }, user: req.user._id }).select('type');
+      const deleteProducts = await Product.find({ _id: { $in: deleteProductIds }, ...baseFilter }).select('type');
       deleteServiceIds = new Set(deleteProducts.filter(p => p.type === 'service').map(p => p._id.toString()));
     }
 
@@ -579,10 +749,10 @@ const deletePurchase = async (req, res) => {
       try {
         const JournalEntry = require('../models/JournalEntry');
         const Account = require('../models/Account');
-        const journalEntry = await JournalEntry.findOne({ referenceType: 'purchase', referenceId: purchase._id, user: req.user._id });
+        const journalEntry = await JournalEntry.findOne({ referenceType: 'purchase', referenceId: purchase._id, ...baseFilter });
         if (journalEntry) {
           const delAccIds = journalEntry.lines.filter(l => l.account).map(l => l.account);
-          const delAccounts = await Account.find({ _id: { $in: delAccIds }, user: req.user._id });
+          const delAccounts = await Account.find({ _id: { $in: delAccIds }, ...baseFilter });
           const delAccountMap = new Map(delAccounts.map(a => [a._id.toString(), a]));
           const delReverseOps = journalEntry.lines.filter(l => l.account).map(line => {
             const acc = delAccountMap.get(line.account.toString());
