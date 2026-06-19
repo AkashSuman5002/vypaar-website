@@ -480,6 +480,8 @@ export const supportAPI = {
   create: (data) => API.post('/support', data),
   getMyTickets: () => API.get('/support'),
   getById: (id) => API.get(`/support/${id}`),
+  reply: (id, data) => API.post(`/support/${id}/reply`, data),
+  userReply: (id, data) => API.post(`/support/${id}/user-reply`, data),
 };
 
 export const whatsappAPI = {
