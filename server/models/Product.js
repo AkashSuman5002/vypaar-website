@@ -49,13 +49,20 @@ const productSchema = new mongoose.Schema({
 productSchema.index({ user: 1, name: 1 });
 productSchema.index({ business: 1, name: 1 });
 productSchema.index({ user: 1, barcode: 1 });
-productSchema.index({ business: 1, barcode: 1 });
-productSchema.index({ barcode: 1 });
+// NOTE: a non-unique { business, barcode } and a standalone { barcode } index were
+// removed here — they collided by auto-generated name with the unique partial index
+// below (and the pre-existing DB `barcode_1`). The unique partial { business, barcode }
+// serves non-empty-barcode lookups within a tenant.
 productSchema.index({ user: 1, category: 1 });
 productSchema.index({ business: 1, category: 1 });
 productSchema.index({ user: 1, stock: 1 });
 productSchema.index({ business: 1, stock: 1 });
 productSchema.index({ user: 1, createdAt: -1 });
 productSchema.index({ business: 1, createdAt: -1 });
+// Per-tenant unique barcode/sku, only constraining non-empty string values.
+// NOTE: existing duplicate barcodes/skus within a business must be cleaned before
+// these indexes can build. Build failures are logged by mongoose and are non-fatal.
+productSchema.index({ business: 1, barcode: 1 }, { unique: true, partialFilterExpression: { barcode: { $type: 'string', $gt: '' } } });
+productSchema.index({ business: 1, sku: 1 }, { unique: true, partialFilterExpression: { sku: { $type: 'string', $gt: '' } } });
 
 module.exports = mongoose.model('Product', productSchema);

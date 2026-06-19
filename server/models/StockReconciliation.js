@@ -23,5 +23,10 @@ const stockReconciliationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 stockReconciliationSchema.index({ user: 1, createdAt: -1 });
+stockReconciliationSchema.index({ business: 1, createdAt: -1 });
+// Per-tenant unique reconciliation number. partialFilterExpression constrains only
+// non-empty string reconciliationNumbers (a compound `sparse` would not exclude nulls).
+// Existing duplicates must be cleaned before this index can build; failures non-fatal.
+stockReconciliationSchema.index({ user: 1, business: 1, reconciliationNumber: 1 }, { unique: true, partialFilterExpression: { reconciliationNumber: { $type: 'string', $gt: '' } } });
 
 module.exports = mongoose.model('StockReconciliation', stockReconciliationSchema);

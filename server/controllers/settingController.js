@@ -28,12 +28,17 @@ const getSettings = async (req, res) => {
 
 const setNestedValue = (obj, path, value) => {
   const keys = path.split('.');
+  // Guard against prototype pollution via crafted keys.
+  const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'];
   let current = obj;
   for (let i = 0; i < keys.length - 1; i++) {
+    if (DANGEROUS_KEYS.includes(keys[i])) return;
     if (!current[keys[i]]) current[keys[i]] = {};
     current = current[keys[i]];
   }
-  current[keys[keys.length - 1]] = value;
+  const finalKey = keys[keys.length - 1];
+  if (DANGEROUS_KEYS.includes(finalKey)) return;
+  current[finalKey] = value;
 };
 
 const updateSettings = async (req, res) => {
@@ -90,7 +95,21 @@ const updateSettings = async (req, res) => {
       }
     }
 
-    if (req.file) {
+    // File uploads. The route registers multer with .fields() so logo and
+    // signature can be uploaded independently (req.files). A legacy single-file
+    // upload (req.file under the generic 'file' field) is treated as a logo.
+    if (req.files) {
+      if (req.files.logo && req.files.logo[0]) {
+        settings.logo = `/uploads/${req.files.logo[0].filename}`;
+      }
+      if (req.files.signature && req.files.signature[0]) {
+        settings.signature = `uploads/${req.files.signature[0].filename}`;
+      }
+      // Generic 'file' field (used by the signature uploader) → store as signature.
+      if (req.files.file && req.files.file[0]) {
+        settings.signature = `uploads/${req.files.file[0].filename}`;
+      }
+    } else if (req.file) {
       settings.logo = `/uploads/${req.file.filename}`;
     }
 

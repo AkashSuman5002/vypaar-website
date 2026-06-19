@@ -5,6 +5,7 @@ const Sale = require('../models/Sale');
 
 const { calculateCOGSFromMovements, getWeightedAverageCostFromMovements } = require('../utils/valuation');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { withTransaction } = require('../utils/withTransaction');
 
 const VALUATION_METHODS = ['fifo', 'lifo', 'average'];
 
@@ -31,15 +32,25 @@ const getWeightedAverageCost = async (req, productId) => {
 const recordStockMovement = async ({
   userId, businessId, productId, productName, type, quantity, rate, totalAmount,
   referenceType, referenceId, referenceNumber, description, batchNo, serialNo,
+  session = null,
 }) => {
-  const product = await Product.findOne({ _id: productId, user: userId });
+  // When a session is passed the read + write join the caller's transaction so
+  // the stock ledger row and the Product.stock change commit atomically.
+  const opts = session ? { session } : {};
+  // Scope the product lookup by business when available: a staff/member user's
+  // req.user._id differs from the owner id stored on the product, so matching by
+  // `user` alone would fail to resolve shared business documents.
+  const productFilter = businessId
+    ? { _id: productId, business: businessId }
+    : { _id: productId, user: userId };
+  const product = await Product.findOne(productFilter, null, opts);
   if (!product) throw new Error('Product not found');
 
   const balanceBefore = product.stock;
   const qty = type === 'sale' ? -Math.abs(quantity) : (type === 'adjustment' ? quantity : Math.abs(quantity));
   const balanceAfter = Math.max(0, balanceBefore + qty);
 
-  await StockMovement.create({
+  await StockMovement.create([{
     user: userId,
     business: businessId,
     product: productId,
@@ -57,7 +68,7 @@ const recordStockMovement = async ({
     serialNo,
     description,
     date: new Date(),
-  });
+  }], opts);
 
   return balanceAfter;
 };
@@ -114,29 +125,44 @@ const getStockValuation = async (req, res) => {
 const adjustStock = async (req, res) => {
   try {
     const { productId, newStock, reason } = req.body;
-    const product = await Product.findOne({ _id: productId, ...getBaseFilter(req) });
-    if (!product) return res.status(404).json({ message: 'Product not found' });
+    let updated;
+    // Atomic: the stock-ledger row and the Product.stock write must both commit
+    // or both roll back, otherwise the movement ledger desyncs from the product.
+    await withTransaction(async (session) => {
+      const product = await Product.findOne(
+        { _id: productId, ...getBaseFilter(req) },
+        null,
+        { session },
+      );
+      if (!product) {
+        const e = new Error('Product not found');
+        e.statusCode = 404;
+        throw e;
+      }
 
-    const diff = newStock - product.stock;
+      // Compute the delta from the in-transaction snapshot so concurrent edits
+      // cannot record a stale adjustment quantity.
+      const diff = newStock - product.stock;
 
-    await recordStockMovement({
-      userId: req.user._id,
-      businessId: req.businessId,
-      productId: product._id,
-      productName: product.name,
-      type: 'adjustment',
-      quantity: diff,
-      balanceBefore: product.stock,
-      balanceAfter: newStock,
-      description: reason || 'Stock adjustment',
+      await recordStockMovement({
+        userId: req.user._id,
+        businessId: req.businessId,
+        productId: product._id,
+        productName: product.name,
+        type: 'adjustment',
+        quantity: diff,
+        description: reason || 'Stock adjustment',
+        session,
+      });
+
+      product.stock = newStock;
+      await product.save({ session });
+      updated = product;
     });
 
-    product.stock = newStock;
-    await product.save();
-
-    res.json({ message: 'Stock adjusted', product });
+    res.json({ message: 'Stock adjusted', product: updated });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 };
 

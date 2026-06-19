@@ -27,10 +27,56 @@ const columns = [
 
 const fmt = (v) => v != null ? `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₹0.00';
 
+const toYMD = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Translate a named period into a concrete { start, end } date range so the
+// existing dates-driven refetch picks it up. Returns null for 'custom' (the user
+// drives the date pickers manually in that mode).
+const periodToRange = (period) => {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+  switch (period) {
+    case 'today':
+      break;
+    case 'yesterday':
+      start.setDate(start.getDate() - 1);
+      end.setDate(end.getDate() - 1);
+      break;
+    case 'this-week': {
+      const day = (start.getDay() + 6) % 7; // Monday-based week
+      start.setDate(start.getDate() - day);
+      break;
+    }
+    case 'this-month':
+      start.setDate(1);
+      break;
+    case 'this-quarter': {
+      const q = Math.floor(start.getMonth() / 3);
+      start.setMonth(q * 3, 1);
+      break;
+    }
+    case 'this-year':
+      start.setMonth(0, 1);
+      break;
+    case 'custom':
+    default:
+      return null;
+  }
+  return { start: toYMD(start), end: toYMD(end) };
+};
+
 const BusinessStatus = () => {
   const [search, setSearch] = useState('');
-  const [dates, setDates] = useState({ start: '', end: '' });
   const [period, setPeriod] = useState('this-month');
+  // Seed the date range from the default period so the initial load and the
+  // period selector stay consistent.
+  const [dates, setDates] = useState(() => periodToRange('this-month') || { start: '', end: '' });
   const [data, setData] = useState(null);
   const filteredData = (data?.recentActivity || data?.recentTransactions || []).filter(d => !search || Object.values(d).some(v => String(v).toLowerCase().includes(search.toLowerCase())));
   const [loading, setLoading] = useState(true);
@@ -65,7 +111,17 @@ const BusinessStatus = () => {
     : defaultCards;
 
   const handleDateChange = (type, value) => {
+    // Manually editing a date implies a custom range.
+    setPeriod('custom');
     setDates(prev => ({ ...prev, [type]: value }));
+  };
+
+  // Selecting a named period computes its date range and updates `dates`, which
+  // triggers the data refetch via the effect above.
+  const handlePeriodChange = (value) => {
+    setPeriod(value);
+    const range = periodToRange(value);
+    if (range) setDates(range);
   };
 
   if (loading) return <LoadingSpinner />;
@@ -91,7 +147,7 @@ const BusinessStatus = () => {
         className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
         ><Printer className="w-4 h-4" /> Print</button>
       </div>
-      <ReportFilters search={search} onSearchChange={setSearch} period={period} onPeriodChange={setPeriod} dateStart={dates.start} dateEnd={dates.end} onDateChange={handleDateChange} />
+      <ReportFilters search={search} onSearchChange={setSearch} period={period} onPeriodChange={handlePeriodChange} dateStart={dates.start} dateEnd={dates.end} onDateChange={handleDateChange} />
       <div className="bg-white dark:bg-[#0F172A] min-h-full p-6 space-y-5">
         <div className="grid grid-cols-6 gap-3">
           {summaryCards.map((card) => (

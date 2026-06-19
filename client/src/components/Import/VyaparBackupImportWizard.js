@@ -101,28 +101,9 @@ const VyaparBackupImportWizard = ({ onComplete }) => {
     setImporting(true);
     setStep(4);
     setImportProgress(0);
+    setImportTask('Processing…');
 
     try {
-      setImportProgress(10);
-      setImportTask('Starting import...');
-      await new Promise(r => setTimeout(r, 300));
-
-      setImportProgress(25);
-      setImportTask('Importing customers & suppliers...');
-      await new Promise(r => setTimeout(r, 300));
-
-      setImportProgress(40);
-      setImportTask('Importing products...');
-
-      setImportProgress(55);
-      setImportTask('Importing sales & purchases...');
-
-      setImportProgress(70);
-      setImportTask('Importing expenses & stock...');
-
-      setImportProgress(85);
-      setImportTask('Importing GST records & payments...');
-
       const res = await importAPI.backupExecute({
         historyId,
         selectedTables,
@@ -354,11 +335,15 @@ const VyaparBackupImportWizard = ({ onComplete }) => {
               <div className="max-w-md mx-auto space-y-6">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-400">{importTask}</span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>
+                    <span className="text-slate-600 dark:text-slate-400">{importing ? 'Processing…' : importTask}</span>
+                    {!importing && <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>}
                   </div>
                   <div className="h-3 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.5 }} className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full" />
+                    {importing ? (
+                      <motion.div className="h-full w-1/3 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
+                    ) : (
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.4 }} className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full" />
+                    )}
                   </div>
                 </div>
                 <div className="flex justify-center">

@@ -8,6 +8,21 @@ const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { sendAutoMessage } = require('../services/messageService');
 const { createNotification } = require('./notificationController');
 const { withTransaction } = require('../utils/withTransaction');
+const { getNextSequence } = require('../utils/nextNumber');
+
+// Seed value = current max numeric PRET- return number for this tenant (prefix
+// stripped). Used only to seed the counter on its first use over existing data.
+const PURCHASE_RETURN_PREFIX = 'PRET-';
+const maxPurchaseReturnSeq = async (baseFilter) => {
+  const all = await PurchaseReturn.find(baseFilter).select('returnNumber').lean();
+  let max = 0;
+  for (const r of all) {
+    if (!r.returnNumber || !String(r.returnNumber).startsWith(PURCHASE_RETURN_PREFIX)) continue;
+    const num = parseInt(String(r.returnNumber).slice(PURCHASE_RETURN_PREFIX.length), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  return max;
+};
 
 const getPurchaseReturns = async (req, res) => {
   try {
@@ -85,6 +100,17 @@ const createPurchaseReturn = async (req, res) => {
     const roundOffVal = roundOff ? Math.round(computedTotal) - computedTotal : (parseFloat(roundOffValue) || 0);
 
     const ret = await withTransaction(async (session) => {
+      // Honor a client-supplied return number; otherwise allocate one atomically
+      // from the per-tenant counter inside this transaction (no read-max-then-+1
+      // race). Re-resolved each attempt since the transaction may retry.
+      if (!req.body.returnNumber) {
+        const retSeq = await getNextSequence(
+          { user: req.user._id, business: req.businessId },
+          'purchase_return',
+          { session, seedFn: () => maxPurchaseReturnSeq(baseFilter) },
+        );
+        returnNumber = `${PURCHASE_RETURN_PREFIX}${String(retSeq).padStart(6, '0')}`;
+      }
       const [created] = await PurchaseReturn.create([{
         user: req.user._id, business: req.businessId, returnNumber, purchase, purchaseBillNumber, supplier, supplierName, returnDate: returnDate || new Date(),
         phone, invoiceDate: invoiceDate || undefined, stateOfSupply, paymentType: paymentType || 'Cash',
@@ -180,6 +206,7 @@ const createPurchaseReturn = async (req, res) => {
           }
         } catch (jeErr) {
           console.error('Failed to create journal entry for purchase return:', jeErr.message);
+          throw jeErr;
         }
       }
 
@@ -339,6 +366,7 @@ const updatePurchaseReturn = async (req, res) => {
           }
         } catch (jeErr) {
           console.error('Failed to update journal entry for purchase return:', jeErr.message);
+          throw jeErr;
         }
       }
 
@@ -402,6 +430,7 @@ const deletePurchaseReturn = async (req, res) => {
         }
       } catch (jeErr) {
         console.error('Failed to reverse journal entry on purchase return delete:', jeErr.message);
+        throw jeErr;
       }
 
       await PurchaseReturn.findOneAndDelete({ _id: req.params.id, ...baseFilter }, { session });

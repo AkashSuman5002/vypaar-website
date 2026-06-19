@@ -283,7 +283,11 @@ const backupExport = async (req, res) => {
     ]);
 
     const sanitize = (arr) => arr.map(item => {
-      const { _id, __v, user, password, ...rest } = item;
+      const { _id, __v, user, password, passcodeHash, ...rest } = item;
+      // passcodeHash also lives nested under preferences.general for Setting docs.
+      if (rest.preferences?.general?.passcodeHash !== undefined) {
+        delete rest.preferences.general.passcodeHash;
+      }
       return rest;
     });
 

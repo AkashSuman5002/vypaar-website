@@ -123,16 +123,32 @@ const getSupplierLedger = async (req, res) => {
         credit: amt,
         balance: runningBalance,
       });
+
+      const paid = purchase.paidAmount || 0;
+      if (paid > 0) {
+        runningBalance -= paid;
+        allAmounts.push(paid);
+        entries.push({
+          date: purchase.paymentDate || purchase.date,
+          type: 'Payment Made',
+          reference: purchase._id.toString().slice(-6).toUpperCase(),
+          debit: paid,
+          credit: 0,
+          balance: runningBalance,
+        });
+      }
     }
 
     const totalPurchases = purchases.reduce((s, x) => s + (x.totalAmount || 0), 0);
-    const outstandingPayable = totalPurchases + (supplier.openingBalance || 0);
+    const totalPaid = purchases.reduce((s, x) => s + (x.paidAmount || 0), 0);
+    const outstandingPayable = totalPurchases - totalPaid + (supplier.openingBalance || 0);
 
     res.json({
       supplier,
       entries,
       openingBalance: supplier.openingBalance || 0,
       totalPurchases,
+      totalPaid,
       outstandingPayable,
       analytics: {
         lastTransactionDate: lastDate,
@@ -140,6 +156,7 @@ const getSupplierLedger = async (req, res) => {
         averageTransactionValue: allAmounts.length > 0 ? allAmounts.reduce((a, b) => a + b, 0) / allAmounts.length : 0,
         largestTransaction: allAmounts.length > 0 ? Math.max(...allAmounts) : 0,
         purchaseCount: purchases.length,
+        paymentCount: purchases.filter(p => (p.paidAmount || 0) > 0).length,
       },
     });
   } catch (error) {

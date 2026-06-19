@@ -1,4 +1,5 @@
 const Setting = require('../models/Setting');
+const PushSubscription = require('../models/PushSubscription');
 
 const webPush = require('web-push') || null;
 
@@ -15,7 +16,10 @@ if (webPush && (!vapidKeys.publicKey || !vapidKeys.privateKey)) {
     const generated = webPush.generateVAPIDKeys();
     vapidKeys.publicKey = generated.publicKey;
     vapidKeys.privateKey = generated.privateKey;
-    console.log('[Push] Generated ephemeral VAPID keypair (set VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY to persist across restarts)');
+    console.warn('[Push] WARNING: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are not set in the environment. ' +
+      'Generated an EPHEMERAL VAPID keypair for development only. This keypair is regenerated on every ' +
+      'restart, which permanently invalidates all existing push subscriptions. ' +
+      'Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in your environment for production.');
   } catch (e) {
     console.error('[Push] Failed to generate VAPID keys:', e.message);
   }
@@ -32,8 +36,6 @@ if (webPush && vapidKeys.publicKey && vapidKeys.privateKey) {
 
 const getVapidPublicKey = () => vapidKeys.publicKey;
 
-const subscriptions = new Map();
-
 // Maps a canonical notification event type to its per-event preference key
 // under preferences.notifications.push.* (see models/Setting.js).
 const PUSH_EVENT_PREF_KEY = {
@@ -43,12 +45,33 @@ const PUSH_EVENT_PREF_KEY = {
   low_stock: 'lowStock',
 };
 
-const saveSubscription = (userId, subscription) => {
-  subscriptions.set(String(userId), subscription);
+// Persist a subscription to the database (survives restarts). A device is
+// keyed by its endpoint; upsert so re-subscribing the same browser updates the
+// keys/owner instead of creating duplicates.
+const saveSubscription = async (userId, subscription) => {
+  if (!subscription || !subscription.endpoint) return;
+  await PushSubscription.findOneAndUpdate(
+    { endpoint: subscription.endpoint },
+    {
+      user: userId,
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys?.p256dh || '',
+        auth: subscription.keys?.auth || '',
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 };
 
-const removeSubscription = (userId) => {
-  subscriptions.delete(String(userId));
+const removeSubscription = async (userId, endpoint) => {
+  // If an endpoint is provided remove just that device; otherwise remove all of
+  // the user's subscriptions (e.g. on a full unsubscribe).
+  if (endpoint) {
+    await PushSubscription.deleteOne({ endpoint });
+  } else {
+    await PushSubscription.deleteMany({ user: userId });
+  }
 };
 
 const sendPushNotification = async (userId, { title, body, icon, url }, eventType) => {
@@ -62,8 +85,8 @@ const sendPushNotification = async (userId, { title, body, icon, url }, eventTyp
     const eventKey = eventType && PUSH_EVENT_PREF_KEY[eventType];
     if (eventKey && pushPrefs[eventKey] === false) return;
 
-    const subscription = subscriptions.get(String(userId));
-    if (!subscription) {
+    const subs = await PushSubscription.find({ user: userId });
+    if (!subs.length) {
       console.log('[Push] No subscription found for user');
       return;
     }
@@ -73,11 +96,29 @@ const sendPushNotification = async (userId, { title, body, icon, url }, eventTyp
       return;
     }
 
-    await webPush.sendNotification(subscription, JSON.stringify({
+    const payload = JSON.stringify({
       title, body, icon: icon || '/logo192.png',
       data: { url: url || '/' },
+    });
+
+    await Promise.all(subs.map(async (sub) => {
+      const subscription = {
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.keys?.p256dh, auth: sub.keys?.auth },
+      };
+      try {
+        await webPush.sendNotification(subscription, payload);
+        console.log(`[Push] Sent to user ${userId}: ${title}`);
+      } catch (err) {
+        // 404/410 mean the subscription is gone — purge it so we stop retrying.
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          await PushSubscription.deleteOne({ endpoint: sub.endpoint }).catch(() => {});
+          console.log('[Push] Removed expired subscription');
+        } else {
+          console.error('[Push] Send failed:', err.message);
+        }
+      }
     }));
-    console.log(`[Push] Sent to user ${userId}: ${title}`);
   } catch (err) {
     console.error('[Push] Failed:', err.message);
   }

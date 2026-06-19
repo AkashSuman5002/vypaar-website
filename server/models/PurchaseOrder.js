@@ -44,5 +44,13 @@ const purchaseOrderSchema = mongoose.Schema({
 }, { timestamps: true });
 
 purchaseOrderSchema.index({ business: 1, createdAt: -1 });
+purchaseOrderSchema.index({ user: 1, createdAt: -1 });
+purchaseOrderSchema.index({ orderNumber: 1 });
+purchaseOrderSchema.index({ supplier: 1 });
+purchaseOrderSchema.index({ status: 1 });
+// Per-tenant unique order number. partialFilterExpression constrains only non-empty
+// string orderNumbers (a compound `sparse` would not exclude nulls). Existing
+// duplicates must be cleaned before this index can build; failures are non-fatal.
+purchaseOrderSchema.index({ user: 1, business: 1, orderNumber: 1 }, { unique: true, partialFilterExpression: { orderNumber: { $type: 'string', $gt: '' } } });
 
 module.exports = mongoose.model('PurchaseOrder', purchaseOrderSchema);

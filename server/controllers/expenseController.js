@@ -6,6 +6,21 @@ const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { createNotification } = require('../controllers/notificationController');
 const { sendEmailNotification } = require('../services/emailService');
 const { withTransaction } = require('../utils/withTransaction');
+const { getNextSequence } = require('../utils/nextNumber');
+
+// Seed value = current max numeric EXP- expense number for this tenant (prefix
+// stripped). Used only to seed the counter on its first use over existing data.
+const EXPENSE_PREFIX = 'EXP-';
+const maxExpenseSeq = async (baseFilter) => {
+  const all = await Expense.find(baseFilter).select('expenseNumber').lean();
+  let max = 0;
+  for (const e of all) {
+    if (!e.expenseNumber || !String(e.expenseNumber).startsWith(EXPENSE_PREFIX)) continue;
+    const num = parseInt(String(e.expenseNumber).slice(EXPENSE_PREFIX.length), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  return max;
+};
 
 const getExpenses = async (req, res) => {
   try {
@@ -48,13 +63,26 @@ const getExpenseById = async (req, res) => {
 const createExpense = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const { expenseNumber, category, description, amount: rawAmount, tax: rawTax, date, paymentMethod, reference, notes, paidTo, items, receiptImage, isRecurring, recurringInterval } = req.body;
+    const { category, description, amount: rawAmount, tax: rawTax, date, paymentMethod, reference, notes, paidTo, items, receiptImage, isRecurring, recurringInterval } = req.body;
+    // expenseNumber is reassigned when omitted (atomic counter), so keep it mutable.
+    let expenseNumber = req.body.expenseNumber;
     const amount = rawAmount ?? (req.body.totalAmount ? req.body.totalAmount - (rawTax || 0) : 0);
     const tax = rawTax ?? 0;
     const totalAmount = amount + tax;
 
     let expense;
     await withTransaction(async (session) => {
+    // Honor a client-supplied expense number; otherwise allocate one atomically
+    // from the per-tenant counter inside this transaction (no read-max-then-+1
+    // race). Re-resolved each attempt since the transaction may retry.
+    if (!req.body.expenseNumber) {
+      const expSeq = await getNextSequence(
+        { user: req.user._id, business: req.businessId },
+        'expense',
+        { session, seedFn: () => maxExpenseSeq(baseFilter) },
+      );
+      expenseNumber = `${EXPENSE_PREFIX}${String(expSeq).padStart(6, '0')}`;
+    }
     [expense] = await Expense.create([
       getCreateData(req, { expenseNumber, category: category || 'Other', description,
         amount, tax, totalAmount, date, paymentMethod: paymentMethod || 'cash',
@@ -100,6 +128,7 @@ const createExpense = async (req, res) => {
       }
     } catch (jeErr) {
       console.error('Failed to create journal entry for expense:', jeErr.message);
+      throw jeErr;
     }
 
     // Update budget spent amount
@@ -213,6 +242,7 @@ const updateExpense = async (req, res) => {
       }
     } catch (jeErr) {
       console.error('Failed to update journal entry for expense:', jeErr.message);
+      throw jeErr;
     }
     });
 
@@ -255,7 +285,21 @@ const deleteExpense = async (req, res) => {
       }
     } catch (jeErr) {
       console.error('Failed to reverse journal entry for expense:', jeErr.message);
+      throw jeErr;
     }
+
+    // Decrement budget spent amount (mirror the increment done in createExpense)
+    try {
+      const Budget = require('../models/Budget');
+      const expenseDate = expense.date ? new Date(expense.date) : new Date();
+      const month = expenseDate.getMonth() + 1;
+      const year = expenseDate.getFullYear();
+      await Budget.findOneAndUpdate(
+        { ...baseFilter, category: expense.category || 'Other', month, year, isActive: true },
+        { $inc: { spent: -(expense.totalAmount || 0) } },
+        { session }
+      );
+    } catch (e) { /* budget update optional */ }
     });
 
     createNotification(req.user._id, 'expense_deleted', 'Expense Removed',

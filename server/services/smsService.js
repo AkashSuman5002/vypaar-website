@@ -2,6 +2,7 @@ const https = require('https');
 const http = require('http');
 const url = require('url');
 const Setting = require('../models/Setting');
+const { decryptSecret } = require('../utils/secretCrypto');
 
 function request(options, body) {
   return new Promise((resolve, reject) => {
@@ -145,7 +146,18 @@ const sendSMSNotification = async (userId, { to, message }, eventType) => {
       return false;
     }
 
-    const result = await sendFn(smsPrefs, to, message);
+    // Secrets are stored encrypted at rest; decrypt before handing to the
+    // provider sender. Legacy plaintext passes through unchanged. We build a
+    // plain object (smsPrefs may be a Mongoose subdocument) so destructuring in
+    // the provider functions sees the decrypted values.
+    const decryptedPrefs = {
+      ...(typeof smsPrefs.toObject === 'function' ? smsPrefs.toObject() : smsPrefs),
+      apiKey: decryptSecret(smsPrefs.apiKey),
+      authToken: decryptSecret(smsPrefs.authToken),
+      accountSid: decryptSecret(smsPrefs.accountSid),
+    };
+
+    const result = await sendFn(decryptedPrefs, to, message);
     if (result) console.log(`[SMS] Sent to ${to} via ${provider}`);
     return result;
   } catch (err) {

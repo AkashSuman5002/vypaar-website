@@ -13,12 +13,62 @@ const { authLimiter } = require('../middleware/rateLimit');
 const { csrfProtection, generateCsrfToken, CSRF_COOKIE } = require('../middleware/csrf');
 const { sendPasswordResetEmail } = require('../services/emailService');
 const { createOtp, verifyOtp, deliverOtp, isDev } = require('../utils/otpAuth');
+const { verifyTotp } = require('../utils/totp');
+const { withTransaction } = require('../utils/withTransaction');
 
 const router = express.Router();
 
 const generateToken = (user) => {
-  return jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
+  // `tv` (token version) enables backward-compatible token revocation: auth middleware
+  // rejects a token whose tv no longer matches the user's current tokenVersion.
+  return jwt.sign({ id: user._id, email: user.email, tv: user.tokenVersion || 0 }, JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
 };
+
+const TOKEN_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
+// Ensure the user has a resolved business / settings, mirroring the password-login logic.
+// Owners with no business get one provisioned; members keep their assigned business.
+const ensureBusinessAndSettings = async (user) => {
+  let business = null;
+  if (user.business) {
+    business = await Business.findById(user.business);
+  } else {
+    business = await Business.findOne({ owner: user._id }).sort({ createdAt: -1 });
+    if (!business) {
+      business = await Business.create({ name: user.name + "'s Business", email: user.email, owner: user._id, isActive: true });
+      await Branch.create({ name: 'Main Branch', business: business._id, isActive: true });
+      await Role.create({ name: 'Admin', business: business._id, permissions: ['*'], isDefault: true });
+    }
+  }
+  const fallbackBusinessName = business ? business.name : (user.name + "'s Business");
+  let setting = await Setting.findOne({ user: user._id });
+  if (!setting) {
+    setting = await Setting.create({ user: user._id, businessName: fallbackBusinessName, email: user.email });
+  } else if (!setting.businessName && fallbackBusinessName) {
+    setting.businessName = fallbackBusinessName;
+    await setting.save();
+  }
+};
+
+// Issue the JWT exactly as a normal successful login: set the httpOnly `token` cookie. The token
+// is NOT returned in the body (cookie-only auth via the same-origin CRA proxy — see auth.js).
+const issueLoginResponse = (res, user, status = 200) => {
+  const token = generateToken(user);
+  res.cookie('token', token, TOKEN_COOKIE_OPTS);
+  return res.status(status).json({ ...user.toJSON() });
+};
+
+// The dev OTP is only ever returned in the HTTP response when explicitly opted-in via
+// EXPOSE_DEV_OTP=true AND we're not in production. Otherwise the code is never put in the
+// response body (it may still be console-logged elsewhere by the OTP delivery utility).
+const exposeDevOtp = () =>
+  process.env.NODE_ENV !== 'production' &&
+  String(process.env.EXPOSE_DEV_OTP).toLowerCase() === 'true';
 
 const normalizeEmail = (email = '') => email.trim().toLowerCase();
 const normalizePhone = (p = '') => String(p).replace(/[\s-]/g, '').trim();
@@ -28,15 +78,61 @@ const normalizePhone = (p = '') => String(p).replace(/[\s-]/g, '').trim();
 // real path so attackers can't use timing to enumerate which emails have accounts.
 const DUMMY_PASSWORD_HASH = '$2a$12$5WwsJp.osusMCBqdV9rA/uGHIObqqN7TlfWVGisC1TWHlCVlwmApi';
 
-// Create the full account (user + business + branch + default role + settings) for a
-// verified passwordless signup. Mirrors the password-based /register provisioning.
-const provisionAccount = async ({ name, email, phone }) => {
-  const user = await User.create({ name, email, phone: phone || '', role: 'admin', isOwner: false, isVerified: true });
-  const business = await Business.create({ name: name + "'s Business", email: user.email, phone: phone || '', owner: user._id, isActive: true });
-  await Branch.create({ name: 'Main Branch', business: business._id, isActive: true });
-  await Role.create({ name: 'Admin', business: business._id, permissions: ['*'], isDefault: true });
-  await Setting.create({ user: user._id, businessName: business.name, email: user.email, phone: phone || '' });
-  return user;
+// Per-account login lockout. In-memory and PER-PROCESS only (not shared across cluster
+// workers / multiple instances) — a deliberate simple defense-in-depth on top of the
+// IP-based authLimiter. After LOCKOUT_MAX failed password attempts within LOCKOUT_WINDOW_MS
+// the account is temporarily blocked. The entry is cleared on a successful login.
+const LOCKOUT_MAX = 5;
+const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+const loginFailures = new Map(); // email -> { count, firstAt }
+
+const isLockedOut = (email) => {
+  const rec = loginFailures.get(email);
+  if (!rec) return false;
+  if (Date.now() - rec.firstAt >= LOCKOUT_WINDOW_MS) {
+    loginFailures.delete(email); // window expired — reset
+    return false;
+  }
+  return rec.count >= LOCKOUT_MAX;
+};
+
+const recordLoginFailure = (email) => {
+  const now = Date.now();
+  const rec = loginFailures.get(email);
+  if (!rec || now - rec.firstAt >= LOCKOUT_WINDOW_MS) {
+    loginFailures.set(email, { count: 1, firstAt: now });
+  } else {
+    rec.count += 1;
+  }
+};
+
+const clearLoginFailures = (email) => loginFailures.delete(email);
+
+// Create the full account (user + business + branch + default role + settings) atomically.
+// All creates run inside a single transaction so a failure rolls everything back — there is
+// never an orphan User without its Business/Branch/Role/Setting.
+//
+// Used by BOTH the password-based /register and the verified passwordless /register/verify.
+// `password` is optional: when omitted the account is passwordless (OTP) and `isVerified` is
+// set true (the OTP already proved ownership); when present the User pre('save') hook still
+// hashes it (Model.create runs the same save hooks), so password hashing is preserved.
+const provisionAccount = async ({ name, email, phone, password, isVerified }) => {
+  return withTransaction(async (session) => {
+    const userDoc = { name, email, phone: phone || '', role: 'admin', isOwner: true };
+    if (password) userDoc.password = password;
+    if (isVerified) userDoc.isVerified = true;
+    // Array form is required to pass a session; create() returns an array — destructure it.
+    const [user] = await User.create([userDoc], { session });
+    const [business] = await Business.create([
+      { name: name + "'s Business", email: user.email, phone: phone || '', owner: user._id, isActive: true },
+    ], { session });
+    await Branch.create([{ name: 'Main Branch', business: business._id, isActive: true }], { session });
+    await Role.create([{ name: 'Admin', business: business._id, permissions: ['*'], isDefault: true }], { session });
+    await Setting.create([
+      { user: user._id, businessName: business.name, email: user.email, phone: phone || '' },
+    ], { session });
+    return user;
+  });
 };
 
 router.post('/register', authLimiter, async (req, res) => {
@@ -53,33 +149,9 @@ router.post('/register', authLimiter, async (req, res) => {
     if (existing) {
       return res.status(400).json({ message: 'Email already registered' });
     }
-    const user = await User.create({ name, email: normalizedEmail, password, role: 'admin', isOwner: false });
-
-    const business = await Business.create({
-      name: name + "'s Business",
-      email: user.email,
-      owner: user._id,
-      isActive: true,
-    });
-
-    await Branch.create({
-      name: 'Main Branch',
-      business: business._id,
-      isActive: true,
-    });
-
-    await Role.create({
-      name: 'Admin',
-      business: business._id,
-      permissions: ['*'],
-      isDefault: true,
-    });
-
-    await Setting.create({
-      user: user._id,
-      businessName: business.name,
-      email: user.email,
-    });
+    // Provision User + Business + Branch + Role + Setting atomically (see provisionAccount).
+    // The password is passed through and hashed by the User pre('save') hook.
+    const user = await provisionAccount({ name, email: normalizedEmail, password });
 
     const token = generateToken(user);
     res.cookie('token', token, {
@@ -88,7 +160,7 @@ router.post('/register', authLimiter, async (req, res) => {
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
-    res.status(201).json({ ...user.toJSON(), token });
+    res.status(201).json({ ...user.toJSON() });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -100,11 +172,20 @@ router.post('/login', authLimiter, async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
-    const user = await User.findOne({ email: normalizeEmail(email) });
+    const normEmail = normalizeEmail(email);
+
+    // Per-account lockout: short-circuit BEFORE checking the password once too many recent
+    // failures have accumulated for this email (see loginFailures map above).
+    if (isLockedOut(normEmail)) {
+      return res.status(429).json({ message: 'Too many failed attempts, try again later' });
+    }
+
+    const user = await User.findOne({ email: normEmail });
     if (!user) {
       // Perform a dummy bcrypt compare so the response timing matches the valid-user path,
       // preventing attackers from enumerating accounts via login timing. Same generic 401.
       await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      recordLoginFailure(normEmail);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
     if (!user.isActive) {
@@ -112,7 +193,17 @@ router.post('/login', authLimiter, async (req, res) => {
     }
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      recordLoginFailure(normEmail);
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+    // Successful login — clear any accumulated failure record for this account.
+    clearLoginFailures(normEmail);
+
+    // Two-Factor enforcement: if the user has 2FA enabled, password success is NOT enough —
+    // do NOT issue a JWT yet. The client must call POST /login/2fa with a valid TOTP code.
+    // Users WITHOUT 2FA fall straight through to the original token-issuing path (no change).
+    if (user.twoFactorEnabled) {
+      return res.json({ twoFactorRequired: true, userId: user._id });
     }
 
     // Resolve the user's business. A MEMBER (non-owner staff) is assigned to the owner's
@@ -155,7 +246,35 @@ router.post('/login', authLimiter, async (req, res) => {
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
-    res.json({ ...user.toJSON(), token });
+    res.json({ ...user.toJSON() });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Second factor for login. Called only after a primary login (password OR OTP) returned
+// `{ twoFactorRequired: true, userId }`. Verifies the 6-digit TOTP and, on success, issues
+// the JWT exactly like a normal login (reusing generateToken via issueLoginResponse).
+router.post('/login/2fa', authLimiter, async (req, res) => {
+  try {
+    const { userId, token } = req.body;
+    if (!userId || !token) {
+      return res.status(400).json({ message: 'User and verification code are required' });
+    }
+    // twoFactorSecret is select:false, so explicitly include it for verification.
+    const user = await User.findById(userId).select('+twoFactorSecret');
+    if (!user || user.isActive === false) {
+      return res.status(401).json({ message: 'Account not found or deactivated' });
+    }
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      // 2FA not actually enabled for this user — nothing to verify here.
+      return res.status(400).json({ message: 'Two-factor authentication is not enabled' });
+    }
+    if (!verifyTotp(token, user.twoFactorSecret)) {
+      return res.status(401).json({ message: 'Invalid authentication code' });
+    }
+    await ensureBusinessAndSettings(user);
+    return issueLoginResponse(res, user);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -178,7 +297,7 @@ router.post('/register/start', authLimiter, async (req, res) => {
     res.json({
       message: 'Verification code sent to your email and phone',
       identifier: email,
-      ...(isDev() ? { devOtp: code } : {}),
+      ...(exposeDevOtp() ? { devOtp: code } : {}),
       ...delivery,
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
@@ -193,10 +312,11 @@ router.post('/register/verify', authLimiter, async (req, res) => {
     if (!result.ok) return res.status(400).json({ message: result.reason });
     if (await User.findOne({ email })) return res.status(400).json({ message: 'Email already registered' });
     const data = result.payload || {};
-    const user = await provisionAccount({ name: data.name, email, phone: data.phone });
+    // Passwordless (OTP) signup: no password, and the verified OTP already proved ownership.
+    const user = await provisionAccount({ name: data.name, email, phone: data.phone, isVerified: true });
     const token = generateToken(user);
     res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.status(201).json({ ...user.toJSON(), token });
+    res.status(201).json({ ...user.toJSON() });
   } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
@@ -214,7 +334,7 @@ router.post('/login/otp', authLimiter, async (req, res) => {
     }
     const code = await createOtp(identifier, 'login', { userId: user._id.toString() });
     const delivery = await deliverOtp(code, { email: user.email, phone: user.phone, name: user.name, purpose: 'login' });
-    res.json({ message: 'Code sent', identifier, ...(isDev() ? { devOtp: code } : {}), ...delivery });
+    res.json({ message: 'Code sent', identifier, ...(exposeDevOtp() ? { devOtp: code } : {}), ...delivery });
   } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
@@ -235,6 +355,12 @@ router.post('/login/verify', authLimiter, async (req, res) => {
     if (!user || user.isActive === false) return res.status(401).json({ message: 'Account not found or deactivated' });
     if (!user.isVerified) { user.isVerified = true; await user.save(); }
 
+    // Two-Factor enforcement (same as password login): OTP success alone is not enough when
+    // 2FA is on — withhold the JWT and require a TOTP code via POST /login/2fa.
+    if (user.twoFactorEnabled) {
+      return res.json({ twoFactorRequired: true, userId: user._id });
+    }
+
     // Resolve the user's business (same logic as password login).
     let business = null;
     if (user.business) {
@@ -253,7 +379,7 @@ router.post('/login/verify', authLimiter, async (req, res) => {
 
     const token = generateToken(user);
     res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ ...user.toJSON(), token });
+    res.json({ ...user.toJSON() });
   } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
@@ -269,7 +395,49 @@ router.get('/refresh', authMiddleware, async (req, res) => {
     sameSite: 'strict',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
-  res.json({ ...req.user.toJSON(), token });
+  res.json({ ...req.user.toJSON() });
+});
+
+// Authenticated password change for a logged-in user. Requires the current password
+// (re-authentication) and issues a fresh token for THIS session while bumping tokenVersion
+// so every OTHER existing session is invalidated.
+router.post('/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current and new password are required' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    }
+
+    // Load with the password field explicitly (defensive: middleware may strip it).
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (!user.password) {
+      // Passwordless (OTP-only) accounts have no password to verify against.
+      return res.status(400).json({ message: 'No password is set for this account' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword; // pre('save') hook hashes it
+    // Invalidate all other existing sessions/tokens issued before this change.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+
+    // Issue a fresh token for the current session so the caller stays logged in.
+    const token = generateToken(user);
+    res.cookie('token', token, TOKEN_COOKIE_OPTS);
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 router.post('/forgot-password', authLimiter, async (req, res) => {
@@ -328,6 +496,8 @@ router.post('/reset-password', authLimiter, async (req, res) => {
     user.password = password;
     user.passwordResetToken = null;
     user.passwordResetExpires = null;
+    // Invalidate any existing sessions/tokens issued before this password reset.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
     const authToken = generateToken(user);
@@ -337,7 +507,7 @@ router.post('/reset-password', authLimiter, async (req, res) => {
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
-    res.json({ ...user.toJSON(), token: authToken });
+    res.json({ ...user.toJSON() });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -347,6 +517,24 @@ router.post('/logout', authMiddleware, csrfProtection, (req, res) => {
   res.clearCookie('token');
   res.clearCookie(CSRF_COOKIE);
   res.json({ message: 'Logged out successfully' });
+});
+
+// Revoke ALL of the current user's existing tokens by bumping tokenVersion. Any JWT
+// issued before this call (carrying the old `tv`) will be rejected by the auth middleware.
+router.post('/logout-all', authMiddleware, csrfProtection, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+    res.clearCookie('token');
+    res.clearCookie(CSRF_COOKIE);
+    res.json({ message: 'Logged out of all sessions' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 // Public: the CSRF token must be obtainable BEFORE login. Gating it behind authMiddleware

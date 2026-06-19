@@ -2,6 +2,7 @@ const Manufacturing = require('../models/Manufacturing');
 const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
 const Setting = require('../models/Setting');
+const { withTransaction } = require('../utils/withTransaction');
 const { getBaseFilter, getSettingQuery, getCreateData } = require('../utils/queryHelper');
 
 const getManufacturingOrders = async (req, res) => {
@@ -162,64 +163,84 @@ const completeManufacturingOrder = async (req, res) => {
 
     const producedQty = req.body.producedQuantity || order.plannedQuantity;
 
-    for (const bom of order.bomItems) {
-      if (bom.product) {
-        const prod = await Product.findOne({ _id: bom.product, ...baseFilter });
-        if (!prod) return res.status(400).json({ message: `Raw material not found: ${bom.productName}` });
-        const qtyNeeded = bom.quantity * producedQty;
-        if (prod.stock < qtyNeeded) {
-          return res.status(400).json({ message: `Insufficient stock for ${prod.name}. Available: ${prod.stock}, Required: ${qtyNeeded}` });
+    // Wrap the whole completion flow (raw-material consumption, finished-goods
+    // stock add, ledger movements and the order status update) in one
+    // transaction so it is all-or-nothing. Validation failures (missing raw
+    // material / insufficient stock) are surfaced via a typed error so the
+    // existing HTTP 400 responses are preserved.
+    try {
+      await withTransaction(async (session) => {
+        for (const bom of order.bomItems) {
+          if (bom.product) {
+            const prod = await Product.findOne({ _id: bom.product, ...baseFilter }, null, { session });
+            if (!prod) {
+              const err = new Error(`Raw material not found: ${bom.productName}`);
+              err.statusCode = 400;
+              throw err;
+            }
+            const qtyNeeded = bom.quantity * producedQty;
+            if (prod.stock < qtyNeeded) {
+              const err = new Error(`Insufficient stock for ${prod.name}. Available: ${prod.stock}, Required: ${qtyNeeded}`);
+              err.statusCode = 400;
+              throw err;
+            }
+            const balBefore = prod.stock;
+            await Product.findOneAndUpdate({ _id: bom.product, ...baseFilter }, { $inc: { stock: -qtyNeeded } }, { new: true, session });
+            await StockMovement.create([{
+              user: req.user._id,
+              business: req.businessId,
+              product: bom.product,
+              productName: bom.productName || prod.name,
+              type: 'manufacturing',
+              quantity: -qtyNeeded,
+              balanceBefore: balBefore,
+              balanceAfter: balBefore - qtyNeeded,
+              rate: bom.costPerUnit,
+              totalAmount: qtyNeeded * bom.costPerUnit,
+              referenceType: 'Manufacturing',
+              referenceId: order._id,
+              referenceNumber: order.orderNumber,
+              description: `Manufacturing ${order.orderNumber} - raw material consumed`,
+              date: new Date(),
+            }], { session });
+          }
         }
-        const balBefore = prod.stock;
-        await Product.findOneAndUpdate({ _id: bom.product, ...baseFilter }, { $inc: { stock: -qtyNeeded } }, { new: true });
-        await StockMovement.create({
-          user: req.user._id,
-          business: req.businessId,
-          product: bom.product,
-          productName: bom.productName || prod.name,
-          type: 'manufacturing',
-          quantity: -qtyNeeded,
-          balanceBefore: balBefore,
-          balanceAfter: balBefore - qtyNeeded,
-          rate: bom.costPerUnit,
-          totalAmount: qtyNeeded * bom.costPerUnit,
-          referenceType: 'Manufacturing',
-          referenceId: order._id,
-          referenceNumber: order.orderNumber,
-          description: `Manufacturing ${order.orderNumber} - raw material consumed`,
-          date: new Date(),
-        });
-      }
-    }
 
-    const finishedProd = await Product.findOne({ _id: order.finishedProduct, ...baseFilter });
-    if (finishedProd) {
-      const balBefore = finishedProd.stock;
-      await Product.findOneAndUpdate({ _id: order.finishedProduct, ...baseFilter }, { $inc: { stock: producedQty } }, { new: true });
-      await StockMovement.create({
-        user: req.user._id,
-        business: req.businessId,
-        product: order.finishedProduct,
-        productName: order.finishedProductName || finishedProd.name,
-        type: 'manufacturing',
-        quantity: producedQty,
-        balanceBefore: balBefore,
-        balanceAfter: balBefore + producedQty,
-        rate: order.costPerUnit,
-        totalAmount: producedQty * order.costPerUnit,
-        referenceType: 'Manufacturing',
-        referenceId: order._id,
-        referenceNumber: order.orderNumber,
-        description: `Manufacturing ${order.orderNumber} - finished goods produced`,
-        date: new Date(),
+        const finishedProd = await Product.findOne({ _id: order.finishedProduct, ...baseFilter }, null, { session });
+        if (finishedProd) {
+          const balBefore = finishedProd.stock;
+          await Product.findOneAndUpdate({ _id: order.finishedProduct, ...baseFilter }, { $inc: { stock: producedQty } }, { new: true, session });
+          await StockMovement.create([{
+            user: req.user._id,
+            business: req.businessId,
+            product: order.finishedProduct,
+            productName: order.finishedProductName || finishedProd.name,
+            type: 'manufacturing',
+            quantity: producedQty,
+            balanceBefore: balBefore,
+            balanceAfter: balBefore + producedQty,
+            rate: order.costPerUnit,
+            totalAmount: producedQty * order.costPerUnit,
+            referenceType: 'Manufacturing',
+            referenceId: order._id,
+            referenceNumber: order.orderNumber,
+            description: `Manufacturing ${order.orderNumber} - finished goods produced`,
+            date: new Date(),
+          }], { session });
+        }
+
+        order.producedQuantity = producedQty;
+        order.status = 'completed';
+        order.completedDate = new Date();
+        order.updatedBy = req.user.name || req.user.email;
+        await order.save({ session });
       });
+    } catch (txErr) {
+      if (txErr.statusCode === 400) {
+        return res.status(400).json({ message: txErr.message });
+      }
+      throw txErr;
     }
-
-    order.producedQuantity = producedQty;
-    order.status = 'completed';
-    order.completedDate = new Date();
-    order.updatedBy = req.user.name || req.user.email;
-    await order.save();
 
     res.json(order);
   } catch (error) {

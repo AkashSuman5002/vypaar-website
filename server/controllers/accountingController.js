@@ -7,6 +7,7 @@ const Transaction = require('../models/Transaction');
 const Expense = require('../models/Expense');
 const Setting = require('../models/Setting');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { withTransaction } = require('../utils/withTransaction');
 
 // Seed default chart of accounts for a new user+business (runs once per user+business)
 const seedAccounts = async (userId, businessId) => {
@@ -121,9 +122,10 @@ const getAccounts = async (req, res) => {
       const balance = hasJournalEntries
         ? (['asset', 'expense'].includes(acc.type) ? totalDebit - totalCredit : totalCredit - totalDebit)
         : acc.balance;
-      if (hasJournalEntries && Math.abs(acc.balance - balance) > 0.01) {
-        await Account.findByIdAndUpdate({ _id: acc._id, user: req.user._id, business: req.businessId || undefined }, { balance });
-      }
+      // NOTE: GETs must not write. We return the JE-computed balance in the
+      // response without persisting it (previously self-healed via
+      // findByIdAndUpdate outside any transaction). Stored balances are kept
+      // correct by the $inc updates in sale/purchase/payment create handlers.
       accountsWithBalance.push({ ...acc.toObject(), balance });
     }
     res.json(accountsWithBalance);
@@ -132,8 +134,14 @@ const getAccounts = async (req, res) => {
   }
 };
 
-const postJournalEntry = async (userId, entry, businessId) => {
-  const setting = await Setting.findOne({ user: userId });
+// Posts a balanced journal entry and applies the per-account balance deltas.
+// When `session` is provided every write joins that transaction so the JE row and
+// the account balances commit atomically (no partial / unbalanced ledger). When
+// called standalone (session === null) the caller is responsible for wrapping it
+// in withTransaction — see createJournalEntry.
+const postJournalEntry = async (userId, entry, businessId, session = null) => {
+  const opts = session ? { session } : {};
+  const setting = await Setting.findOne({ user: userId }, null, opts);
   if (setting?.preferences?.accounting?.allowJournalEntries === false) {
     throw new Error('Journal entries are disabled in settings');
   }
@@ -144,7 +152,8 @@ const postJournalEntry = async (userId, entry, businessId) => {
     throw new Error(`Debit (${totalDebit}) != Credit (${totalCredit})`);
   }
 
-  const je = await JournalEntry.create({
+  // create([...]) array form is required to pass a session; it returns an array.
+  const [je] = await JournalEntry.create([{
     user: userId,
     business: businessId,
     entryNumber: entry.entryNumber,
@@ -166,10 +175,14 @@ const postJournalEntry = async (userId, entry, businessId) => {
     totalCredit,
     isPosted: true,
     postedAt: new Date(),
-  });
+  }], opts);
 
   for (const line of entry.lines) {
-    const account = await Account.findOne({ _id: line.account, user: userId, business: businessId || undefined });
+    const account = await Account.findOne(
+      { _id: line.account, user: userId, business: businessId || undefined },
+      null,
+      opts,
+    );
     if (!account) continue;
     let balanceChange = 0;
     if (['asset', 'expense'].includes(account.type)) {
@@ -181,7 +194,7 @@ const postJournalEntry = async (userId, entry, businessId) => {
     // (The previous call passed a filter object to findByIdAndUpdate, which expects an
     // id — Mongoose tried to cast the object to an ObjectId and threw, failing the
     // whole journal entry and never updating account balances.)
-    await Account.updateOne({ _id: account._id }, { $inc: { balance: balanceChange } });
+    await Account.updateOne({ _id: account._id }, { $inc: { balance: balanceChange } }, opts);
   }
 
   return je;
@@ -463,10 +476,11 @@ const createJournalEntry = async (req, res) => {
     }
     const userId = req.user._id;
     const { entryNumber, entryDate, narration, referenceType, lines } = req.body;
-    const je = await postJournalEntry(userId, {
+    // Atomic: the JE row and every account balance delta commit together.
+    const je = await withTransaction((session) => postJournalEntry(userId, {
       entryNumber, entryDate, narration, referenceType: referenceType || 'journal',
       description: narration, lines,
-    }, req.businessId);
+    }, req.businessId, session));
     res.status(201).json(je);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -582,9 +596,10 @@ const createAccount = async (req, res) => {
 const updateAccount = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const { name, code, type, category, group, parent, description, metadata, isActive, balance } = req.body;
+    const { name, code, type, category, group, parent, description, metadata, isActive } = req.body;
+    // `balance` is intentionally NOT accepted here. Account balances must only change
+    // via journal entries (postJournalEntry) to preserve double-entry integrity.
     const update = { name, code, type, category, group, parent, description, metadata, isActive };
-    if (balance !== undefined) update.balance = parseFloat(balance) || 0;
     const account = await Account.findOneAndUpdate(
       { _id: req.params.id, ...baseFilter },
       { $set: update },

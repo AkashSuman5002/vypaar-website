@@ -89,7 +89,7 @@ const Customers = () => {
       await customerAPI.delete(id);
       toast.success('Customer deleted');
       loadCustomers();
-    } catch { toast.error('Delete failed'); }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Delete failed'); }
   };
 
   const openEdit = (customer) => {
@@ -135,7 +135,7 @@ const Customers = () => {
       ),
     },
     { key: 'phone', label: 'Phone', render: (v) => <span className="text-slate-600 dark:text-slate-400">{v}</span> },
-    { key: 'openingBalance', label: 'Opening Balance', render: (v) => <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(v)}</span> },
+    { key: 'openingBalance', label: 'Outstanding', render: (v) => <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(v)}</span> },
     {
       key: 'actions', label: '',
       render: (_, row) => (

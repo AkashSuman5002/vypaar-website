@@ -409,7 +409,7 @@ const Products = () => {
       await productAPI.delete(id);
       toast.success('Item deleted');
       loadProducts();
-    } catch { toast.error('Delete failed'); }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Delete failed'); }
   };
 
   const handleDuplicate = async (product) => {

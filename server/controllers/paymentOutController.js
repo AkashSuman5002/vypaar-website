@@ -80,18 +80,19 @@ const createPaymentOut = async (req, res) => {
             }),
           ], { session });
           const accIds = jeLines.map(l => l.account);
-          const accounts = await Account.find({ _id: { $in: accIds }, user: req.user._id });
+          const accounts = await Account.find({ _id: { $in: accIds }, ...baseFilter });
           const accMap = new Map(accounts.map(a => [a._id.toString(), a]));
           const balanceOps = jeLines.map(line => {
             const acc = accMap.get(line.account.toString());
             if (!acc) return null;
             const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
-            return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
+            return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: change } } } };
           }).filter(Boolean);
           if (balanceOps.length > 0) await Account.bulkWrite(balanceOps, { session });
         }
       } catch (jeErr) {
         console.error('Failed to create journal entry for payment out:', jeErr.message);
+        throw jeErr;
       }
 
       return created;
@@ -119,7 +120,7 @@ const createPaymentOut = async (req, res) => {
 
     // Send email/SMS if supplier info available
     if (partyId) {
-      const supplier = await Supplier.findOne({ _id: partyId, user: req.user._id });
+      const supplier = await Supplier.findOne({ _id: partyId, ...baseFilter });
       if (supplier) {
         const payMsg = `Payment of Rs.${amount.toFixed(2)} sent to ${partyName || 'supplier'}`;
         if (supplier.email) {
@@ -144,46 +145,145 @@ const createPaymentOut = async (req, res) => {
   }
 };
 
+// Reverses the supplier-balance, journal-entry and account-balance effects of a
+// payment-out doc inside the given transaction `session`. Used by both delete and
+// update (update reverses the old effects then re-applies the new ones).
+const reversePaymentOutEffects = async (payment, baseFilter, session) => {
+  // Reverse supplier balance. ALWAYS prefer the stored stable supplier id
+  // (referenceId) that create decremented. Only fall back to a name match when
+  // NO id is present (legacy docs) — name matching can mis-credit renamed/
+  // duplicate suppliers, so it is strictly scoped and logged.
+  if (payment.partyType === 'supplier' && payment.referenceId) {
+    await Supplier.findOneAndUpdate({ _id: payment.referenceId, ...baseFilter }, { $inc: { openingBalance: payment.amount } }, { session });
+  } else if (payment.partyType === 'supplier' && payment.partyName) {
+    console.warn(`[paymentOut] Reversing legacy payment ${payment._id} by supplier NAME "${payment.partyName}" (no stored supplier id); scoped by baseFilter.`);
+    const supplier = await Supplier.findOne({ ...baseFilter, name: payment.partyName }, null, { session });
+    if (supplier) {
+      await Supplier.findOneAndUpdate({ _id: supplier._id, ...baseFilter }, { $inc: { openingBalance: payment.amount } }, { session });
+    }
+  }
+
+  // Reverse journal entry
+  try {
+    const oldJE = await JournalEntry.findOne({ referenceType: 'PaymentOut', referenceId: payment._id, ...baseFilter }, null, { session });
+    if (oldJE) {
+      const jeAccIds = oldJE.lines.filter(l => l.account).map(l => l.account);
+      const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, ...baseFilter }, null, { session });
+      const jeAccMap = new Map(jeAccounts.map(a => [a._id.toString(), a]));
+      const reverseOps = oldJE.lines.filter(l => l.account).map(line => {
+        const acc = jeAccMap.get(line.account.toString());
+        if (!acc) return null;
+        const change = ['asset', 'expense'].includes(acc.type) ? -(line.debit - line.credit) : -(line.credit - line.debit);
+        return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: change } } } };
+      }).filter(Boolean);
+      if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
+      await JournalEntry.findOneAndDelete({ _id: oldJE._id, ...baseFilter }, { session });
+    }
+  } catch (jeErr) {
+    console.error('Failed to reverse journal entry for payment out:', jeErr.message);
+    throw jeErr;
+  }
+};
+
+// Applies the supplier-balance, journal-entry and account-balance effects of a
+// payment-out inside the given transaction `session`. Mirrors createPaymentOut's
+// side-effects so update can re-apply with the new values. Returns the JE (if any).
+const applyPaymentOutEffects = async ({ req, baseFilter, transaction, amount, description, date, paymentMethod, partyName, partyId, partyType }, session) => {
+  // Update supplier opening balance
+  if (partyId && (partyType || 'supplier') === 'supplier') {
+    await Supplier.findOneAndUpdate({ _id: partyId, ...baseFilter }, { $inc: { openingBalance: -amount } }, { session });
+  }
+
+  // Create journal entry
+  const payableAccount = await Account.findOne({ ...baseFilter, code: '2001' }, null, { session });
+  const cashBankCode = paymentMethod === 'cash' ? '1001' : '1002';
+  const cashBankAccount = await Account.findOne({ ...baseFilter, code: cashBankCode }, null, { session });
+  if (payableAccount && cashBankAccount) {
+    const jeLines = [
+      { account: payableAccount._id, accountName: payableAccount.name, accountType: payableAccount.type, debit: amount, credit: 0 },
+      { account: cashBankAccount._id, accountName: cashBankAccount.name, accountType: cashBankAccount.type, debit: 0, credit: amount },
+    ];
+    await JournalEntry.create([
+      getCreateData(req, {
+        entryNumber: `JE-POUT-${transaction._id}`,
+        entryDate: date || new Date(),
+        referenceType: 'PaymentOut',
+        referenceId: transaction._id,
+        lines: jeLines,
+        totalDebit: amount,
+        totalCredit: amount,
+        narration: `Payment out: ${description || partyName || 'supplier'}`,
+        isPosted: true,
+        postedAt: new Date(),
+      }),
+    ], { session });
+    const accIds = jeLines.map(l => l.account);
+    const accounts = await Account.find({ _id: { $in: accIds }, ...baseFilter }, null, { session });
+    const accMap = new Map(accounts.map(a => [a._id.toString(), a]));
+    const balanceOps = jeLines.map(line => {
+      const acc = accMap.get(line.account.toString());
+      if (!acc) return null;
+      const change = ['asset', 'expense'].includes(acc.type) ? line.debit - line.credit : line.credit - line.debit;
+      return { updateOne: { filter: { _id: line.account, ...baseFilter }, update: { $inc: { balance: change } } } };
+    }).filter(Boolean);
+    if (balanceOps.length > 0) await Account.bulkWrite(balanceOps, { session });
+  }
+};
+
+const updatePaymentOut = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const existing = await Transaction.findOne({ _id: req.params.id, ...baseFilter, type: { $in: ['cash_out', 'bank_out'] } });
+    if (!existing) return res.status(404).json({ message: 'Payment not found' });
+
+    const { amount, description, date, paymentMethod, partyName, partyType, reference, partyId } = req.body;
+    const txnType = paymentMethod === 'cash' ? 'cash_out' : 'bank_out';
+
+    const updated = await withTransaction(async (session) => {
+      // 1. Reverse all old effects (supplier balance, JE, account balances).
+      await reversePaymentOutEffects(existing, baseFilter, session);
+
+      // 2. Update the transaction document in place with the new values.
+      existing.type = txnType;
+      existing.amount = amount;
+      existing.description = description || 'Payment out';
+      existing.date = date || existing.date || new Date();
+      existing.reference = reference || '';
+      existing.partyName = partyName || '';
+      existing.partyType = partyType || 'supplier';
+      existing.referenceId = (partyId && (partyType || 'supplier') === 'supplier') ? partyId : undefined;
+      await existing.save({ session });
+
+      // 3. Re-apply the new effects mirroring create.
+      await applyPaymentOutEffects({
+        req, baseFilter, transaction: existing,
+        amount, description, date, paymentMethod, partyName, partyId, partyType,
+      }, session);
+
+      return existing;
+    });
+
+    createNotification(req.user._id, 'payment_out', 'Payment Updated',
+      `Payment to ${partyName || 'supplier'} updated to Rs.${Number(amount).toFixed(2)}`,
+      updated._id, 'PaymentOut'
+    ).catch(() => {});
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const deletePaymentOut = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
-    const payment = await Transaction.findOne({ _id: req.params.id, user: req.user._id });
+    const payment = await Transaction.findOne({ _id: req.params.id, ...baseFilter });
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
 
     await withTransaction(async (session) => {
-      await Transaction.findOneAndDelete({ _id: req.params.id, user: req.user._id }, { session });
+      await Transaction.findOneAndDelete({ _id: req.params.id, ...baseFilter }, { session });
 
-      // Reverse supplier balance using the SAME stable id create decremented (stored on referenceId).
-      // Exact opposite of create's $inc: { openingBalance: -amount }.
-      if (payment.partyType === 'supplier' && payment.referenceId) {
-        await Supplier.findOneAndUpdate({ _id: payment.referenceId, ...baseFilter }, { $inc: { openingBalance: payment.amount } }, { session });
-      } else if (payment.partyType === 'supplier' && payment.partyName) {
-        // NOTE: legacy doc has no stored supplier id; fall back to name lookup (may mis-credit duplicate/renamed suppliers).
-        const supplier = await Supplier.findOne({ ...baseFilter, name: payment.partyName });
-        if (supplier) {
-          await Supplier.findByIdAndUpdate(supplier._id, { $inc: { openingBalance: payment.amount } }, { session });
-        }
-      }
-
-      // Reverse journal entry
-      try {
-        const oldJE = await JournalEntry.findOne({ referenceType: 'PaymentOut', referenceId: payment._id, user: req.user._id });
-        if (oldJE) {
-          const jeAccIds = oldJE.lines.filter(l => l.account).map(l => l.account);
-          const jeAccounts = await Account.find({ _id: { $in: jeAccIds }, user: req.user._id });
-          const jeAccMap = new Map(jeAccounts.map(a => [a._id.toString(), a]));
-          const reverseOps = oldJE.lines.filter(l => l.account).map(line => {
-            const acc = jeAccMap.get(line.account.toString());
-            if (!acc) return null;
-            const change = ['asset', 'expense'].includes(acc.type) ? -(line.debit - line.credit) : -(line.credit - line.debit);
-            return { updateOne: { filter: { _id: line.account, user: req.user._id }, update: { $inc: { balance: change } } } };
-          }).filter(Boolean);
-          if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
-          await JournalEntry.findOneAndDelete({ _id: oldJE._id, user: req.user._id }, { session });
-        }
-      } catch (jeErr) {
-        console.error('Failed to reverse journal entry for payment out:', jeErr.message);
-      }
+      await reversePaymentOutEffects(payment, baseFilter, session);
     });
 
     createNotification(req.user._id, 'payment_out_deleted', 'Payment Removed',
@@ -197,4 +297,4 @@ const deletePaymentOut = async (req, res) => {
   }
 };
 
-module.exports = { getPaymentOuts, createPaymentOut, deletePaymentOut };
+module.exports = { getPaymentOuts, createPaymentOut, updatePaymentOut, deletePaymentOut };

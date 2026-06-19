@@ -397,7 +397,7 @@ const Dashboard = () => {
               <BarChart3 className="w-4 h-4 text-slate-400" />
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Recent Transactions</h3>
             </div>
-            <Link to="/cash-bank" className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700">View all</Link>
+            <Link to="/sales" className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700">View all</Link>
           </div>
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full text-sm">

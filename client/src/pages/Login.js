@@ -34,12 +34,15 @@ const redirectFor = (data) => {
 };
 
 const Login = () => {
-  const [step, setStep] = useState('identifier'); // 'identifier' | 'otp'
+  const [step, setStep] = useState('identifier'); // 'identifier' | 'otp' | '2fa'
   const [identifier, setIdentifier] = useState('');
   const [otp, setOtp] = useState('');
   const [devOtp, setDevOtp] = useState('');
   const [loading, setLoading] = useState(false);
-  const { loginOtp, loginVerify } = useAuth();
+  // Set when the primary login (OTP) succeeds but the account has 2FA enabled.
+  const [twoFactorUserId, setTwoFactorUserId] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const { loginOtp, loginVerify, loginTwoFactor } = useAuth();
   const navigate = useNavigate();
 
   const handleSendOtp = async (e) => {
@@ -67,10 +70,30 @@ const Login = () => {
     setLoading(true);
     try {
       const data = await loginVerify({ identifier: identifier.trim(), otp });
+      // Account has 2FA enabled: no session yet — prompt for the authenticator code.
+      if (data?.twoFactorRequired) {
+        setTwoFactorUserId(data.userId);
+        setStep('2fa');
+        toast.info('Enter the code from your authenticator app');
+        return;
+      }
       toast.success('Login successful');
       navigate(redirectFor(data));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Login failed');
+    } finally { setLoading(false); }
+  };
+
+  const handleVerifyTwoFactor = async (e) => {
+    e.preventDefault();
+    if (!twoFactorCode || twoFactorCode.length !== 6) return toast.error('Enter the 6-digit code');
+    setLoading(true);
+    try {
+      const data = await loginTwoFactor({ userId: twoFactorUserId, token: twoFactorCode });
+      toast.success('Login successful');
+      navigate(redirectFor(data));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid authentication code');
     } finally { setLoading(false); }
   };
 
@@ -82,13 +105,38 @@ const Login = () => {
         <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
           {step === 'identifier' ? <LogIn className="w-6 h-6 text-white" /> : <ShieldCheck className="w-6 h-6 text-white" />}
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{step === 'identifier' ? 'Welcome back' : 'Enter your code'}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          {step === 'identifier' ? 'Welcome back' : step === '2fa' ? 'Two-factor authentication' : 'Enter your code'}
+        </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1.5 text-sm">
-          {step === 'identifier' ? 'Sign in with your email or phone' : `We sent a code to ${identifier}`}
+          {step === 'identifier'
+            ? 'Sign in with your email or phone'
+            : step === '2fa'
+              ? 'Enter the 6-digit code from your authenticator app'
+              : `We sent a code to ${identifier}`}
         </p>
       </div>
 
-      {step === 'identifier' ? (
+      {step === '2fa' ? (
+        <form onSubmit={handleVerifyTwoFactor} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Authentication Code</label>
+            <div className="relative">
+              <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+              <input type="text" inputMode="numeric" value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                required placeholder="6-digit code" maxLength={6} className={inputCls + ' tracking-widest'} autoFocus />
+            </div>
+          </div>
+          <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors disabled:opacity-50 shadow-sm">
+            {loading ? 'Verifying...' : 'Verify & Sign In'}
+          </button>
+          <button type="button" onClick={() => { setStep('identifier'); setOtp(''); setDevOtp(''); setTwoFactorCode(''); setTwoFactorUserId(''); }}
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to login
+          </button>
+        </form>
+      ) : step === 'identifier' ? (
         <form onSubmit={handleSendOtp} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Email or Phone</label>

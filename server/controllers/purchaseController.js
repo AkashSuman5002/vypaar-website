@@ -7,7 +7,22 @@ const JournalEntry = require('../models/JournalEntry');
 const StockMovement = require('../models/StockMovement');
 const Setting = require('../models/Setting');
 const { withTransaction } = require('../utils/withTransaction');
+const { getNextSequence } = require('../utils/nextNumber');
 const { recordStockMovement } = require('./stockController');
+
+// Seed value = current max numeric BILL- bill number for this tenant (prefix
+// stripped). Used only to seed the counter on its first use over existing data.
+const PURCHASE_BILL_PREFIX = 'BILL-';
+const maxPurchaseBillSeq = async (baseFilter) => {
+  const all = await Purchase.find(baseFilter).select('billNumber').lean();
+  let max = 0;
+  for (const p of all) {
+    if (!p.billNumber || !String(p.billNumber).startsWith(PURCHASE_BILL_PREFIX)) continue;
+    const num = parseInt(String(p.billNumber).slice(PURCHASE_BILL_PREFIX.length), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  return max;
+};
 const { getBaseFilter, getCreateData, getSettingQuery } = require('../utils/queryHelper');
 const { createNotification } = require('../controllers/notificationController');
 const { sendAutoMessage } = require('../services/messageService');
@@ -47,9 +62,11 @@ const createPurchase = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const {
-      supplier, supplierName, billNumber, date, dueDate, items,
+      supplier, supplierName, date, dueDate, items,
       paidAmount, paymentStatus, paymentMethod, notes, isInterState,
     } = req.body;
+    // billNumber is reassigned when omitted (atomic counter), so it must be mutable.
+    let billNumber = req.body.billNumber;
     // totalAmount is reassigned later (TCS/TDS, rounding), so it must be mutable.
     let totalAmount = req.body.totalAmount;
 
@@ -170,15 +187,25 @@ const createPurchase = async (req, res) => {
       if (roundOff !== 0) totalAmount = Math.round(totalAmount);
     }
 
-    // Movements to record AFTER the transaction commits. recordStockMovement
-    // lives in stockController and does not accept a session, so it cannot
-    // participate in this transaction; we collect the movement payloads here
-    // and replay them once the atomic writes have committed.
+    // Movements are recorded INSIDE the transaction now that recordStockMovement
+    // accepts a session, so the stock ledger rows commit atomically with the
+    // Product.stock bulkWrite and purchase.save.
     let purchaseMovements = [];
 
     const purchase = await withTransaction(async (session) => {
-      // Reset on each (possibly retried) attempt so the post-commit replay is not duplicated.
+      // Reset on each (possibly retried) attempt so movements are not duplicated.
       purchaseMovements = [];
+      // Honor a client-supplied bill number; otherwise allocate one atomically from
+      // the per-tenant counter inside this transaction (no read-max-then-+1 race).
+      // The transaction may retry, so re-resolve each attempt before building the doc.
+      if (!req.body.billNumber) {
+        const billSeq = await getNextSequence(
+          { user: req.user._id, business: req.businessId },
+          'purchase_bill',
+          { session, seedFn: () => maxPurchaseBillSeq(baseFilter) },
+        );
+        billNumber = `${PURCHASE_BILL_PREFIX}${String(billSeq).padStart(6, '0')}`;
+      }
       const purchase = new Purchase({
         user: req.user._id,
         business: req.businessId,
@@ -240,7 +267,7 @@ const createPurchase = async (req, res) => {
         if (prod) {
           purchaseStockOps.push({
             updateOne: {
-              filter: { _id: prod._id, user: req.user._id },
+              filter: { _id: prod._id, ...baseFilter },
               update: { $inc: { stock: item.quantity } }
             }
           });
@@ -272,7 +299,7 @@ const createPurchase = async (req, res) => {
           if (item.serialNo) {
             serialNumberOps.push({
               updateOne: {
-                filter: { _id: prod._id, user: req.user._id },
+                filter: { _id: prod._id, ...baseFilter },
                 update: { $addToSet: { serialNumbers: item.serialNo } }
               }
             });
@@ -285,13 +312,19 @@ const createPurchase = async (req, res) => {
       }
       if (serialNumberOps.length > 0) await Product.bulkWrite(serialNumberOps, { session });
 
+      // Record stock-movement ledger rows inside the transaction so they commit
+      // atomically with the Product.stock change above.
+      for (const movement of purchaseMovements) {
+        await recordStockMovement({ ...movement, session });
+      }
+
       // Auto-update sale price if setting enabled
       if (setting?.preferences?.item?.updateSalePriceAuto) {
         const purchasePriceOps = processedItems
           .filter(item => item.product && item.rate)
           .map(item => ({
             updateOne: {
-              filter: { _id: item.product, user: req.user._id },
+              filter: { _id: item.product, ...baseFilter },
               update: { $set: { price: item.rate } }
             }
           }));
@@ -386,17 +419,12 @@ const createPurchase = async (req, res) => {
           if (purchaseBalanceOps.length > 0) await Account.bulkWrite(purchaseBalanceOps, { session });
         } catch (jeErr) {
           console.error('Failed to create journal entry for purchase:', jeErr.message);
+          throw jeErr;
         }
       }
 
       return purchase;
     });
-
-    // External / non-atomic side effects run AFTER the transaction commits.
-    // recordStockMovement cannot accept a session, so it runs here.
-    for (const movement of purchaseMovements) {
-      await recordStockMovement(movement);
-    }
 
     createNotification(req.user._id, 'new_purchase', 'New Purchase Created',
       `Purchase from ${supplierName || 'supplier'} for Rs.${purchase.totalAmount?.toFixed(2) || '0'}`,
@@ -684,6 +712,7 @@ const updatePurchase = async (req, res) => {
           }
         } catch (jeErr) {
           console.error('Failed to adjust journal entry on purchase update:', jeErr.message);
+          throw jeErr;
         }
       }
 
@@ -731,11 +760,33 @@ const deletePurchase = async (req, res) => {
         .filter(item => item.product && !deleteServiceIds.has(item.product.toString()))
         .map(item => ({
           updateOne: {
-            filter: { _id: item.product, user: req.user._id },
+            filter: { _id: item.product, ...baseFilter },
             update: { $inc: { stock: -item.quantity } }
           }
         }));
       if (deletePOps.length > 0) await Product.bulkWrite(deletePOps, { session });
+
+      // Write StockMovement reversal rows so the ledger reconciles after delete.
+      // recordStockMovement reads the (already-decremented) product stock inside
+      // this session and writes a signed adjustment row atomically.
+      for (const item of purchase.items) {
+        if (!item.product || deleteServiceIds.has(item.product.toString())) continue;
+        await recordStockMovement({
+          userId: req.user._id,
+          businessId: req.businessId,
+          productId: item.product,
+          productName: item.productName || '',
+          type: 'adjustment',
+          quantity: -item.quantity,
+          rate: item.rate || 0,
+          totalAmount: item.amount || 0,
+          referenceType: 'purchase',
+          referenceId: purchase._id,
+          referenceNumber: purchase.billNumber || String(purchase._id),
+          description: `Purchase delete reversal for ${purchase.supplierName || ''}`.trim(),
+          session,
+        });
+      }
 
       // Reverse supplier opening balance for the unpaid portion added at creation
       if (purchase.supplier) {
@@ -759,17 +810,22 @@ const deletePurchase = async (req, res) => {
             if (!acc) return null;
             return {
               updateOne: {
-                filter: { _id: line.account, user: req.user._id },
+                filter: { _id: line.account, ...baseFilter },
                 update: { $inc: { balance: line.debit ? -line.debit : line.credit } }
               }
             };
           }).filter(Boolean);
           if (delReverseOps.length > 0) await Account.bulkWrite(delReverseOps, { session });
-          await JournalEntry.findOneAndDelete({ _id: journalEntry._id, user: req.user._id }, { session });
+          await JournalEntry.findOneAndDelete({ _id: journalEntry._id, ...baseFilter }, { session });
         }
       } catch (jeErr) {
         console.error('Failed to reverse journal entry on purchase delete:', jeErr.message);
+        throw jeErr;
       }
+
+      // Remove the linked payment Transaction record(s) created in createPurchase,
+      // otherwise a phantom cash/bank payment lingers after the purchase is deleted.
+      await Transaction.deleteMany({ ...baseFilter, referenceModel: 'Purchase', referenceId: purchase._id }, { session });
 
       await Purchase.findOneAndDelete({ _id: req.params.id, ...getBaseFilter(req) }, { session });
     });

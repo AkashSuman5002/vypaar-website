@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const partyToPartyTransferSchema = mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },
   transferNumber: { type: String },
   fromPartyType: { type: String, enum: ['customer', 'supplier'], required: true },
   fromParty: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -13,5 +14,8 @@ const partyToPartyTransferSchema = mongoose.Schema({
   date: { type: Date, default: Date.now },
   notes: { type: String },
 }, { timestamps: true });
+
+partyToPartyTransferSchema.index({ user: 1, createdAt: -1 });
+partyToPartyTransferSchema.index({ business: 1, createdAt: -1 });
 
 module.exports = mongoose.model('PartyToPartyTransfer', partyToPartyTransferSchema);

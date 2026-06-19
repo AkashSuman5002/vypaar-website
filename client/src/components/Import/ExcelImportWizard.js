@@ -201,30 +201,14 @@ const ExcelImportWizard = ({ onComplete }) => {
   const handleImport = async () => {
     setImporting(true);
     setStep(5);
+    // Honest indeterminate progress: we can't know server-side percentage, so we
+    // show an animated indeterminate bar while the request is in flight and only
+    // report 100% once the awaited request actually resolves.
     setImportProgress(0);
+    setImportTask('Processing…');
 
     try {
       const filesPayload = REQUIRED_TYPES.filter(t => parsedData[t] && parsedData[t].length > 0).map(t => ({ type: t, data: parsedData[t], columns: Object.keys(parsedData[t][0] || {}) }));
-
-      setImportProgress(10);
-      setImportTask('Uploading data...');
-      await new Promise(r => setTimeout(r, 500));
-
-      setImportProgress(25);
-      setImportTask('Validating records...');
-      await new Promise(r => setTimeout(r, 500));
-
-      setImportProgress(40);
-      setImportTask('Importing customers & suppliers...');
-
-      setImportProgress(55);
-      setImportTask('Importing products...');
-
-      setImportProgress(70);
-      setImportTask('Importing sales & purchases...');
-
-      setImportProgress(85);
-      setImportTask('Importing expenses & stock...');
 
       const res = await importAPI.excelExecute({
         files: filesPayload,
@@ -516,11 +500,21 @@ const ExcelImportWizard = ({ onComplete }) => {
               <div className="max-w-md mx-auto space-y-6">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-400">{importTask}</span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>
+                    <span className="text-slate-600 dark:text-slate-400">{importing ? 'Processing…' : importTask}</span>
+                    {!importing && <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>}
                   </div>
                   <div className="h-3 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.5 }} className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full" />
+                    {importing ? (
+                      // Indeterminate bar: a segment slides back and forth while the
+                      // real request is in flight (we have no true percentage).
+                      <motion.div
+                        className="h-full w-1/3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"
+                        animate={{ x: ['-100%', '300%'] }}
+                        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                      />
+                    ) : (
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.4 }} className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full" />
+                    )}
                   </div>
                 </div>
                 <div className="flex justify-center">

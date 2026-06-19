@@ -1,5 +1,5 @@
 const express = require('express');
-const { getPaymentOuts, createPaymentOut, deletePaymentOut } = require('../controllers/paymentOutController');
+const { getPaymentOuts, createPaymentOut, updatePaymentOut, deletePaymentOut } = require('../controllers/paymentOutController');
 const { authorize } = require('../middleware/authorize');
 const router = express.Router();
 
@@ -8,6 +8,7 @@ router.route('/')
   .post(authorize('cashbank:manage'), createPaymentOut);
 
 router.route('/:id')
+  .put(authorize('cashbank:manage'), updatePaymentOut)
   .delete(authorize('cashbank:manage'), deletePaymentOut);
 
 module.exports = router;

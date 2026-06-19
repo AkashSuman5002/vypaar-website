@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatCurrency, formatDate } from '../utils/format';
 import {
-  Plus, Search, Trash2, X, ChevronLeft, ChevronRight,
+  Plus, Search, Trash2, Pencil, X, ChevronLeft, ChevronRight,
   Save, Share2, Loader2, Wallet, ChevronDown,
   StickyNote, Camera, MessageSquare, Mail, Link2,
   Calculator, Delete, Settings as SettingsIcon,
@@ -32,6 +32,7 @@ const PaymentOut = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const fileInputRef = useRef(null);
   const pageSize = 10;
 
@@ -90,7 +91,29 @@ const PaymentOut = () => {
   };
 
   const openAddModal = () => {
+    setEditingId(null);
     resetForm();
+    setShowModal(true);
+  };
+
+  const openEditModal = (p) => {
+    // Map payment method back to a display payment type for the form.
+    const displayType = p.paymentMethod === 'cash' ? 'Cash' : 'Bank';
+    // Resolve the supplier id from referenceId (stored on the transaction) or by name.
+    const matched = suppliers.find(s => s._id === (p.referenceId || p.partyId)) ||
+      suppliers.find(s => s.name === p.partyName);
+    setEditingId(p._id);
+    setForm({
+      party: matched?._id || '',
+      partyName: p.partyName || matched?.name || '',
+      paymentType: displayType,
+      receiptNo: p.reference || '',
+      date: p.date ? new Date(p.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      description: p.description === 'Payment out' ? '' : (p.description || ''),
+      paidAmount: p.amount != null ? String(p.amount) : '',
+    });
+    setAvailableTypes(prev => prev.includes(displayType) ? prev : [...prev, displayType]);
+    setShowDesc(false);
     setShowModal(true);
   };
 
@@ -112,6 +135,8 @@ const PaymentOut = () => {
     const methodForAPI = form.paymentType.toLowerCase() === 'cash' ? 'cash' : 'bank';
     const payload = {
       partyName: form.partyName,
+      partyId: form.party || undefined,
+      partyType: 'supplier',
       paymentMethod: methodForAPI,
       reference: form.receiptNo,
       date: form.date,
@@ -119,11 +144,19 @@ const PaymentOut = () => {
       amount: parseFloat(form.paidAmount) || 0,
     };
     try {
-      const res = await paymentOutAPI.create(payload);
-      const created = res.data.payment || res.data;
-      setPayments(prev => [...prev, created]);
-      toast.success('Payment recorded');
+      if (editingId) {
+        const res = await paymentOutAPI.update(editingId, payload);
+        const updated = res.data.payment || res.data;
+        setPayments(prev => prev.map(p => (p._id === editingId ? updated : p)));
+        toast.success('Payment updated');
+      } else {
+        const res = await paymentOutAPI.create(payload);
+        const created = res.data.payment || res.data;
+        setPayments(prev => [...prev, created]);
+        toast.success('Payment recorded');
+      }
       setShowModal(false);
+      setEditingId(null);
       resetForm();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to save payment');
@@ -228,6 +261,9 @@ const PaymentOut = () => {
                     <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900">{formatCurrency(p.amount)}</span></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEditModal(p)}
+                          className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"
+                        ><Pencil className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handleDelete(p._id)}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Delete"
                         ><Trash2 className="w-3.5 h-3.5" /></button>
@@ -263,7 +299,7 @@ const PaymentOut = () => {
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setShowModal(false); setEditingId(null); }}
             />
             <motion.div initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -272,7 +308,7 @@ const PaymentOut = () => {
             >
               {/* Title Row matching Vyapar */}
               <div className="flex items-center justify-between px-6 pt-5 pb-3">
-                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Payment-Out</h3>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{editingId ? 'Edit Payment-Out' : 'Payment-Out'}</h3>
                 <div className="flex items-center gap-1">
                   <button onClick={() => setShowCalculator(true)} className="p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors" title="Calculator">
                     <Calculator className="w-4 h-4" />
@@ -280,7 +316,7 @@ const PaymentOut = () => {
                   <button onClick={() => navigate('/settings?tab=transaction')} className="p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 rounded-lg transition-colors" title="Transaction Settings">
                     <SettingsIcon className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setShowModal(false)} className="p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors" title="Close">
+                  <button onClick={() => { setShowModal(false); setEditingId(null); }} className="p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors" title="Close">
                     <X className="w-4 h-4" />
                   </button>
                 </div>

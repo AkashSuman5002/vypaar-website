@@ -69,14 +69,8 @@ const ExportData = () => {
 
   const handleExcelExport = async () => {
     if (selectedModules.length === 0) { toast.error('Select at least one module'); return; }
-    setImporting(true); setStep(3); setImportProgress(0);
+    setImporting(true); setStep(3); setImportProgress(0); setImportTask('Processing…');
     try {
-      const steps = ['Preparing data...', 'Generating spreadsheets...', 'Compressing files...', 'Finalizing...'];
-      for (let i = 0; i < steps.length; i++) {
-        setImportTask(steps[i]);
-        setImportProgress((i + 1) * 25);
-        await new Promise(r => setTimeout(r, 400));
-      }
       const res = await exportAPI.excelExport({
         modules: selectedModules, format: exportFormat,
         dateFrom: dateFrom || undefined, dateTo: dateTo || undefined,
@@ -97,14 +91,8 @@ const ExportData = () => {
   };
 
   const handleBackupExport = async () => {
-    setImporting(true); setStep(3); setImportProgress(0);
+    setImporting(true); setStep(3); setImportProgress(0); setImportTask('Processing…');
     try {
-      const steps = ['Collecting business data...', 'Serializing records...', 'Compressing backup...', 'Preparing download...'];
-      for (let i = 0; i < steps.length; i++) {
-        setImportTask(steps[i]);
-        setImportProgress((i + 1) * 25);
-        await new Promise(r => setTimeout(r, 500));
-      }
       const res = await exportAPI.backupExport();
       downloadBlob(res.data, 'backup.zip');
       setImportProgress(100); setImportTask('Completed!');
@@ -119,14 +107,8 @@ const ExportData = () => {
   };
 
   const handleReportExport = async () => {
-    setImporting(true); setStep(3); setImportProgress(0);
+    setImporting(true); setStep(3); setImportProgress(0); setImportTask('Processing…');
     try {
-      const steps = ['Generating report...', 'Formatting data...', 'Preparing download...'];
-      for (let i = 0; i < steps.length; i++) {
-        setImportTask(steps[i]);
-        setImportProgress((i + 1) * 33);
-        await new Promise(r => setTimeout(r, 400));
-      }
       const res = await exportAPI.reportExport({
         reportType, format: reportFormat,
         dateFrom: dateFrom || undefined, dateTo: dateTo || undefined,
@@ -361,11 +343,15 @@ const ExportData = () => {
               </div>
               <div className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600 dark:text-slate-400">{importTask}</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>
+                  <span className="text-slate-600 dark:text-slate-400">{importing ? 'Processing…' : importTask}</span>
+                  {!importing && <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>}
                 </div>
                 <div className="h-3 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.5 }} className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full" />
+                  {importing ? (
+                    <motion.div className="h-full w-1/3 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
+                  ) : (
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.4 }} className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full" />
+                  )}
                 </div>
                 <div className="flex justify-center"><Loader2 className="w-8 h-8 text-emerald-600 animate-spin" /></div>
               </div>
@@ -449,11 +435,15 @@ const ExportData = () => {
               </div>
               <div className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600 dark:text-slate-400">{importTask || 'Collecting data...'}</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>
+                  <span className="text-slate-600 dark:text-slate-400">{importing ? 'Processing…' : (importTask || 'Collecting data...')}</span>
+                  {!importing && <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>}
                 </div>
                 <div className="h-3 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.5 }} className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full" />
+                  {importing ? (
+                    <motion.div className="h-full w-1/3 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
+                  ) : (
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.4 }} className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full" />
+                  )}
                 </div>
                 <div className="flex justify-center"><Loader2 className="w-8 h-8 text-indigo-600 animate-spin" /></div>
               </div>
@@ -554,11 +544,15 @@ const ExportData = () => {
               </div>
               <div className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600 dark:text-slate-400">{importTask}</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>
+                  <span className="text-slate-600 dark:text-slate-400">{importing ? 'Processing…' : importTask}</span>
+                  {!importing && <span className="font-medium text-slate-900 dark:text-slate-100">{importProgress}%</span>}
                 </div>
                 <div className="h-3 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.5 }} className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full" />
+                  {importing ? (
+                    <motion.div className="h-full w-1/3 bg-gradient-to-r from-amber-500 to-amber-600 rounded-full" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
+                  ) : (
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${importProgress}%` }} transition={{ duration: 0.4 }} className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full" />
+                  )}
                 </div>
                 <div className="flex justify-center"><Loader2 className="w-8 h-8 text-amber-600 animate-spin" /></div>
               </div>

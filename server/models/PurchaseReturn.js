@@ -42,5 +42,11 @@ const purchaseReturnSchema = mongoose.Schema({
 }, { timestamps: true });
 
 purchaseReturnSchema.index({ business: 1, createdAt: -1 });
+purchaseReturnSchema.index({ user: 1, createdAt: -1 });
+purchaseReturnSchema.index({ business: 1, returnNumber: 1 });
+// Per-tenant unique return number. partialFilterExpression constrains only non-empty
+// string returnNumbers (a compound `sparse` would not exclude nulls). Existing
+// duplicates must be cleaned before this index can build; failures are non-fatal.
+purchaseReturnSchema.index({ user: 1, business: 1, returnNumber: 1 }, { unique: true, partialFilterExpression: { returnNumber: { $type: 'string', $gt: '' } } });
 
 module.exports = mongoose.model('PurchaseReturn', purchaseReturnSchema);

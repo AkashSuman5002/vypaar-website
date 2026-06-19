@@ -15,9 +15,53 @@ const { sendPushNotification } = require('../services/pushNotificationService');
 const Transaction = require('../models/Transaction');
 const { getBaseFilter, getSettingQuery, getCreateData } = require('../utils/queryHelper');
 const { withTransaction } = require('../utils/withTransaction');
+const { getNextSequence } = require('../utils/nextNumber');
 const { isDateLocked } = require('../utils/financialYearLock');
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// Resolve the configured prefix for a sale TYPE (mirrors getNextInvoiceNumber /
+// the legacy collision-regeneration block so each series keeps its own format).
+const salePrefixForType = (setting, type) => {
+  const txnPrefs = setting?.preferences?.transaction || {};
+  if (type === 'order') return txnPrefs.saleOrderPrefix || 'SO-';
+  if (type === 'proforma') return txnPrefs.proformaPrefix || 'PRO-';
+  if (type === 'estimate' || type === 'quotation') return txnPrefs.estimatePrefix || 'EST-';
+  if (type === 'challan') return txnPrefs.deliveryChallanPrefix || 'DC-';
+  if (type === 'return' || type === 'credit_note') return txnPrefs.creditNotePrefix || 'CN-';
+  return txnPrefs.salePrefix || setting?.invoicePrefix || 'INV-';
+};
+
+// A stable counter key per sale TYPE so each series increments independently,
+// mirroring the prior behavior where the max was computed within { type }.
+const saleCounterKey = (type) => `sale_${type || 'invoice'}`;
+
+// Seed value = current max numeric portion of existing numbers for this tenant+type.
+// Strips the type's prefix so we compare the raw counter (reuses the legacy
+// max-scan query, just returning the integer instead of a formatted string).
+const maxSaleSeq = async (baseFilter, type, prefix) => {
+  const all = await Sale.find({ ...baseFilter, type: type || 'invoice' }).select('invoiceNumber').lean();
+  let max = 0;
+  for (const s of all) {
+    if (!s.invoiceNumber) continue;
+    const numStr = s.invoiceNumber.startsWith(prefix) ? s.invoiceNumber.slice(prefix.length) : s.invoiceNumber;
+    const num = parseInt(numStr, 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  return max;
+};
+
+// Allocate the next formatted sale number atomically for the given type.
+// Same prefix + 6-digit zero-pad format as the legacy code (e.g. INV-000001).
+const nextSaleNumber = async (req, baseFilter, setting, type, session) => {
+  const prefix = salePrefixForType(setting, type);
+  const seq = await getNextSequence(
+    { user: req.user._id, business: req.businessId },
+    saleCounterKey(type),
+    { session, seedFn: () => maxSaleSeq(baseFilter, type, prefix) },
+  );
+  return `${prefix}${String(seq).padStart(6, '0')}`;
+};
 
 /**
  * Recompute every monetary field server-side from authoritative inputs so the
@@ -457,28 +501,14 @@ const createSale = async (req, res) => {
       if (roundOff !== 0) totalAmount = Math.round(totalAmount);
     }
 
+    // Decide whether we must allocate a number from the atomic counter. We do so
+    // when no explicit number is supplied, OR when the supplied one collides with
+    // an existing sale of a compatible type. The actual allocation happens INSIDE
+    // the transaction (below) so the counter increments atomically with the insert.
+    let needsGeneratedNumber = !invoiceNumber;
     if (invoiceNumber) {
       const exists = await Sale.findOne({ ...baseFilter, invoiceNumber, type: { $in: [type || 'invoice', 'order', 'quotation', 'challan', 'estimate', 'proforma'] } });
-      if (exists) {
-        // Each transaction type regenerates against its own configured prefix.
-        const txnPrefs = setting?.preferences?.transaction || {};
-        let prefix;
-        if (type === 'order') prefix = txnPrefs.saleOrderPrefix || 'SO-';
-        else if (type === 'proforma') prefix = txnPrefs.proformaPrefix || 'PRO-';
-        else if (type === 'estimate' || type === 'quotation') prefix = txnPrefs.estimatePrefix || 'EST-';
-        else if (type === 'challan') prefix = txnPrefs.deliveryChallanPrefix || 'DC-';
-        else if (type === 'return' || type === 'credit_note') prefix = txnPrefs.creditNotePrefix || 'CN-';
-        else prefix = txnPrefs.salePrefix || setting?.invoicePrefix || 'INV-';
-        const allSales = await Sale.find({ ...baseFilter, type: type || 'invoice' }).select('invoiceNumber').lean();
-        let maxNum = 0;
-        for (const s of allSales) {
-          if (!s.invoiceNumber) continue;
-          const numStr = s.invoiceNumber.startsWith(prefix) ? s.invoiceNumber.slice(prefix.length) : s.invoiceNumber;
-          const num = parseInt(numStr);
-          if (!isNaN(num) && num > maxNum) maxNum = num;
-        }
-        invoiceNumber = `${prefix}${String(maxNum + 1).padStart(6, '0')}`;
-      }
+      if (exists) needsGeneratedNumber = true;
     }
 
     let tcsAmount = 0;
@@ -535,7 +565,28 @@ const createSale = async (req, res) => {
     });
 
     await withTransaction(async (session) => {
+    // Allocate the document number atomically within the transaction so the counter
+    // increment commits together with the sale insert (no read-max-then-+1 race).
+    // Explicit, non-colliding numbers supplied by the client are honored as-is.
+    if (needsGeneratedNumber) {
+      invoiceNumber = await nextSaleNumber(req, baseFilter, setting, type || 'invoice', session);
+      sale.invoiceNumber = invoiceNumber;
+    }
+
     await sale.save({ session });
+
+    // TOCTOU guard: re-read products WITHIN the transaction (with session) so the
+    // negative-stock validation and balanceBefore reflect the in-transaction snapshot
+    // rather than the pre-transaction read at the top of createSale.
+    const txnProducts = await Product.find({ ...baseFilter, _id: { $in: productIds } }, null, { session });
+    const productMap = new Map(txnProducts.map(p => [p._id.toString(), p]));
+
+    if (stockTracked) {
+      const offenders = findNegativeStockOffenders(items, productMap);
+      if (offenders.length > 0 && stopOnNegative) {
+        throw Object.assign(new Error(`Insufficient stock: ${offenders.map(o => `${o.name} (available ${o.available}, requested ${o.requested})`).join('; ')}`), { statusCode: 400 });
+      }
+    }
 
     if (sale.type === 'invoice' && sale.status !== 'draft' && stockMaintenance) {
       const bulkStockOps = [];
@@ -628,14 +679,14 @@ const createSale = async (req, res) => {
     // (UPI/card/cheque/bank transfer) goes to the bank ledger/account.
     const primaryPayMode = (payments && payments[0] && payments[0].mode) || 'cash';
     const isCashPay = primaryPayMode === 'cash';
-    if (paidAmount > 0) {
+    if (finalPaidAmount > 0) {
       const addTime = setting?.preferences?.transaction?.addTimeOnTransactions === true;
       const txnDate = addTime ? new Date() : (date || new Date());
       const txn = new Transaction({
         user: req.user._id,
         business: req.businessId,
         type: isCashPay ? 'cash_in' : 'bank_in',
-        amount: paidAmount,
+        amount: finalPaidAmount,
         description: `Payment received - ${invoiceNumber} from ${customerName || 'Walk-in'}`,
         date: txnDate,
         reference: invoiceNumber,
@@ -770,7 +821,7 @@ const createSale = async (req, res) => {
       const loyaltySetting = await Setting.findOne(getSettingQuery(req));
       if (loyaltySetting?.preferences?.party?.enableLoyalty) {
         const earningRate = 10;
-        const pointsEarned = Math.floor((paidAmount || totalAmount) / earningRate);
+        const pointsEarned = Math.floor((finalPaidAmount || totalAmount) / earningRate);
         if (pointsEarned > 0) {
           const lastEntry = await LoyaltyPoint.findOne({ ...baseFilter, customer }).sort({ createdAt: -1 });
           const currentBalance = lastEntry ? lastEntry.balance : 0;
@@ -850,7 +901,7 @@ const createSale = async (req, res) => {
 
     res.status(201).json(sale);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 };
 
@@ -1067,6 +1118,120 @@ const updateSale = async (req, res) => {
     }
 
     await sale.save({ session });
+
+    // Adjust the sale's JournalEntry so the GL does not drift after an edit.
+    // 1) Reverse the OLD entry (mirror deleteSale): unwind each line's applied
+    //    balance change (type-aware), then delete the old JE.
+    // 2) Post a NEW balanced entry from the recomputed totals (mirror createSale).
+    const allowJE = setting?.preferences?.accounting?.allowJournalEntries !== false;
+    if (allowJE && sale.type === 'invoice' && sale.status !== 'draft') {
+      const oldJe = await JournalEntry.findOne({ ...baseFilter, referenceType: 'sale', referenceId: sale._id });
+      if (oldJe) {
+        const oldAccIds = oldJe.lines.filter(l => l.account).map(l => l.account);
+        const oldAccounts = await Account.find({ ...baseFilter, _id: { $in: oldAccIds } });
+        const oldAccMap = new Map(oldAccounts.map(a => [a._id.toString(), a]));
+        const reverseOps = oldJe.lines.filter(l => l.account).map(line => {
+          const acc = oldAccMap.get(line.account.toString());
+          if (!acc) return null;
+          const appliedChange = ['asset', 'expense'].includes(acc.type)
+            ? line.debit - line.credit
+            : line.credit - line.debit;
+          return {
+            updateOne: {
+              filter: { ...baseFilter, _id: line.account },
+              update: { $inc: { balance: -appliedChange } }
+            }
+          };
+        }).filter(Boolean);
+        if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
+        await JournalEntry.findOneAndDelete({ ...baseFilter, _id: oldJe._id }, { session });
+      }
+
+      // Build + post the NEW entry (same account selection & debit/credit logic as createSale).
+      const salesRevenue = await Account.findOne({ ...baseFilter, code: '4001' });
+      const receivable = await Account.findOne({ ...baseFilter, code: '1101' });
+      if (salesRevenue && receivable) {
+        const lines = [];
+        const paid = round2(Number(sale.paidAmount) || 0);
+        const unpaid = round2(Number(sale.remainingBalance) || 0);
+        const primaryPayMode = (sale.payments && sale.payments[0] && sale.payments[0].mode) || 'cash';
+        const isCashPay = primaryPayMode === 'cash';
+        if (paid > 0) {
+          const payCode = isCashPay ? '1001' : '1002';
+          let cash = await Account.findOne({ ...baseFilter, code: payCode });
+          if (!cash) cash = await Account.findOne({ ...baseFilter, code: '1001' });
+          const debitAcc = cash || receivable;
+          lines.push({ account: debitAcc._id, accountName: debitAcc.name, accountType: debitAcc.type, debit: paid, credit: 0 });
+        }
+        if (unpaid > 0) {
+          lines.push({ account: receivable._id, accountName: receivable.name, accountType: receivable.type, debit: unpaid, credit: 0 });
+        }
+        const totalDebit = round2(paid + unpaid);
+
+        const gstPayable = round2((sale.cgstTotal || 0) + (sale.sgstTotal || 0) + (sale.igstTotal || 0) + (sale.cessTotal || 0));
+        let taxPayable = null;
+        if (gstPayable > 0) {
+          taxPayable = await Account.findOne({ ...baseFilter, code: '2102' })
+            || await Account.findOne({ ...baseFilter, code: '2101' });
+        }
+        let tcsPayable = null;
+        const tcsAmt = round2(Number(sale.tcsAmount) || 0);
+        if (tcsAmt > 0) {
+          tcsPayable = await Account.findOne({ ...baseFilter, code: '2103' });
+        }
+        let creditedTax = 0;
+        if (taxPayable && gstPayable > 0) {
+          lines.push({ account: taxPayable._id, accountName: taxPayable.name, accountType: taxPayable.type, debit: 0, credit: gstPayable });
+          creditedTax = gstPayable;
+        }
+        let creditedTcs = 0;
+        if (tcsPayable && tcsAmt > 0) {
+          lines.push({ account: tcsPayable._id, accountName: tcsPayable.name, accountType: tcsPayable.type, debit: 0, credit: tcsAmt });
+          creditedTcs = tcsAmt;
+        }
+        const revenueCredit = round2(totalDebit - creditedTax - creditedTcs);
+        lines.push({ account: salesRevenue._id, accountName: salesRevenue.name, accountType: salesRevenue.type, debit: 0, credit: revenueCredit });
+
+        const totalDebitSum = round2(lines.reduce((s, l) => s + l.debit, 0));
+        const totalCreditSum = round2(lines.reduce((s, l) => s + l.credit, 0));
+        if (Math.abs(totalDebitSum - totalCreditSum) >= 0.01) {
+          throw new Error(`Sale journal entry unbalanced: debit ${totalDebitSum} != credit ${totalCreditSum}`);
+        }
+
+        const je = new JournalEntry({
+          user: req.user._id,
+          business: req.businessId,
+          entryNumber: `JE-SALE-${sale.invoiceNumber}`,
+          entryDate: sale.date || new Date(),
+          referenceType: 'sale',
+          referenceId: sale._id,
+          lines,
+          totalDebit: totalDebitSum,
+          totalCredit: totalCreditSum,
+          narration: `Sale ${sale.invoiceNumber} - ${sale.customerName || 'Walk-in'}`,
+          isPosted: true,
+          postedAt: new Date(),
+        });
+        await je.save({ session });
+        const accountIds = lines.map(l => l.account);
+        const accounts = await Account.find({ ...baseFilter, _id: { $in: accountIds } });
+        const accountMap = new Map(accounts.map(a => [a._id.toString(), a]));
+        const bulkAccountOps = lines.map(line => {
+          const acc = accountMap.get(line.account.toString());
+          if (!acc) return null;
+          const balanceChange = ['asset', 'expense'].includes(acc.type)
+            ? line.debit - line.credit
+            : line.credit - line.debit;
+          return {
+            updateOne: {
+              filter: { ...baseFilter, _id: line.account },
+              update: { $inc: { balance: balanceChange } }
+            }
+          };
+        }).filter(Boolean);
+        if (bulkAccountOps.length > 0) await Account.bulkWrite(bulkAccountOps, { session });
+      }
+    }
     });
     createNotification(req.user._id, 'sale_updated', 'Sale Updated',
       `Invoice ${sale.invoiceNumber} has been updated`,
@@ -1166,6 +1331,10 @@ const deleteSale = async (req, res) => {
       if (reverseOps.length > 0) await Account.bulkWrite(reverseOps, { session });
       await JournalEntry.findOneAndDelete({ ...baseFilter, _id: journalEntry._id }, { session });
     }
+
+    // Remove the linked payment Transaction record(s) created in createSale,
+    // otherwise a phantom cash/bank receipt lingers after the sale is cancelled.
+    await Transaction.deleteMany({ ...baseFilter, referenceModel: 'Sale', referenceId: sale._id }, { session });
 
     sale.status = 'cancelled';
     await sale.save({ session });
@@ -1590,11 +1759,30 @@ const convertToInvoice = async (req, res) => {
     invoiceData.business = req.businessId;
     const invoice = new Sale(invoiceData);
 
+    await withTransaction(async (session) => {
+    // TOCTOU guard: re-read products WITHIN the transaction (with session) so the
+    // negative-stock validation and balanceBefore reflect the in-transaction snapshot
+    // rather than the pre-transaction read above.
+    const txnConvProducts = await Product.find({ ...baseFilter, _id: { $in: convProductIds } }, null, { session });
+    const txnConvProductMap = new Map(txnConvProducts.map(p => [p._id.toString(), p]));
+
+    for (const item of invoiceData.items) {
+      if (item.product) {
+        const prod = txnConvProductMap.get(item.product.toString());
+        if (!prod) throw Object.assign(new Error(`Product not found: ${item.productName}`), { statusCode: 400 });
+        // Services never affect stock: skip negative-stock validation.
+        if (prod.type === 'service') continue;
+        if (stopOnNegative && prod.stock < item.quantity) {
+          throw Object.assign(new Error(`Insufficient stock for ${prod.name}. Available: ${prod.stock}, Requested: ${item.quantity}`), { statusCode: 400 });
+        }
+      }
+    }
+
     const convStockOps = [];
     const convMovements = [];
     for (const item of invoiceData.items) {
       if (item.product) {
-        const prod = convProductMap.get(item.product.toString());
+        const prod = txnConvProductMap.get(item.product.toString());
         // Services never affect stock: skip deduction & movement.
         if (prod && prod.type === 'service') continue;
         const balBefore = prod ? prod.stock : 0;
@@ -1617,7 +1805,6 @@ const convertToInvoice = async (req, res) => {
       }
     }
 
-    await withTransaction(async (session) => {
     if (convStockOps.length > 0) await Product.bulkWrite(convStockOps, { session });
     if (convMovements.length > 0) await StockMovement.insertMany(convMovements, { session });
 
@@ -1702,7 +1889,7 @@ const convertToInvoice = async (req, res) => {
 
     res.status(201).json(invoice);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 };
 

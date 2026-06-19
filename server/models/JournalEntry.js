@@ -16,7 +16,13 @@ const journalEntrySchema = new mongoose.Schema({
   entryDate: { type: Date, default: Date.now, index: true },
   referenceType: {
     type: String,
-    enum: ['sale', 'purchase', 'payment', 'receipt', 'expense', 'journal', 'credit_note', 'debit_note', 'gst', 'opening'],
+    // Includes the capitalized reference types the controllers actually use for
+    // journal entries (PaymentOut, PurchaseReturn, etc.). These were missing, so
+    // those JE inserts silently failed enum validation and no ledger entry was
+    // ever written — only surfaced once JE errors stopped being swallowed.
+    enum: ['sale', 'Sale', 'purchase', 'payment', 'PaymentOut', 'receipt', 'expense',
+           'journal', 'credit_note', 'debit_note', 'gst', 'opening',
+           'PurchaseReturn', 'PurchaseOrder', 'GodownTransfer', 'Manufacturing', 'StockReconciliation'],
     required: true,
     index: true,
   },
@@ -37,5 +43,26 @@ journalEntrySchema.index({ business: 1, referenceType: 1, referenceId: 1 });
 journalEntrySchema.index({ user: 1, entryDate: -1 });
 journalEntrySchema.index({ business: 1, entryDate: -1 });
 journalEntrySchema.index({ 'lines.account': 1 });
+
+// Enforce double-entry balance: total debit must equal total credit (within rounding
+// tolerance). Always enforced for posted entries; only skipped for explicit drafts
+// (isPosted === false).
+journalEntrySchema.pre('validate', function balanceCheck(next) {
+  if (this.isPosted === false) {
+    return next();
+  }
+  const debit = this.totalDebit || 0;
+  const credit = this.totalCredit || 0;
+  if (Math.abs(debit - credit) > 0.01) {
+    const err = new mongoose.Error.ValidationError(this);
+    err.addError('totalDebit', new mongoose.Error.ValidatorError({
+      message: `Journal entry is unbalanced: totalDebit (${debit}) must equal totalCredit (${credit})`,
+      path: 'totalDebit',
+      value: debit,
+    }));
+    return next(err);
+  }
+  return next();
+});
 
 module.exports = mongoose.model('JournalEntry', journalEntrySchema);

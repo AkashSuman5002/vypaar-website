@@ -270,6 +270,25 @@ const deleteProduct = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const product = await Product.findOne({ ...baseFilter, _id: req.params.id });
     if (!product) return res.status(404).json({ message: 'Product not found' });
+
+    // Referential delete-guard: refuse to delete a product that is referenced
+    // by historical documents, which would orphan those references.
+    const Sale = require('../models/Sale');
+    const Purchase = require('../models/Purchase');
+    const StockMovement = require('../models/StockMovement');
+    const [sales, purchases, stockMovements] = await Promise.all([
+      Sale.countDocuments({ ...baseFilter, 'items.product': req.params.id }),
+      Purchase.countDocuments({ ...baseFilter, 'items.product': req.params.id }),
+      StockMovement.countDocuments({ ...baseFilter, product: req.params.id }),
+    ]);
+    const total = sales + purchases + stockMovements;
+    if (total > 0) {
+      return res.status(409).json({
+        message: `Product cannot be deleted because it is used in ${total} transaction(s). Mark it inactive instead.`,
+        references: { sales, purchases, stockMovements },
+      });
+    }
+
     await Product.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Product removed' });
   } catch (error) {

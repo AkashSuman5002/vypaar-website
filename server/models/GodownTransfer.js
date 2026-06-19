@@ -21,7 +21,12 @@ const godownTransferSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 godownTransferSchema.index({ user: 1, createdAt: -1 });
+godownTransferSchema.index({ business: 1, createdAt: -1 });
 godownTransferSchema.index({ user: 1, fromGodown: 1 });
 godownTransferSchema.index({ user: 1, toGodown: 1 });
+// Per-tenant unique transfer number. partialFilterExpression constrains only non-empty
+// string transferNumbers (a compound `sparse` would not exclude nulls). Existing
+// duplicates must be cleaned before this index can build; failures are non-fatal.
+godownTransferSchema.index({ user: 1, business: 1, transferNumber: 1 }, { unique: true, partialFilterExpression: { transferNumber: { $type: 'string', $gt: '' } } });
 
 module.exports = mongoose.model('GodownTransfer', godownTransferSchema);

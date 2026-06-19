@@ -126,9 +126,9 @@ const getDashboardData = async (req, res) => {
         { $match: aggBase },
         { $group: { _id: '$type', total: { $sum: { $ifNull: ['$amount', 0] } } } },
       ]),
-      // 6. YoY sales (type:invoice, INCLUDING cancelled — mirrors the old yoy query).
+      // 6. YoY sales (type:invoice, EXCLUDING cancelled — consistent with the Total Sales KPI).
       Sale.aggregate([
-        { $match: { ...aggBase, type: 'invoice' } },
+        { $match: salesMatch },
         { $group: {
           _id: null,
           thisYearSales: { $sum: { $cond: [inRange(thisYearStart, thisYearEnd), { $ifNull: ['$totalAmount', 0] }, 0] } },
@@ -139,7 +139,7 @@ const getDashboardData = async (req, res) => {
       ]),
       Customer.countDocuments(baseFilter),
       Product.countDocuments(baseFilter),
-      Product.find(baseFilter).select('costPrice stock price type').lean(),
+      Product.find(baseFilter).select('costPrice stock price type name minStock').lean(),
       // Month-by-month chart: scoped to this year, only the 2 fields needed.
       Sale.find({ ...salesMatch, date: { $gte: yearStart, $lte: yearEnd } }).select('date totalAmount').lean(),
       // Recent activity: top 10 by createdAt instead of sorting the whole collection.
@@ -189,7 +189,7 @@ const getDashboardData = async (req, res) => {
 
     // Services are not stockable, so they must never contribute to inventory/stock metrics.
     const stockProducts = products.filter(p => p.type !== 'service');
-    const lowStockProducts = stockProducts.filter(p => (p.stock || 0) <= (p.minStock || 0)).map(p => ({ name: p.name, stock: p.stock, minStock: p.minStock }));
+    const lowStockProducts = stockProducts.filter(p => (p.stock || 0) <= (p.minStock || 5)).map(p => ({ name: p.name, stock: p.stock, minStock: p.minStock }));
 
     const pendingDuesTotal = S.pendingDuesTotal || 0;
     const pendingInvoices = S.pendingInvoices || 0;

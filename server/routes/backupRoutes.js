@@ -5,6 +5,7 @@ const os = require('os');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const multer = require('multer');
+const AdmZip = require('adm-zip');
 
 const {
   createBusinessBackup,
@@ -123,12 +124,78 @@ router.put('/config', authorize('settings:manage'), async (req, res) => {
 // collide with existing _ids.
 const STRIP_FIELDS = ['_id', 'business', 'user', 'createdAt', 'updatedAt', '__v'];
 
+// Detect a ZIP archive by its magic bytes (PK\x03\x04). The download produced by
+// exportController.backupExport is a ZIP of per-collection JSON files, while the
+// backupService backup is a single JSON document — restore must accept both.
+const isZipBuffer = (buffer) =>
+  Buffer.isBuffer(buffer) && buffer.length >= 4 &&
+  buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;
+
+// Maps the file names produced by exportController.backupExport to the collection
+// keys understood by restore (TENANT_MODELS). Entries with no matching model
+// (settings, payments, gst, stock) are intentionally omitted — restore only
+// rehydrates tenant-scoped business documents it has a model for.
+const ZIP_FILE_TO_COLLECTION = {
+  'customers.json': 'customers',
+  'suppliers.json': 'suppliers',
+  'products.json': 'products',
+  'sales.json': 'sales',
+  'purchases.json': 'purchases',
+  'expenses.json': 'expenses',
+};
+
+// Build the canonical { collections: {...} } shape from a backupExport ZIP.
+const parseBackupZip = (buffer) => {
+  let zip;
+  try {
+    zip = new AdmZip(buffer);
+  } catch (_) {
+    const err = new Error('Uploaded ZIP backup could not be read');
+    err.statusCode = 422;
+    throw err;
+  }
+
+  const collections = {};
+  let meta = null;
+  let matched = 0;
+
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) continue;
+    const name = path.basename(entry.entryName).toLowerCase();
+
+    if (name === 'backup-info.json') {
+      try { meta = JSON.parse(entry.getData().toString('utf8')); } catch (_) { /* ignore */ }
+      continue;
+    }
+
+    const key = ZIP_FILE_TO_COLLECTION[name];
+    if (!key) continue;
+    try {
+      const parsed = JSON.parse(entry.getData().toString('utf8'));
+      if (Array.isArray(parsed)) { collections[key] = parsed; matched++; }
+    } catch (_) { /* skip unparsable entry */ }
+  }
+
+  if (matched === 0) {
+    const err = new Error('Not a valid Vyapar business backup archive (no recognized collection files found)');
+    err.statusCode = 422;
+    throw err;
+  }
+  return { _meta: meta, collections };
+};
+
 const parseBackupBuffer = (buffer) => {
+  // ZIP backup (from exportController.backupExport): unpack into the canonical shape.
+  if (isZipBuffer(buffer)) {
+    return parseBackupZip(buffer);
+  }
+
+  // Raw JSON backup (from backupService): a single { _meta, collections } document.
   let json;
   try {
     json = JSON.parse(buffer.toString('utf8'));
   } catch (_) {
-    const err = new Error('Uploaded file is not valid JSON');
+    const err = new Error('Uploaded file is not valid JSON or ZIP');
     err.statusCode = 422;
     throw err;
   }
@@ -169,13 +236,66 @@ router.post('/restore/preview', authorize('settings:manage'), upload.single('fil
   }
 });
 
+// Normalize the client-supplied mode to the two restore semantics. The client
+// (RestoreBackup.js) sends 'overwrite' for a destructive replace and 'merge'
+// otherwise. Honor 'overwrite' (and legacy 'replace') as a wipe; anything else
+// is a safe merge/upsert. Previously only 'replace' was treated as a wipe, so
+// selecting "Overwrite" silently fell through to merge (#56).
+const normalizeRestoreMode = (mode) =>
+  (mode === 'overwrite' || mode === 'replace') ? 'replace' : 'merge';
+
+// Shared restore execution: given a parsed backup ({ collections }) and the
+// request (for tenant scoping), wipe-and-insert ('replace') or merge-insert
+// ('merge') each tenant collection inside a transaction. Tenant-scoped via
+// getBaseFilter (delete) and getCreateData (insert). Reused by both the local
+// /restore/execute route and the Drive /drive/restore route so the two share
+// one code path.
+const applyRestore = async (req, json, restoreMode) => {
+  const baseFilter = getBaseFilter(req);
+  const restored = {};
+
+  await withTransaction(async (session) => {
+    for (const [key, modelName] of Object.entries(TENANT_MODELS)) {
+      const docs = Array.isArray(json.collections[key]) ? json.collections[key] : [];
+      let Model;
+      try {
+        Model = mongoose.model(modelName);
+      } catch (_) {
+        continue;
+      }
+
+      if (restoreMode === 'replace') {
+        // Wipe THIS tenant's existing docs for the collection, then insert.
+        await Model.deleteMany(baseFilter, { session });
+      }
+
+      if (docs.length === 0) {
+        restored[key] = 0;
+        continue;
+      }
+
+      const toInsert = docs.map((doc) => {
+        const clean = { ...doc };
+        for (const f of STRIP_FIELDS) delete clean[f];
+        // Re-stamp ownership for the current tenant.
+        return { ...clean, ...getCreateData(req) };
+      });
+
+      const inserted = await Model.insertMany(toInsert, { session, ordered: false });
+      restored[key] = inserted.length;
+    }
+  });
+
+  return restored;
+};
+
 router.post('/restore/execute', authorize('settings:manage'), async (req, res) => {
   try {
     const { id, mode } = req.body || {};
     if (!id || !/^[a-f0-9]{32}$/.test(String(id))) {
       return res.status(400).json({ message: 'Invalid or missing preview id' });
     }
-    const restoreMode = mode === 'replace' ? 'replace' : 'merge';
+    const restoreMode = normalizeRestoreMode(mode);
 
     const tmpName = `${req.businessId}-${id}.json`;
     const tmpPath = path.join(RESTORE_TMP_DIR, tmpName);
@@ -184,40 +304,7 @@ router.post('/restore/execute', authorize('settings:manage'), async (req, res) =
     }
     const json = parseBackupBuffer(fs.readFileSync(tmpPath));
 
-    const baseFilter = getBaseFilter(req);
-    const restored = {};
-
-    await withTransaction(async (session) => {
-      for (const [key, modelName] of Object.entries(TENANT_MODELS)) {
-        const docs = Array.isArray(json.collections[key]) ? json.collections[key] : [];
-        let Model;
-        try {
-          Model = mongoose.model(modelName);
-        } catch (_) {
-          continue;
-        }
-
-        if (restoreMode === 'replace') {
-          // Wipe THIS tenant's existing docs for the collection, then insert.
-          await Model.deleteMany(baseFilter, { session });
-        }
-
-        if (docs.length === 0) {
-          restored[key] = 0;
-          continue;
-        }
-
-        const toInsert = docs.map((doc) => {
-          const clean = { ...doc };
-          for (const f of STRIP_FIELDS) delete clean[f];
-          // Re-stamp ownership for the current tenant.
-          return { ...clean, ...getCreateData(req) };
-        });
-
-        const inserted = await Model.insertMany(toInsert, { session, ordered: false });
-        restored[key] = inserted.length;
-      }
-    });
+    const restored = await applyRestore(req, json, restoreMode);
 
     // Best-effort cleanup of the temp payload (outside the txn).
     fs.unlink(tmpPath, () => {});
@@ -318,6 +405,54 @@ router.post('/drive/backup', authorize('settings:manage'), async (req, res) => {
     await record.save();
 
     res.json({ message: 'Backup uploaded to Google Drive', lastBackup: record.lastBackupAt });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+});
+
+// List the backup files available in the connected Drive account.
+router.get('/drive/backups', authorize('settings:view'), async (req, res) => {
+  try {
+    if (!driveService.isConfigured()) {
+      return res.status(400).json({ message: 'Google Drive is not configured on the server' });
+    }
+    const record = await DriveBackup.findOne({ business: req.businessId });
+    if (!record) return res.status(400).json({ message: 'Google Drive is not connected' });
+
+    const refreshToken = record.getRefreshToken();
+    const accessToken = await driveService.refreshAccessToken(refreshToken);
+
+    const backups = await driveService.listBackups(accessToken);
+    res.json({ backups });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+});
+
+// Download a chosen backup from Drive and restore it through the SAME tenant-scoped
+// restore code path used by the local restore (applyRestore). Honors the same
+// overwrite/merge mode semantics.
+router.post('/drive/restore', authorize('settings:manage'), async (req, res) => {
+  try {
+    if (!driveService.isConfigured()) {
+      return res.status(400).json({ message: 'Google Drive is not configured on the server' });
+    }
+    const { fileId, mode } = req.body || {};
+    if (!fileId) return res.status(400).json({ message: 'fileId is required' });
+
+    const record = await DriveBackup.findOne({ business: req.businessId });
+    if (!record) return res.status(400).json({ message: 'Google Drive is not connected' });
+
+    const refreshToken = record.getRefreshToken();
+    const accessToken = await driveService.refreshAccessToken(refreshToken);
+
+    const buffer = await driveService.downloadBackup(accessToken, fileId);
+    const json = parseBackupBuffer(buffer);
+
+    const restoreMode = normalizeRestoreMode(mode);
+    const restored = await applyRestore(req, json, restoreMode);
+
+    res.json({ message: 'Restore completed from Google Drive', mode: restoreMode, restored });
   } catch (error) {
     res.status(error.statusCode || 500).json({ message: error.message });
   }

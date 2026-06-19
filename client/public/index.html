@@ -7,6 +7,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+      // Pre-paint: apply dark mode from localStorage BEFORE React mounts to
+      // eliminate the light flash (FOUC). Keep dependency-free and tiny.
+      (function () {
+        try {
+          if (localStorage.getItem('vyapar_dark_mode') === 'true') {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

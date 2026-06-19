@@ -71,8 +71,32 @@ setTimeout(async () => {
 const app = express();
 
 // NOTE: In production, set CLIENT_URL env var to your deployed frontend URL (e.g. https://app.vyapar.com)
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000', credentials: true }));
-app.use(helmet({ crossOriginResourcePolicy: false }));
+const CLIENT_ORIGIN = process.env.CLIENT_URL || 'http://localhost:3000';
+app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
+
+// Content-Security-Policy tuned for a Create-React-App SPA + Tailwind so it adds real
+// protection WITHOUT ever white-screening the app (no wildcard `*`):
+//  - scriptSrc allows 'unsafe-inline' + 'unsafe-eval' because CRA's runtime (and the dev
+//    server) evaluate inline/eval'd code; removing these breaks the bundle.
+//  - styleSrc allows 'unsafe-inline' because Tailwind / styled components inject inline styles.
+//  - imgSrc allows data:/blob: for inline logos, generated QR codes and object-URL previews.
+//  - connectSrc allows 'self', the client origin and ws:/wss: for CRA HMR + SSE/EventSource.
+//  - fontSrc allows data: for embedded fonts.
+// crossOriginResourcePolicy stays disabled (false) so cross-origin <img src="/uploads/.."> works.
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", CLIENT_ORIGIN, 'ws:', 'wss:'],
+      fontSrc: ["'self'", 'data:'],
+    },
+  },
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
@@ -135,6 +159,7 @@ app.use('/api', csrfProtection);
 app.use('/api', businessContext);
 app.use('/api', auditMiddleware);
 
+app.use('/api/2fa', require('./routes/twoFactorRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/sales', require('./routes/saleRoutes'));

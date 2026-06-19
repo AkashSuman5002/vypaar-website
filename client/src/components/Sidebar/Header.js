@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Menu, Moon, Sun, Search, Bell, User, LogOut, Settings as SettingsIcon, X, TrendingUp, ShoppingBag, BookOpen, List, BarChart3, TrendingDown, Scale, FileText, Users, Package, RefreshCw, ShoppingCart, LayoutDashboard, ChevronRight, Clock, CheckCircle, DollarSign, Landmark, Info, AlertTriangle, Phone, Headphones, Building2, HelpCircle, History, Zap, UserPlus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { notificationAPI, themeAPI, customerAPI, productAPI, saleAPI } from '../../services/api';
+import { notificationAPI, customerAPI, productAPI, saleAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 
 const searchItems = [
@@ -30,9 +31,8 @@ const searchItems = [
 
 const Header = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
-  const [dark, setDark] = useState(false);
-  const [themeLoaded, setThemeLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -40,25 +40,6 @@ const Header = ({ onMenuClick }) => {
   const [notifications, setNotifications] = useState([]);
   const [notifLoading, setNotifLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    themeAPI.get().then(res => {
-      setDark(res.data.darkMode === true);
-      setThemeLoaded(true);
-    }).catch(() => {
-      setThemeLoaded(true);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!themeLoaded) return;
-    if (dark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    themeAPI.update(dark).catch(() => null);
-  }, [dark, themeLoaded]);
 
   const removeNotification = async (id) => {
     setNotifications(prev => prev.filter(n => n._id !== id));
@@ -379,10 +360,10 @@ const Header = ({ onMenuClick }) => {
         </div>
 
         <button
-          onClick={() => setDark(!dark)}
+          onClick={toggleDarkMode}
           className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors"
         >
-          {dark ? (
+          {darkMode ? (
             <Sun className="w-4.5 h-4.5 text-amber-500" />
           ) : (
             <Moon className="w-4.5 h-4.5 text-slate-500" />

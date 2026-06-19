@@ -4,11 +4,36 @@ const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { withTransaction } = require('../utils/withTransaction');
+const { getNextSequence } = require('../utils/nextNumber');
 
-const getNextTransferNumber = async (req) => {
+// Compute the current max numeric transfer number for seeding the atomic counter.
+// Preserves the 'GT-' prefix / 4-digit pad format produced previously.
+const maxTransferSeq = async (req) => {
   const baseFilter = getBaseFilter(req);
-  const count = await GodownTransfer.countDocuments(baseFilter);
-  return `GT-${String(count + 1).padStart(4, '0')}`;
+  const last = await GodownTransfer.find(baseFilter)
+    .select('transferNumber')
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
+  let max = 0;
+  for (const t of last) {
+    if (!t.transferNumber) continue;
+    const num = parseInt(String(t.transferNumber).replace(/^GT-/, ''), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  return max;
+};
+
+// Atomic transfer-number generator. The counter increments atomically (inside the
+// caller's transaction when a session is supplied) instead of counting documents,
+// eliminating the read-count-then-increment race. Format unchanged: GT-0001.
+const getNextTransferNumber = async (req, session) => {
+  const seq = await getNextSequence(
+    { user: req.user._id, business: req.businessId },
+    'godown_transfer',
+    { session, seedFn: () => maxTransferSeq(req) },
+  );
+  return `GT-${String(seq).padStart(4, '0')}`;
 };
 
 // Find a product's godownStock entry for a given godown id (or undefined).
@@ -133,9 +158,8 @@ const createTransfer = async (req, res) => {
       }
     }
 
-    const transferNumber = await getNextTransferNumber(req);
-
     const transfer = await withTransaction(async (session) => {
+      const transferNumber = await getNextTransferNumber(req, session);
       const processedItems = [];
 
       for (const item of items) {

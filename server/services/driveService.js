@@ -13,6 +13,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
 const UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 
 const getRedirectUri = () =>
   process.env.GOOGLE_REDIRECT_URI ||
@@ -148,6 +149,60 @@ const uploadBackup = async (accessToken, filename, jsonString) => {
   return data.id;
 };
 
+// List the app's backup files in Drive (only files this app created/has access to
+// under the drive.file scope). Returns [{ id, name, date, size }] newest first.
+// We match the upload naming convention (backup-*.json) so we don't surface
+// unrelated files the user may have granted access to.
+const listBackups = async (accessToken) => {
+  if (!accessToken) throw new Error('Access token is required to list backups');
+  const params = new URLSearchParams({
+    q: "name contains 'backup-' and mimeType = 'application/json' and trashed = false",
+    orderBy: 'modifiedTime desc',
+    pageSize: '100',
+    fields: 'files(id,name,modifiedTime,createdTime,size)',
+    spaces: 'drive',
+  });
+  const res = await fetch(`${FILES_URL}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`Google Drive list failed: ${(data.error && data.error.message) || res.status}`);
+  }
+  const files = Array.isArray(data.files) ? data.files : [];
+  return files.map((f) => ({
+    id: f.id,
+    name: f.name,
+    date: f.modifiedTime || f.createdTime || null,
+    size: f.size != null ? Number(f.size) : null,
+  }));
+};
+
+// Download a file's raw contents from Drive by id. Returns a Buffer so it can be
+// fed straight into the existing restore parser (parseBackupBuffer).
+const downloadBackup = async (accessToken, fileId) => {
+  if (!accessToken) throw new Error('Access token is required to download a backup');
+  if (!fileId) {
+    const err = new Error('fileId is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  const params = new URLSearchParams({ alt: 'media' });
+  const res = await fetch(`${FILES_URL}/${encodeURIComponent(fileId)}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    let message = res.status;
+    try {
+      const data = await res.json();
+      message = (data.error && data.error.message) || message;
+    } catch (_) { /* body wasn't JSON */ }
+    throw new Error(`Google Drive download failed: ${message}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+};
+
 module.exports = {
   isConfigured,
   getRedirectUri,
@@ -156,4 +211,6 @@ module.exports = {
   refreshAccessToken,
   uploadBackup,
   getUserEmail,
+  listBackups,
+  downloadBackup,
 };

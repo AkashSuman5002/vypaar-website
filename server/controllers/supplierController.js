@@ -1,4 +1,6 @@
 const Supplier = require('../models/Supplier');
+const Purchase = require('../models/Purchase');
+const PurchaseReturn = require('../models/PurchaseReturn');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { createNotification } = require('../controllers/notificationController');
 
@@ -103,6 +105,21 @@ const deleteSupplier = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const supplier = await Supplier.findOne({ ...baseFilter, _id: req.params.id });
     if (!supplier) return res.status(404).json({ message: 'Supplier not found' });
+
+    // Referential delete-guard: refuse to delete a supplier that is referenced
+    // by historical documents, which would orphan those references.
+    const [purchases, purchaseReturns] = await Promise.all([
+      Purchase.countDocuments({ ...baseFilter, supplier: req.params.id }),
+      PurchaseReturn.countDocuments({ ...baseFilter, supplier: req.params.id }),
+    ]);
+    const total = purchases + purchaseReturns;
+    if (total > 0) {
+      return res.status(409).json({
+        message: `Supplier cannot be deleted because it is used in ${total} transaction(s). Mark it inactive instead.`,
+        references: { purchases, purchaseReturns },
+      });
+    }
+
     await Supplier.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Supplier removed' });
   } catch (error) {

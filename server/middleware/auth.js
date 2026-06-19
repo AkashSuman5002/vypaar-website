@@ -13,7 +13,21 @@ const authMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     let token = null;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    // Prefer the httpOnly `token` cookie (hardening #28): a cookie can't be read by JS, so it
+    // is not exposed to XSS the way a localStorage Bearer token is. We then FALL BACK to the
+    // Authorization: Bearer header so nothing breaks for the current cross-origin dev setup.
+    //
+    // NOTE: We intentionally keep BOTH transports. Fully eliminating the body/localStorage
+    // token (cookie-only auth) is NOT done here because the client (:3000) and API (:5000) are
+    // different origins over http in dev, where a SameSite cookie isn't reliably sent on XHR.
+    // Going cookie-only requires migrating to a same-origin setup (CRA `proxy` + a relative API
+    // base URL); that migration also affects the SSE / uploads / push `?token=` query-param auth
+    // paths and must be tested live, so it is deliberately deferred.
+    if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+
+    if (!token && authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
     }
 
@@ -36,6 +50,12 @@ const authMiddleware = async (req, res, next) => {
     if (!user.isActive) {
       return res.status(401).json({ message: 'Account deactivated' });
     }
+    // Token revocation: a token whose version no longer matches the user's current
+    // tokenVersion has been invalidated (e.g. by a password reset / logout-all).
+    // Backward compatible: legacy tokens lack `tv` (=> 0) and default users are 0.
+    if ((decoded.tv || 0) !== (user.tokenVersion || 0)) {
+      return res.status(401).json({ message: 'Token has been revoked' });
+    }
     req.user = user;
     next();
   } catch (error) {
@@ -48,7 +68,13 @@ const sseAuthMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     let token = null;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    // Same-origin (CRA proxy) cookie auth: EventSource sends the httpOnly `token` cookie
+    // automatically now that /api is same-origin, so prefer it before any header/query fallback.
+    if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+
+    if (!token && authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
     }
 
@@ -94,7 +120,13 @@ const uploadsAuthMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     let token = null;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    // Same-origin (CRA proxy) cookie auth: <img src="/uploads/..."> sends the httpOnly `token`
+    // cookie automatically now that /uploads is same-origin, so prefer it first.
+    if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+
+    if (!token && authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
     }
     if (!token && req.query && req.query.token) {

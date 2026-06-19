@@ -12,6 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const AdmZip = require('adm-zip');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { recordStockMovement } = require('./stockController');
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'imports');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -180,7 +181,37 @@ const excelExecute = async (req, res) => {
               for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
               try {
                 const total = parseFloat(mapped.totalAmount) || 0;
-                await Sale.create({ user: req.user._id, business: req.businessId, invoiceNumber: mapped.invoiceNumber || `IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: mapped.customerName || 'Unknown', date: mapped.date || new Date(), items: [], taxableAmount: parseFloat(mapped.taxableAmount) || total, cgstTotal: parseFloat(mapped.cgstTotal) || 0, sgstTotal: parseFloat(mapped.sgstTotal) || 0, totalAmount: total, paidAmount: parseFloat(mapped.paidAmount) || 0, remainingBalance: total - (parseFloat(mapped.paidAmount) || 0), paymentMethod: mapped.paymentMethod || 'cash', paymentStatus: total <= (parseFloat(mapped.paidAmount) || 0) ? 'paid' : 'unpaid' });
+                const paid = parseFloat(mapped.paidAmount) || 0;
+                const cgst = parseFloat(mapped.cgstTotal) || 0;
+                const sgst = parseFloat(mapped.sgstTotal) || 0;
+                // The Excel Sales format carries no structured per-line columns
+                // (only a free-text "Items" label plus row-level totals/tax).
+                // Build ONE summary line item from the row totals so the invoice
+                // is never empty, deriving the taxable base and a gstRate from the
+                // CGST+SGST provided. Link the product by name/barcode when found.
+                const itemName = (mapped.items && String(mapped.items).trim()) || mapped.customerName || 'Imported Item';
+                const taxable = parseFloat(mapped.taxableAmount) || (total - cgst - sgst) || total;
+                const taxTotal = cgst + sgst;
+                const gstRate = taxable > 0 ? Math.round((taxTotal / taxable) * 100) : 0;
+                const product = await Product.findOne({
+                  ...baseFilter,
+                  $or: [{ name: itemName }, { barcode: itemName }],
+                });
+                const item = {
+                  product: product ? product._id : undefined,
+                  productName: product ? product.name : itemName,
+                  hsn: product ? product.hsn : '',
+                  quantity: 1,
+                  unit: product ? product.unit : 'Pcs',
+                  rate: taxable,
+                  amount: total,
+                  gstRate,
+                  taxableAmount: taxable,
+                  cgst,
+                  sgst,
+                  igst: 0,
+                };
+                await Sale.create({ user: req.user._id, business: req.businessId, invoiceNumber: mapped.invoiceNumber || `IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: mapped.customerName || 'Unknown', date: mapped.date || new Date(), items: [item], totalItems: 1, totalQuantity: 1, taxableAmount: taxable, cgstTotal: cgst, sgstTotal: sgst, taxTotal, totalAmount: total, paidAmount: paid, remainingBalance: Math.max(0, total - paid), paymentMethod: mapped.paymentMethod || 'cash', paymentStatus: total <= paid ? 'paid' : (paid > 0 ? 'partial' : 'unpaid') });
                 results.sales++;
               } catch (e) { errors.push(`Sale ${mapped.invoiceNumber}: ${e.message}`); totalFailed++; }
             }
@@ -192,7 +223,33 @@ const excelExecute = async (req, res) => {
               for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
               try {
                 const total = parseFloat(mapped.totalAmount) || 0;
-                await Purchase.create({ user: req.user._id, business: req.businessId, invoiceNumber: mapped.invoiceNumber || `PUR-IMP-${Date.now()}`, supplierName: mapped.supplierName || 'Unknown', date: mapped.date || new Date(), items: [], totalAmount: total, paidAmount: parseFloat(mapped.paidAmount) || 0, remainingBalance: total - (parseFloat(mapped.paidAmount) || 0), paymentMethod: mapped.paymentMethod || 'cash', paymentStatus: total <= (parseFloat(mapped.paidAmount) || 0) ? 'paid' : 'unpaid' });
+                const paid = parseFloat(mapped.paidAmount) || 0;
+                // The Excel Purchases format has no structured per-line or tax
+                // columns (only a free-text "Items" label and row-level totals),
+                // so build ONE summary line item from the total to keep the bill
+                // non-empty. Treat the total as the taxable base (GST=0) since no
+                // tax split is supplied; link the product by name/barcode if found.
+                const itemName = (mapped.items && String(mapped.items).trim()) || 'Imported Item';
+                const product = await Product.findOne({
+                  ...baseFilter,
+                  $or: [{ name: itemName }, { barcode: itemName }],
+                });
+                const item = {
+                  product: product ? product._id : undefined,
+                  productName: product ? product.name : itemName,
+                  quantity: 1, // schema requires min 1
+                  rate: total,
+                  amount: total,
+                  gstRate: 0,
+                  taxableAmount: total,
+                  cgst: 0,
+                  sgst: 0,
+                  igst: 0,
+                };
+                // Normalize paymentMethod to the Purchase enum [cash,bank,upi,cheque].
+                const pmRaw = (mapped.paymentMethod || 'cash').toLowerCase();
+                const pm = ['cash', 'bank', 'upi', 'cheque'].includes(pmRaw) ? pmRaw : 'cash';
+                await Purchase.create({ user: req.user._id, business: req.businessId, supplierName: mapped.supplierName || 'Unknown', billNumber: mapped.invoiceNumber || `PUR-IMP-${Date.now()}`, date: mapped.date || new Date(), items: [item], taxableAmount: total, totalAmount: total, paidAmount: paid, remainingBalance: Math.max(0, total - paid), paymentMethod: pm, paymentStatus: total <= paid ? 'paid' : (paid > 0 ? 'partial' : 'unpaid') });
                 results.purchases++;
               } catch (e) { errors.push(`Purchase ${mapped.invoiceNumber}: ${e.message}`); totalFailed++; }
             }
@@ -203,7 +260,15 @@ const excelExecute = async (req, res) => {
               const mapped = {};
               for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
               try {
-                await Transaction.create({ user: req.user._id, business: req.businessId, type: 'expense', category: mapped.category || 'General', amount: parseFloat(mapped.amount) || 0, description: mapped.description || '', date: mapped.date || new Date(), paymentMethod: mapped.paymentMethod || 'cash' });
+                // Transaction.type enum is [cash_in,cash_out,bank_in,bank_out];
+                // an expense is money out — bank_out when paid by bank/cheque/card,
+                // otherwise cash_out. (The model has no category/paymentMethod
+                // fields, so fold the category into description.)
+                const pm = (mapped.paymentMethod || 'cash').toLowerCase();
+                const txnType = ['bank', 'cheque', 'card', 'upi', 'neft', 'rtgs'].some(k => pm.includes(k)) ? 'bank_out' : 'cash_out';
+                const category = mapped.category || 'General';
+                const desc = mapped.description ? `${category}: ${mapped.description}` : category;
+                await Transaction.create({ user: req.user._id, business: req.businessId, type: txnType, amount: parseFloat(mapped.amount) || 0, description: desc, date: mapped.date || new Date(), partyType: 'expense', reference: 'Excel Import' });
                 results.expenses++;
               } catch (e) { errors.push(`Expense: ${e.message}`); totalFailed++; }
             }
@@ -214,13 +279,41 @@ const excelExecute = async (req, res) => {
               const mapped = {};
               for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
               try {
-                const qty = parseInt(mapped.quantity) || 0;
-                await StockMovement.create({ user: req.user._id, business: req.businessId, productName: mapped.productName || '', type: mapped.type === 'In' ? 'in' : 'out', quantity: qty, date: mapped.date || new Date(), reference: mapped.reference || 'Excel Import' });
-                if (mapped.type !== 'out') {
-                  await Product.findOneAndUpdate({ ...baseFilter, name: mapped.productName }, { $inc: { stock: qty } });
-                } else {
-                  await Product.findOneAndUpdate({ ...baseFilter, name: mapped.productName }, { $inc: { stock: -qty } });
+                const rawQty = parseInt(mapped.quantity) || 0;
+                // Signed quantity: positive for "In", negative for "Out". The
+                // StockMovement enum has no 'in'/'out'; use 'adjustment', which
+                // recordStockMovement applies as a signed delta.
+                const isOut = String(mapped.type || '').toLowerCase() === 'out';
+                const qty = isOut ? -Math.abs(rawQty) : Math.abs(rawQty);
+                // Resolve the product within the tenant by name (or barcode).
+                const productName = mapped.productName || '';
+                const product = await Product.findOne({
+                  ...baseFilter,
+                  $or: [{ name: productName }, { barcode: productName }],
+                });
+                if (!product) {
+                  // Skip rows whose product can't be resolved; count as failed so
+                  // it surfaces in the import report rather than crashing.
+                  errors.push(`Stock ${productName}: product not found, skipped`);
+                  totalFailed++;
+                  continue;
                 }
+                // recordStockMovement looks up the product, computes
+                // balanceBefore/balanceAfter and writes the ledger row with all
+                // required fields. It does NOT persist Product.stock, so update it
+                // here to match the recorded balance.
+                const balanceAfter = await recordStockMovement({
+                  userId: req.user._id,
+                  businessId: req.businessId,
+                  productId: product._id,
+                  productName: product.name,
+                  type: 'adjustment',
+                  quantity: qty,
+                  referenceType: 'import',
+                  referenceNumber: mapped.reference || 'Excel Import',
+                  description: 'Excel Import',
+                });
+                await Product.updateOne({ _id: product._id }, { $set: { stock: balanceAfter } });
                 results.stockMovements++;
               } catch (e) { errors.push(`Stock ${mapped.productName}: ${e.message}`); totalFailed++; }
             }

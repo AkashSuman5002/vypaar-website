@@ -13,15 +13,15 @@ const expenseItemSchema = new mongoose.Schema({
   gstAmount: { type: Number, default: 0 },
 }, { _id: false });
 
-const expenseSchema = mongoose.Schema({
+const expenseSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', index: true },
   expenseNumber: { type: String },
   category: { type: String, required: true, default: 'Other' },
   description: { type: String },
-  amount: { type: Number, required: true },
+  amount: { type: Number, required: true, min: 0 },
   tax: { type: Number, default: 0 },
-  totalAmount: { type: Number, required: true },
+  totalAmount: { type: Number, required: true, min: 0 },
   date: { type: Date, default: Date.now },
   paymentMethod: { type: String, default: 'cash' },
   reference: { type: String },
@@ -40,5 +40,11 @@ const expenseSchema = mongoose.Schema({
 expenseSchema.index({ user: 1, date: -1 });
 expenseSchema.index({ business: 1, date: -1 });
 expenseSchema.index({ business: 1, category: 1 });
+expenseSchema.index({ user: 1, category: 1 });
+// Per-tenant unique expense number. partialFilterExpression constrains only non-empty
+// string expenseNumbers — a compound `sparse` does NOT exclude null expenseNumber here
+// (user/business are always present), which caused null-on-null collisions. Existing
+// duplicates must be cleaned before this index can build; failures are non-fatal.
+expenseSchema.index({ user: 1, business: 1, expenseNumber: 1 }, { unique: true, partialFilterExpression: { expenseNumber: { $type: 'string', $gt: '' } } });
 
 module.exports = mongoose.model('Expense', expenseSchema);

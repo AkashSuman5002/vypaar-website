@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { encryptSecret, isEncrypted } = require('../utils/secretCrypto');
 
 const preferencesSchema = new mongoose.Schema({
   general: {
@@ -323,5 +324,30 @@ const settingSchema = new mongoose.Schema({
   sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   preferences: { type: preferencesSchema, default: () => ({}) },
 }, { timestamps: true });
+
+// Encrypt notification secrets at rest before persisting. We only touch a field
+// when it was modified, and skip values that are already in encrypted format so
+// we never double-encrypt. Empty values stay empty (encryptSecret returns '').
+const SECRET_PATHS = [
+  'preferences.notifications.email.smtpPass',
+  'preferences.notifications.sms.apiKey',
+  'preferences.notifications.sms.authToken',
+  'preferences.notifications.sms.accountSid',
+];
+
+settingSchema.pre('save', function encryptNotificationSecrets(next) {
+  try {
+    for (const path of SECRET_PATHS) {
+      if (!this.isModified(path)) continue;
+      const value = this.get(path);
+      if (value && !isEncrypted(value)) {
+        this.set(path, encryptSecret(value));
+      }
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = mongoose.model('Setting', settingSchema);

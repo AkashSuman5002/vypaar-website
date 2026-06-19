@@ -47,5 +47,10 @@ purchaseSchema.index({ user: 1, supplier: 1 });
 purchaseSchema.index({ business: 1, supplier: 1 });
 purchaseSchema.index({ user: 1, paymentStatus: 1 });
 purchaseSchema.index({ business: 1, paymentStatus: 1 });
+// Per-tenant unique bill number. partialFilterExpression constrains only non-empty
+// string billNumbers (null/empty are excluded — a compound `sparse` would NOT skip
+// them since user/business are always present). NOTE: existing duplicate billNumbers
+// must be cleaned before this index can build; build failures are logged, non-fatal.
+purchaseSchema.index({ user: 1, business: 1, billNumber: 1 }, { unique: true, partialFilterExpression: { billNumber: { $type: 'string', $gt: '' } } });
 
 module.exports = mongoose.model('Purchase', purchaseSchema);

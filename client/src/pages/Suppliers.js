@@ -82,7 +82,7 @@ const Suppliers = () => {
       await supplierAPI.delete(id);
       toast.success('Supplier deleted');
       loadSuppliers();
-    } catch { toast.error('Delete failed'); }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Delete failed'); }
   };
 
   const openEdit = (supplier) => {

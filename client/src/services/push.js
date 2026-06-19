@@ -50,7 +50,8 @@ export async function registerPush() {
       });
     }
 
-    await pushNotificationAPI.subscribe(subscription);
+    // Send the serialized form so the server reliably receives keys.p256dh/auth.
+    await pushNotificationAPI.subscribe(subscription.toJSON ? subscription.toJSON() : subscription);
     return subscription;
   } catch (err) {
     console.error('[Push] Failed to register push:', err);

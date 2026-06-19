@@ -1,4 +1,6 @@
 const Customer = require('../models/Customer');
+const Sale = require('../models/Sale');
+const Receipt = require('../models/Receipt');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { createNotification } = require('../controllers/notificationController');
 
@@ -95,6 +97,21 @@ const deleteCustomer = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const customer = await Customer.findOne({ ...baseFilter, _id: req.params.id });
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
+
+    // Referential delete-guard: refuse to delete a customer that is referenced
+    // by historical documents, which would orphan those references.
+    const [sales, receipts] = await Promise.all([
+      Sale.countDocuments({ ...baseFilter, customer: req.params.id }),
+      Receipt.countDocuments({ ...baseFilter, customer: req.params.id }),
+    ]);
+    const total = sales + receipts;
+    if (total > 0) {
+      return res.status(409).json({
+        message: `Customer cannot be deleted because it is used in ${total} transaction(s). Mark it inactive instead.`,
+        references: { sales, receipts },
+      });
+    }
+
     await Customer.findOneAndDelete({ _id: req.params.id, ...baseFilter });
     res.json({ message: 'Customer removed' });
   } catch (error) {

@@ -6,9 +6,11 @@ import SettingsSection from './SettingsSection';
 import { SettingsSelectRow, SettingsInputRow } from './SettingsRow';
 import { ZoomIn, Warehouse, Save } from 'lucide-react';
 import { defaultPrefs, loadSettings, saveCategory } from '../../hooks/useSettings';
-import { settingAPI, backupAPI, themeAPI } from '../../services/api';
+import { settingAPI, backupAPI, twoFactorAPI } from '../../services/api';
+import { useTheme } from '../../context/ThemeContext';
 
 const GeneralTab = () => {
+  const { darkMode, setDark } = useTheme();
   const [settings, setSettings] = useState(defaultPrefs.general);
   const [business, setBusiness] = useState({
     businessName: '', phone: '', email: '', address: '', gstNumber: '',
@@ -20,18 +22,20 @@ const GeneralTab = () => {
   const [passcodeConfirm, setPasscodeConfirm] = useState('');
   const [hasPasscode, setHasPasscode] = useState(false);
   const [lastBackupDate, setLastBackupDate] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
   const [invoiceNote, setInvoiceNote] = useState('');
   const [signaturePreview, setSignaturePreview] = useState('');
+  // Two-Factor Authentication (TOTP) state.
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+  const [twoFAQr, setTwoFAQr] = useState('');       // data-URL QR shown during setup
+  const [twoFASecret, setTwoFASecret] = useState(''); // base32 secret (manual-entry fallback)
+  const [twoFACode, setTwoFACode] = useState('');
+  const [twoFABusy, setTwoFABusy] = useState(false);
 
   useEffect(() => {
     loadSettings().then(data => {
       if (data?.preferences?.general) {
         setSettings({ ...defaultPrefs.general, ...data.preferences.general });
         setHasPasscode(!!data.preferences.general.passcodeHash);
-        if (data.preferences.general.darkMode !== undefined) {
-          setDarkMode(data.preferences.general.darkMode);
-        }
       }
       const topFields = ['businessName', 'phone', 'email', 'address', 'gstNumber',
         'state', 'currency', 'invoicePrefix', 'bankName', 'bankAccountNumber', 'bankIfsc', 'bankBranch', 'upiId'];
@@ -45,6 +49,9 @@ const GeneralTab = () => {
       if (data && data.length > 0) {
         setLastBackupDate(data[0].created);
       }
+    }).catch(() => null);
+    twoFactorAPI.getStatus().then(({ data }) => {
+      setTwoFAEnabled(!!data?.twoFactorEnabled);
     }).catch(() => null);
   }, []);
 
@@ -74,6 +81,46 @@ const GeneralTab = () => {
       toast.success('Passcode cleared');
     } catch { toast.error('Failed to clear passcode'); }
   };
+
+  // --- Two-Factor Authentication handlers ---
+  const handleStart2FASetup = async () => {
+    setTwoFABusy(true);
+    try {
+      const { data } = await twoFactorAPI.setup();
+      setTwoFAQr(data?.qrDataUrl || '');
+      setTwoFASecret(data?.secret || '');
+      setTwoFACode('');
+    } catch { toast.error('Failed to start 2FA setup'); }
+    finally { setTwoFABusy(false); }
+  };
+
+  const handleEnable2FA = async () => {
+    if (!twoFACode || twoFACode.length !== 6) { toast.error('Enter the 6-digit code'); return; }
+    setTwoFABusy(true);
+    try {
+      await twoFactorAPI.enable(twoFACode);
+      setTwoFAEnabled(true);
+      setTwoFAQr('');
+      setTwoFASecret('');
+      setTwoFACode('');
+      toast.success('Two-factor authentication enabled');
+    } catch (err) { toast.error(err.response?.data?.message || 'Invalid code'); }
+    finally { setTwoFABusy(false); }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!twoFACode || twoFACode.length !== 6) { toast.error('Enter the 6-digit code to disable'); return; }
+    setTwoFABusy(true);
+    try {
+      await twoFactorAPI.disable(twoFACode);
+      setTwoFAEnabled(false);
+      setTwoFACode('');
+      toast.success('Two-factor authentication disabled');
+    } catch (err) { toast.error(err.response?.data?.message || 'Invalid code'); }
+    finally { setTwoFABusy(false); }
+  };
+
+  const cancel2FASetup = () => { setTwoFAQr(''); setTwoFASecret(''); setTwoFACode(''); };
 
   const handleSave = async () => {
     if (settings.enablePasscode && passcodeInput) {
@@ -150,6 +197,71 @@ const GeneralTab = () => {
             <ToggleSwitch label="Block New Items from Transaction Form" checked={settings.blockNewItemsFromTransaction} onChange={v => update('blockNewItemsFromTransaction', v)} />
             <ToggleSwitch label="Block New Parties from Transaction Form" checked={settings.blockNewPartiesFromTransaction} onChange={v => update('blockNewPartiesFromTransaction', v)} />
           </SettingsSection>
+          <SettingsSection title="Two-Factor Authentication">
+            <div className="py-2 space-y-3">
+              {twoFAEnabled ? (
+                <>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    Two-factor authentication is <strong>enabled</strong>. You'll be asked for a code from your
+                    authenticator app each time you sign in.
+                  </p>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Enter a current code to disable</label>
+                    <input type="text" inputMode="numeric" maxLength={6} value={twoFACode}
+                      onChange={e => setTwoFACode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="6-digit code"
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                  </div>
+                  <button type="button" onClick={handleDisable2FA} disabled={twoFABusy}
+                    className="text-xs text-red-600 dark:text-red-400 hover:underline disabled:opacity-50">
+                    Disable two-factor authentication
+                  </button>
+                </>
+              ) : twoFAQr ? (
+                <>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Scan this QR code with Google Authenticator, Authy, or any TOTP app, then enter the 6-digit code to confirm.
+                  </p>
+                  <div className="flex justify-center">
+                    <img src={twoFAQr} alt="2FA QR code" className="w-40 h-40 border rounded bg-white p-1" />
+                  </div>
+                  {twoFASecret && (
+                    <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 break-all">
+                      Can't scan? Enter this key manually: <span className="font-mono">{twoFASecret}</span>
+                    </p>
+                  )}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Verification Code</label>
+                    <input type="text" inputMode="numeric" maxLength={6} value={twoFACode}
+                      onChange={e => setTwoFACode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="6-digit code"
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={handleEnable2FA} disabled={twoFABusy}
+                      className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                      {twoFABusy ? 'Verifying...' : 'Verify & Enable'}
+                    </button>
+                    <button type="button" onClick={cancel2FASetup} disabled={twoFABusy}
+                      className="text-xs text-slate-500 dark:text-slate-400 hover:underline disabled:opacity-50">
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Add an extra layer of security. After your password/OTP login, you'll also enter a code from an
+                    authenticator app.
+                  </p>
+                  <button type="button" onClick={handleStart2FASetup} disabled={twoFABusy}
+                    className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    {twoFABusy ? 'Loading...' : 'Set up two-factor authentication'}
+                  </button>
+                </>
+              )}
+            </div>
+          </SettingsSection>
           <SettingsSection title="More Transactions">
             <ToggleSwitch label="Estimate/Quotation" checked={settings.estimateQuotation} onChange={v => update('estimateQuotation', v)} />
             <ToggleSwitch label="Proforma Invoice" checked={settings.proformaInvoice} onChange={v => update('proformaInvoice', v)} />
@@ -215,7 +327,16 @@ const GeneralTab = () => {
                     }} />
                   </label>
                   {signaturePreview && (
-                    <button onClick={() => { setSignaturePreview(''); }} className="text-xs text-red-500 hover:underline">Remove</button>
+                    <button onClick={async () => {
+                      // Persist the removal (clear the stored signature), not just the preview.
+                      try {
+                        await settingAPI.update({ signature: '' });
+                        setSignaturePreview('');
+                        update('signature', '');
+                        loadSettings(true).catch(() => {});
+                        toast.success('Signature removed');
+                      } catch { toast.error('Failed to remove signature'); }
+                    }} className="text-xs text-red-500 hover:underline">Remove</button>
                   )}
                 </div>
               </div>
@@ -236,6 +357,14 @@ const GeneralTab = () => {
         <div className="space-y-6">
           <SettingsSection title="Backup & History">
             <ToggleSwitch label="Auto Backup" checked={settings.autoBackup} onChange={v => update('autoBackup', v)} />
+            <SettingsSelectRow label="Backup Frequency" value={settings.backupFrequency}
+              onChange={v => update('backupFrequency', v)} options={['daily', 'weekly', 'monthly']} />
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-sm text-[#1F2937] dark:text-slate-200">Backup Retention (days)</span>
+              <input type="number" min={1} value={settings.backupRetention}
+                onChange={e => update('backupRetention', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                className="w-24 px-3 py-1.5 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+            </div>
             <div className="flex items-center justify-between py-2.5">
               <span className="text-sm text-[#1F2937]">Last Backup</span>
               <span className="text-sm text-gray-400">
@@ -264,18 +393,9 @@ const GeneralTab = () => {
                   </button>
                 ))}
               </div>
-              <ToggleSwitch label="Dark Mode" checked={darkMode} onChange={v => {
-                setDarkMode(v);
-                update('darkMode', v);
-                if (v) {
-                  document.documentElement.classList.add('dark');
-                } else {
-                  document.documentElement.classList.remove('dark');
-                }
-                // Persist to the canonical theme endpoint (same field the header reads),
-                // so the choice survives a reload and both controls stay in sync.
-                themeAPI.update(v).catch(() => {});
-              }} />
+              {/* Dark mode is owned by ThemeContext (single source of truth shared with
+                  the header), so this toggle and the header toggle can never desync. */}
+              <ToggleSwitch label="Dark Mode" checked={darkMode} onChange={v => setDark(v)} />
             </div>
           </SettingsSection>
           <SettingsSection title="Amount Decimal Places">

@@ -160,7 +160,7 @@ const subscribePush = async (req, res) => {
     if (!subscription || !subscription.endpoint) {
       return res.status(400).json({ message: 'Invalid subscription' });
     }
-    pushNotificationService.saveSubscription(req.user._id, subscription);
+    await pushNotificationService.saveSubscription(req.user._id, subscription);
     res.status(201).json({ message: 'Subscribed to push notifications' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -169,7 +169,7 @@ const subscribePush = async (req, res) => {
 
 const unsubscribePush = async (req, res) => {
   try {
-    pushNotificationService.removeSubscription(req.user._id);
+    await pushNotificationService.removeSubscription(req.user._id, req.body?.endpoint);
     res.json({ message: 'Unsubscribed from push notifications' });
   } catch (error) {
     res.status(500).json({ message: error.message });

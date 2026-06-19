@@ -1,7 +1,11 @@
 const nodemailer = require('nodemailer');
 const Setting = require('../models/Setting');
+const { decryptSecret } = require('../utils/secretCrypto');
 
-let transporter = null;
+// Per-user transporter cache. Previously a single module-level transporter was
+// built from the FIRST user's SMTP config and reused for everyone, which leaked
+// one tenant's mail server into all others. Each userId now gets its own.
+const transporters = new Map();
 
 // Maps a canonical notification event type to its per-event preference key
 // under preferences.notifications.email.* (see models/Setting.js).
@@ -15,12 +19,15 @@ const initEmailTransport = async (userId) => {
   const emailPrefs = settings?.preferences?.notifications?.email || {};
   if (!emailPrefs.smtpHost || !emailPrefs.smtpUser) return null;
 
-  transporter = nodemailer.createTransport({
+  const transporter = nodemailer.createTransport({
     host: emailPrefs.smtpHost,
     port: parseInt(emailPrefs.smtpPort) || 587,
     secure: emailPrefs.smtpSecure || false,
-    auth: { user: emailPrefs.smtpUser, pass: emailPrefs.smtpPass },
+    // smtpPass is stored encrypted at rest; decrypt before use. Legacy plaintext
+    // passes through unchanged.
+    auth: { user: emailPrefs.smtpUser, pass: decryptSecret(emailPrefs.smtpPass) },
   });
+  transporters.set(String(userId), transporter);
   return transporter;
 };
 
@@ -35,8 +42,9 @@ const sendEmailNotification = async (userId, { to, subject, html, text }, eventT
     const eventKey = eventType && EMAIL_EVENT_PREF_KEY[eventType];
     if (eventKey && emailPrefs[eventKey] === false) return;
 
+    let transporter = transporters.get(String(userId));
     if (!transporter) {
-      await initEmailTransport(userId);
+      transporter = await initEmailTransport(userId);
     }
     if (!transporter) {
       console.log('[Email] SMTP not configured, skipping email notification');

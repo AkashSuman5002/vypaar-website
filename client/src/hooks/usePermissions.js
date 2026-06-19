@@ -32,7 +32,10 @@ const ROLE_PERMISSIONS = {
 const usePermissions = () => {
   const { user } = useAuth();
 
-  const userRole = user?.role || 'admin';
+  // Do NOT default an unknown user to 'admin'. UI gating must be conservative:
+  // an unrecognized/missing role gets the minimal permission set. Real admins
+  // are still recognized via their explicit 'admin'/'Admin' role or isOwner.
+  const userRole = user?.role || '';
   const isOwner = user?.isOwner === true;
   const userPermissions = user?.permissions || [];
 
@@ -40,6 +43,9 @@ const usePermissions = () => {
     if (isOwner) return true;
     if (userPermissions.includes('*')) return true;
     if (userPermissions.includes(permission)) return true;
+    // For an UNKNOWN role, fall back to the minimal (Staff) permission set
+    // rather than full role perms, so admin-only controls stay hidden. Known
+    // roles (admin/Admin/Manager/Accountant/Staff) keep their exact perms.
     const rolePerms = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS['Staff'];
     if (rolePerms.includes('*')) return true;
     if (rolePerms.includes(permission)) return true;

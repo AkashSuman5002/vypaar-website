@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const gstRecordSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },
   partyName: { type: String, trim: true },
   partyGstin: { type: String, trim: true },
   invoiceNumber: { type: String, trim: true },
@@ -25,5 +26,6 @@ gstRecordSchema.index({ user: 1, invoiceNumber: 1 });
 gstRecordSchema.index({ user: 1, partyGstin: 1 });
 gstRecordSchema.index({ user: 1, invoiceDate: -1 });
 gstRecordSchema.index({ user: 1, importRef: 1 });
+gstRecordSchema.index({ business: 1, createdAt: -1 });
 
 module.exports = mongoose.model('GstRecord', gstRecordSchema);

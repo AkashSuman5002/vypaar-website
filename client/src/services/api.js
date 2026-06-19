@@ -1,31 +1,25 @@
 import axios from 'axios';
 
-export const BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+export const BASE_URL = (process.env.REACT_APP_API_URL || '/api').replace(/\/api\/?$/, '');
 
-// Resolve a server-stored media path (e.g. "/uploads/logo-123.png") to a full URL.
-// /uploads is now auth-protected on the server, so we append the JWT as a query param
-// (an <img> tag cannot send an Authorization header). data:/blob:/http(s) values pass through.
+// Resolve a server-stored media path (e.g. "/uploads/logo-123.png") to a same-origin URL.
+// /uploads is auth-protected on the server, but the request now goes through the same-origin
+// CRA proxy, so the httpOnly `token` cookie authenticates it automatically — no ?token= needed.
+// data:/blob:/http(s) values pass through unchanged.
 export const mediaUrl = (val) => {
   if (!val) return '';
   const s = String(val);
   if (/^(https?:|data:|blob:)/.test(s)) return s;
-  let token = '';
-  try {
-    const user = JSON.parse(localStorage.getItem('user') || 'null');
-    if (user?.token) token = `?token=${encodeURIComponent(user.token)}`;
-  } catch (_) { /* ignore */ }
-  return `${BASE_URL}/${s.replace(/^\//, '')}${token}`;
+  return `/${s.replace(/^\//, '')}`;
 };
-const API = axios.create({ baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api', withCredentials: true });
+const API = axios.create({ baseURL: process.env.REACT_APP_API_URL || '/api', withCredentials: true });
 const CSRF_STORAGE_KEY = 'vyapar_csrf_token';
 
 const getCsrfToken = () => sessionStorage.getItem(CSRF_STORAGE_KEY) || '';
 
 API.interceptors.request.use((req) => {
-  const user = JSON.parse(localStorage.getItem('user'));
-  if (user?.token) {
-    req.headers.Authorization = `Bearer ${user.token}`;
-  }
+  // Auth is now cookie-only (httpOnly `token` cookie sent automatically via the same-origin
+  // CRA proxy). No Authorization header is set — the token is no longer accessible to JS.
   const activeBusiness = localStorage.getItem('activeBusiness');
   if (activeBusiness) {
     req.headers['x-business-id'] = activeBusiness;
@@ -77,11 +71,20 @@ export const authAPI = {
   registerVerify: (data) => API.post('/auth/register/verify', data),
   loginOtp: (data) => API.post('/auth/login/otp', data),
   loginVerify: (data) => API.post('/auth/login/verify', data),
+  // Second-factor (TOTP) verification after a primary login returns twoFactorRequired.
+  loginTwoFactor: (data) => API.post('/auth/login/2fa', data),
   getProfile: () => API.get('/auth/profile'),
   refresh: () => API.get('/auth/refresh'),
   forgotPassword: (data) => API.post('/auth/forgot-password', data),
   resetPassword: (data) => API.post('/auth/reset-password', data),
   logout: () => API.post('/auth/logout'),
+};
+
+export const twoFactorAPI = {
+  getStatus: () => API.get('/2fa/status'),
+  setup: () => API.post('/2fa/setup'),
+  enable: (token) => API.post('/2fa/enable', { token }),
+  disable: (token) => API.post('/2fa/disable', { token }),
 };
 
 export const userAPI = {
@@ -187,6 +190,7 @@ export const pushNotificationAPI = {
 export const paymentOutAPI = {
   getAll: (params) => API.get('/payment-out', { params }),
   create: (data) => API.post('/payment-out', data),
+  update: (id, data) => API.put(`/payment-out/${id}`, data),
   delete: (id) => API.delete(`/payment-out/${id}`),
 };
 

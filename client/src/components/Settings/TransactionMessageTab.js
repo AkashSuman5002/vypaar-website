@@ -71,11 +71,17 @@ const TransactionMessageTab = () => {
     finally { setSaving(false); }
   };
 
+  // Inline template save now writes the SAME canonical store as the tab's main
+  // Save (preferences.transactionMessage.templates, the store messageService
+  // reads when sending) via saveCategory, so the two can never desync.
   const handleSaveTemplate = async () => {
     try {
-      const current = await whatsappAPI.getTemplates();
-      const updated = { ...current.data.templates, [selectedTemplate]: templateText };
-      await whatsappAPI.saveTemplates(updated);
+      const existing = await loadSettings();
+      const existingTemplates = existing?.preferences?.transactionMessage?.templates || {};
+      await saveCategory('transactionMessage', {
+        ...settings,
+        templates: { ...existingTemplates, [selectedTemplate]: templateText },
+      });
       toast.success('Template saved');
     } catch { toast.error('Failed to save template'); }
   };

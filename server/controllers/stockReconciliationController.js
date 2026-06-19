@@ -4,11 +4,36 @@ const StockMovement = require('../models/StockMovement');
 const Godown = require('../models/Godown');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { withTransaction } = require('../utils/withTransaction');
+const { getNextSequence } = require('../utils/nextNumber');
 
-const getNextReconciliationNumber = async (req) => {
+// Compute the current max numeric reconciliation number for seeding the counter.
+// Preserves the 'SR-' prefix / 4-digit pad format produced previously.
+const maxReconciliationSeq = async (req) => {
   const baseFilter = getBaseFilter(req);
-  const count = await StockReconciliation.countDocuments(baseFilter);
-  return `SR-${String(count + 1).padStart(4, '0')}`;
+  const last = await StockReconciliation.find(baseFilter)
+    .select('reconciliationNumber')
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
+  let max = 0;
+  for (const r of last) {
+    if (!r.reconciliationNumber) continue;
+    const num = parseInt(String(r.reconciliationNumber).replace(/^SR-/, ''), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  return max;
+};
+
+// Atomic reconciliation-number generator. Uses an atomic counter increment
+// instead of countDocuments()+1, eliminating the read-count-then-increment race.
+// Format unchanged: SR-0001. `session` is optional (create runs without a txn).
+const getNextReconciliationNumber = async (req, session) => {
+  const seq = await getNextSequence(
+    { user: req.user._id, business: req.businessId },
+    'stock_reconciliation',
+    { session, seedFn: () => maxReconciliationSeq(req) },
+  );
+  return `SR-${String(seq).padStart(4, '0')}`;
 };
 
 const getReconciliations = async (req, res) => {
@@ -140,49 +165,60 @@ const applyReconciliation = async (req, res) => {
     }
 
     const productIds = itemsWithDifference.map(item => item.product);
-    const products = await Product.find({ _id: { $in: productIds }, ...baseFilter });
-    const productMap = new Map(products.map(p => [p._id.toString(), p]));
-
-    const bulkOps = [];
-    const movements = [];
-
-    for (const item of itemsWithDifference) {
-      const product = productMap.get(item.product.toString());
-      if (!product) continue;
-
-      // Apply by the COUNTED absolute value, not the frozen-at-create-time
-      // `difference`. The snapshot's `systemStock` may be stale (e.g. sales
-      // happened between count and apply); applying `product.stock + difference`
-      // would double-apply that delta and corrupt stock. Setting to the counted
-      // figure makes post-apply stock equal what was physically counted,
-      // regardless of intervening activity. The recorded movement quantity is the
-      // real adjustment against current stock.
-      const newStock = Math.max(0, item.countedStock);
-      const adjustment = newStock - product.stock;
-      bulkOps.push({
-        updateOne: {
-          filter: { _id: product._id, ...baseFilter },
-          update: { $set: { stock: newStock } },
-        },
-      });
-
-      movements.push({
-        user: req.user._id,
-        business: req.businessId,
-        product: product._id,
-        productName: product.name,
-        type: 'adjustment',
-        quantity: adjustment,
-        balanceBefore: product.stock,
-        balanceAfter: newStock,
-        referenceType: 'StockReconciliation',
-        referenceNumber: reconciliation.reconciliationNumber,
-        description: `Stock reconciliation: ${item.reason || 'Physical count adjustment'}`,
-        date: new Date(),
-      });
-    }
 
     await withTransaction(async (session) => {
+      // Re-read products INSIDE the transaction so balanceBefore/adjustment/
+      // balanceAfter are computed from the in-session snapshot. A pre-transaction
+      // read can go stale if a sale commits between the read and this write, which
+      // would record a wrong movement quantity/balance even though the absolute
+      // `stock = countedStock` ends correct.
+      const products = await Product.find(
+        { _id: { $in: productIds }, ...baseFilter },
+        null,
+        { session },
+      );
+      const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
+      const bulkOps = [];
+      const movements = [];
+
+      for (const item of itemsWithDifference) {
+        const product = productMap.get(item.product.toString());
+        if (!product) continue;
+
+        // Apply by the COUNTED absolute value, not the frozen-at-create-time
+        // `difference`. The snapshot's `systemStock` may be stale (e.g. sales
+        // happened between count and apply); applying `product.stock + difference`
+        // would double-apply that delta and corrupt stock. Setting to the counted
+        // figure makes post-apply stock equal what was physically counted,
+        // regardless of intervening activity. The recorded movement quantity is the
+        // real adjustment against current (in-session) stock.
+        const newStock = Math.max(0, item.countedStock);
+        const balanceBefore = product.stock;
+        const adjustment = newStock - balanceBefore;
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: product._id, ...baseFilter },
+            update: { $set: { stock: newStock } },
+          },
+        });
+
+        movements.push({
+          user: req.user._id,
+          business: req.businessId,
+          product: product._id,
+          productName: product.name,
+          type: 'adjustment',
+          quantity: adjustment,
+          balanceBefore,
+          balanceAfter: newStock,
+          referenceType: 'StockReconciliation',
+          referenceNumber: reconciliation.reconciliationNumber,
+          description: `Stock reconciliation: ${item.reason || 'Physical count adjustment'}`,
+          date: new Date(),
+        });
+      }
+
       if (bulkOps.length > 0) {
         await Product.bulkWrite(bulkOps, { session });
       }

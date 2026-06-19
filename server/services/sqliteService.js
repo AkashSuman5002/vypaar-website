@@ -48,7 +48,12 @@ const getRowCounts = (sql, tables) => {
 
 const getSetting = (sql, keyPattern) => {
   try {
-    const res = sql.exec(`SELECT value FROM settings WHERE key = '${keyPattern}' OR key LIKE '%${keyPattern}%' LIMIT 1;`);
+    // Use bound parameters (sql.js exec accepts a params array bound to `?` placeholders)
+    // to prevent SQL injection via keyPattern.
+    const res = sql.exec(
+      'SELECT value FROM settings WHERE key = ? OR key LIKE ? LIMIT 1;',
+      [keyPattern, '%' + keyPattern + '%']
+    );
     if (res.length > 0 && res[0].values.length > 0) return res[0].values[0][0];
   } catch { /* ignore */ }
   return null;

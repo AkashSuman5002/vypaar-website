@@ -5,7 +5,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 // Rate limiting is ALWAYS enforced so production safety never silently depends on
 // NODE_ENV being set. Dev caps are generous enough not to interfere with local work;
 // production caps are strict. Set DISABLE_RATE_LIMIT=true only for load testing.
-const disabled = process.env.DISABLE_RATE_LIMIT === 'true';
+// The kill-switch is IGNORED in production — rate limiting can never be disabled there.
+const disabled = isDev && process.env.DISABLE_RATE_LIMIT === 'true';
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -14,6 +15,7 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => disabled,
+  validate: { xForwardedForHeader: false },
 });
 
 const authLimiter = rateLimit({
@@ -23,6 +25,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => disabled,
+  validate: { xForwardedForHeader: false },
 });
 
 module.exports = { apiLimiter, authLimiter };

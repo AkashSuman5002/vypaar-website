@@ -1,7 +1,9 @@
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Product = require('../models/Product');
 const { recordStockMovement } = require('./stockController');
+const { withTransaction } = require('../utils/withTransaction');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+const { getNextSequence } = require('../utils/nextNumber');
 const { sendAutoMessage } = require('../services/messageService');
 const { createNotification } = require('./notificationController');
 
@@ -42,18 +44,31 @@ const createPurchaseOrder = async (req, res) => {
     const baseFilter = getBaseFilter(req);
     const { orderNumber, supplier, supplierName, orderDate, expectedDate, items, notes, isInterState } = req.body;
 
+    // Honor an explicit order number; otherwise allocate atomically from a
+    // per-tenant counter (eliminates the read-last-then-increment race).
     let finalOrderNumber = orderNumber;
     if (!finalOrderNumber) {
       const Setting = require('../models/Setting');
       const setting = await Setting.findOne({ user: req.user._id, ...(req.businessId ? { business: req.businessId } : {}) });
       const prefix = setting?.preferences?.transaction?.purchaseOrderPrefix || 'PO-';
-      const lastOrder = await PurchaseOrder.findOne({ user: req.user._id }).sort({ createdAt: -1 });
-      let nextNum = 1;
-      if (lastOrder?.orderNumber) {
-        const num = parseInt(lastOrder.orderNumber.replace(prefix, '')) || 0;
-        nextNum = num + 1;
-      }
-      finalOrderNumber = `${prefix}${String(nextNum).padStart(6, '0')}`;
+      // Seed the counter from the current max numeric order number (prefix stripped)
+      // so it never restarts at 1 over existing data. Same prefix / 6-digit pad format.
+      const seedFn = async () => {
+        const orders = await PurchaseOrder.find(baseFilter).select('orderNumber').lean();
+        let max = 0;
+        for (const o of orders) {
+          if (!o.orderNumber) continue;
+          const num = parseInt(String(o.orderNumber).replace(prefix, ''), 10);
+          if (!isNaN(num) && num > max) max = num;
+        }
+        return max;
+      };
+      const seq = await getNextSequence(
+        { user: req.user._id, business: req.businessId },
+        'purchase_order',
+        { seedFn },
+      );
+      finalOrderNumber = `${prefix}${String(seq).padStart(6, '0')}`;
     }
 
     let taxableAmount = 0, cgstTotal = 0, sgstTotal = 0, igstTotal = 0;
@@ -174,49 +189,68 @@ const receivePurchaseOrder = async (req, res) => {
       return res.status(400).json({ message: 'At least one item must be received' });
     }
 
-    let allFullyReceived = true;
-    for (const received of receivedItems) {
-      const orderItem = order.items.id(received.itemId) || order.items.find(i => i.product?.toString() === received.productId);
-      if (!orderItem) continue;
+    // Wrap the entire receive flow (stock increments, ledger movements and the
+    // order status update) in a single transaction so a partial failure can
+    // never leave stock updated without the order marked received (or vice
+    // versa). Validation errors are surfaced via a typed error so the HTTP 400
+    // response is preserved.
+    try {
+      await withTransaction(async (session) => {
+        let allFullyReceived = true;
+        for (const received of receivedItems) {
+          const orderItem = order.items.id(received.itemId) || order.items.find(i => i.product?.toString() === received.productId);
+          if (!orderItem) continue;
 
-      const recvQty = parseInt(received.receivedQuantity) || 0;
-      if (recvQty <= 0) continue;
+          const recvQty = parseInt(received.receivedQuantity) || 0;
+          if (recvQty <= 0) continue;
 
-      if (recvQty > orderItem.pendingQuantity) {
-        return res.status(400).json({ message: `Received quantity (${recvQty}) exceeds pending quantity (${orderItem.pendingQuantity}) for ${orderItem.productName}` });
+          if (recvQty > orderItem.pendingQuantity) {
+            const err = new Error(`Received quantity (${recvQty}) exceeds pending quantity (${orderItem.pendingQuantity}) for ${orderItem.productName}`);
+            err.statusCode = 400;
+            throw err;
+          }
+
+          orderItem.receivedQuantity = (orderItem.receivedQuantity || 0) + recvQty;
+          orderItem.pendingQuantity = orderItem.quantity - orderItem.receivedQuantity;
+
+          const product = await Product.findOne({ _id: orderItem.product, ...baseFilter }, null, { session });
+          if (product) {
+            await recordStockMovement({
+              userId: req.user._id,
+              businessId: req.businessId,
+              productId: product._id,
+              productName: product.name,
+              type: 'purchase',
+              quantity: recvQty,
+              rate: orderItem.rate || 0,
+              totalAmount: (orderItem.rate || 0) * recvQty,
+              referenceType: 'PurchaseOrder',
+              referenceId: order._id,
+              referenceNumber: order.orderNumber,
+              description: `Received against PO ${order.orderNumber}`,
+              session,
+            });
+            product.stock = (product.stock || 0) + recvQty;
+            await product.save({ session });
+          }
+
+          if (orderItem.pendingQuantity > 0) allFullyReceived = false;
+        }
+
+        order.status = allFullyReceived ? 'received' : 'partially_received';
+        order.receivedDate = new Date();
+        order.receiveNotes = notes || '';
+        await order.save({ session });
+      });
+    } catch (txErr) {
+      if (txErr.statusCode === 400) {
+        return res.status(400).json({ message: txErr.message });
       }
-
-      orderItem.receivedQuantity = (orderItem.receivedQuantity || 0) + recvQty;
-      orderItem.pendingQuantity = orderItem.quantity - orderItem.receivedQuantity;
-
-      const product = await Product.findOne({ _id: orderItem.product, ...baseFilter });
-      if (product) {
-        await recordStockMovement({
-          userId: req.user._id,
-          businessId: req.businessId,
-          productId: product._id,
-          productName: product.name,
-          type: 'purchase',
-          quantity: recvQty,
-          rate: orderItem.rate || 0,
-          totalAmount: (orderItem.rate || 0) * recvQty,
-          referenceType: 'PurchaseOrder',
-          referenceId: order._id,
-          referenceNumber: order.orderNumber,
-          description: `Received against PO ${order.orderNumber}`,
-        });
-        product.stock = (product.stock || 0) + recvQty;
-        await product.save();
-      }
-
-      if (orderItem.pendingQuantity > 0) allFullyReceived = false;
+      throw txErr;
     }
 
-    order.status = allFullyReceived ? 'received' : 'partially_received';
-    order.receivedDate = new Date();
-    order.receiveNotes = notes || '';
-    await order.save();
-
+    // External side-effect: run only after the transaction has committed so it
+    // is not duplicated by transient-transaction retries.
     createNotification(req.user._id, 'new_purchase', 'Stock Received', `${order.orderNumber} - stock received`, order._id, 'PurchaseOrder');
 
     res.json(order);
