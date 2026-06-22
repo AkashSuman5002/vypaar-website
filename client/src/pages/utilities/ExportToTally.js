@@ -1,0 +1,75 @@
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import { toast } from 'react-toastify';
+import { Download } from 'lucide-react';
+import { utilityAPI } from '../../services/api';
+
+const ExportToTally = () => {
+  const [selectedModules, setSelectedModules] = useState(['ledgers', 'vouchers']);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  const modules = [
+    { id: 'ledgers', label: 'Ledgers (Parties)', description: 'Export all party ledger data' },
+    { id: 'vouchers', label: 'Vouchers (Transactions)', description: 'Export sales, purchase, payment, and receipt vouchers' },
+    { id: 'stock', label: 'Stock Items', description: 'Export inventory/stock item data with quantities and rates' },
+    { id: 'groups', label: 'Account Groups', description: 'Export chart of accounts and group hierarchy' },
+  ];
+
+  const toggleModule = (id) => setSelectedModules(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
+
+  const handleExport = async () => {
+    if (selectedModules.length === 0) { toast.error('Select at least one module'); return; }
+    setExporting(true);
+    try {
+      // The backend (POST /utilities/export-tally) generates a Tally-compatible XML blob.
+      const res = await utilityAPI.exportToTally({ modules: selectedModules, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/xml' }));
+      const a = document.createElement('a'); a.href = url;
+      a.download = `tally_export_${new Date().toISOString().split('T')[0]}.xml`;
+      a.click(); window.URL.revokeObjectURL(url);
+      toast.success('Tally XML exported successfully!');
+    } catch (err) { toast.error(err.response?.data?.message || 'Export failed'); }
+    finally { setExporting(false); }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC] mb-6">Export To Tally</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-6">
+          <h2 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] mb-2">Export Format</h2>
+          <p className="text-xs text-slate-500 dark:text-[#64748B] mb-5">Data is exported as Tally-compatible XML for direct import into Tally ERP 9 / TallyPrime.</p>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC] mb-3">Select Data to Export</h3>
+          <div className="space-y-3 mb-6">
+            {modules.map(mod => (
+              <label key={mod.id} className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedModules.includes(mod.id) ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10' : 'border-slate-200 hover:border-slate-300 dark:border-[#334155] dark:hover:border-[#475569]'}`}>
+                <input type="checkbox" checked={selectedModules.includes(mod.id)} onChange={() => toggleModule(mod.id)} className="w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-[#334155] mt-0.5" />
+                <div><p className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">{mod.label}</p><p className="text-xs text-slate-500 dark:text-[#64748B] mt-0.5">{mod.description}</p></div>
+              </label>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div><label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1.5">From Date</label><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" /></div>
+            <div><label className="block text-sm font-medium text-slate-700 dark:text-[#E2E8F0] mb-1.5">To Date</label><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-slate-900 dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm" /></div>
+          </div>
+          <button onClick={handleExport} disabled={exporting || selectedModules.length === 0} className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2">
+            <Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export Data'}
+          </button>
+        </div>
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-[#334155] shadow-soft p-6">
+          <h3 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] mb-4">Export Instructions</h3>
+          <ol className="space-y-3 text-sm text-slate-600 dark:text-[#94A3B8]">
+            <li className="flex items-start gap-3"><span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</span><span>Select the data modules you want to export.</span></li>
+            <li className="flex items-start gap-3"><span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</span><span>Choose a date range (optional) to filter data.</span></li>
+            <li className="flex items-start gap-3"><span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</span><span>Click Export to download the file.</span></li>
+            <li className="flex items-start gap-3"><span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">4</span><span>Import into Tally: Gateway of Tally &gt; Import.</span></li>
+          </ol>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+export default ExportToTally;

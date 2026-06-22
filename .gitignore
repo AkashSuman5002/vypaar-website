@@ -1,0 +1,17 @@
+.env
+.env.local
+.env.production
+server/.env
+node_modules/
+dist/
+.history/
+client/build/
+mongodb/
+cloud-config.json
+*.log
+*.err
+server.log
+server.err
+server/server.log
+server/server.err
+server/whatsapp-sessions/

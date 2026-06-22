@@ -1,0 +1,94 @@
+const Godown = require('../models/Godown');
+const Product = require('../models/Product');
+const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
+
+const getGodowns = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const godowns = await Godown.find({ ...baseFilter }).sort({ name: 1 });
+    const godownIds = godowns.map(g => g._id);
+
+    const counts = await Product.aggregate([
+      { $match: { ...baseFilter, warehouse: { $in: godownIds }, isActive: true } },
+      { $group: { _id: '$warehouse', count: { $sum: 1 } } },
+    ]);
+    const countMap = new Map(counts.map(c => [c._id.toString(), c.count]));
+
+    const godownsWithStock = godowns.map((g) => {
+      const obj = g.toObject();
+      obj.productCount = countMap.get(g._id.toString()) || 0;
+      return obj;
+    });
+    res.json(godownsWithStock);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const createGodown = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { name, code, address, city, state, phone, email, managerName, capacity, notes, items } = req.body;
+    if (!name) return res.status(400).json({ message: 'Godown name is required' });
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const existing = await Godown.findOne({ ...baseFilter, name: new RegExp(`^${escaped}$`, 'i') });
+    if (existing) return res.status(400).json({ message: 'Godown with this name already exists' });
+    const godown = await Godown.create({
+      ...getCreateData(req, { name, code, address, city, state, phone, email, managerName, capacity, notes }),
+    });
+
+    // Assign selected products to this new godown (sets each product's warehouse reference)
+    if (Array.isArray(items) && items.length > 0) {
+      const productIds = items
+        .map((i) => (i && typeof i === 'object' ? i.product : i))
+        .filter(Boolean);
+      if (productIds.length > 0) {
+        await Product.updateMany(
+          { ...baseFilter, _id: { $in: productIds } },
+          { $set: { warehouse: godown._id } }
+        );
+      }
+    }
+
+    res.status(201).json(godown);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const updateGodown = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const godown = await Godown.findOne({ _id: req.params.id, ...baseFilter });
+    if (!godown) return res.status(404).json({ message: 'Godown not found' });
+    const fields = ['name', 'code', 'address', 'city', 'state', 'phone', 'email', 'managerName', 'capacity', 'notes', 'isActive', 'isDefault'];
+    for (const field of fields) {
+      if (req.body[field] !== undefined) godown[field] = req.body[field];
+    }
+    if (req.body.isDefault) {
+      await Godown.updateMany({ ...baseFilter, _id: { $ne: godown._id } }, { isDefault: false });
+    }
+    await godown.save();
+    res.json(godown);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const deleteGodown = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const godown = await Godown.findOne({ _id: req.params.id, ...baseFilter });
+    if (!godown) return res.status(404).json({ message: 'Godown not found' });
+    const productCount = await Product.countDocuments({ ...baseFilter, warehouse: godown._id, isActive: true });
+    if (productCount > 0) {
+      return res.status(400).json({ message: `Cannot delete: ${productCount} products are assigned to this godown` });
+    }
+    await Godown.findOneAndDelete({ _id: req.params.id, ...baseFilter });
+    res.json({ message: 'Godown deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getGodowns, createGodown, updateGodown, deleteGodown };

@@ -1,0 +1,52 @@
+const mongoose = require('mongoose');
+
+const purchaseReturnSchema = mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', index: true },
+  returnNumber: { type: String },
+  purchase: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase' },
+  purchaseBillNumber: { type: String },
+  supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
+  supplierName: { type: String },
+  phone: { type: String, default: '' },
+  returnDate: { type: Date, default: Date.now },
+  invoiceDate: { type: Date },
+  stateOfSupply: { type: String, default: '' },
+  paymentType: { type: String, default: 'Cash' },
+  roundOff: { type: Boolean, default: true },
+  roundOffValue: { type: Number, default: 0 },
+  image: { type: String, default: '' },
+  items: [{
+    product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+    productName: { type: String },
+    quantity: { type: Number, required: true },
+    rate: { type: Number, required: true },
+    amount: { type: Number },
+    gstRate: { type: Number, default: 0 },
+    unit: { type: String, default: 'pcs' },
+    hsn: { type: String, default: '' },
+    discountPct: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 },
+    taxAmount: { type: Number, default: 0 },
+    taxableAmount: { type: Number, default: 0 },
+  }],
+  taxableAmount: { type: Number, default: 0 },
+  cgstTotal: { type: Number, default: 0 },
+  sgstTotal: { type: Number, default: 0 },
+  igstTotal: { type: Number, default: 0 },
+  totalAmount: { type: Number, default: 0 },
+  reason: { type: String },
+  returnReason: { type: String, trim: true },
+  notes: { type: String },
+  isInterState: { type: Boolean, default: false },
+}, { timestamps: true });
+
+purchaseReturnSchema.index({ business: 1, createdAt: -1 });
+purchaseReturnSchema.index({ user: 1, createdAt: -1 });
+purchaseReturnSchema.index({ business: 1, returnNumber: 1 });
+// Per-tenant unique return number. partialFilterExpression constrains only non-empty
+// string returnNumbers (a compound `sparse` would not exclude nulls). Existing
+// duplicates must be cleaned before this index can build; failures are non-fatal.
+purchaseReturnSchema.index({ user: 1, business: 1, returnNumber: 1 }, { unique: true, partialFilterExpression: { returnNumber: { $type: 'string', $gt: '' } } });
+
+module.exports = mongoose.model('PurchaseReturn', purchaseReturnSchema);
