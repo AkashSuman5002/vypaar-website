@@ -5,6 +5,10 @@ const { runSync, getStatus, isEnabled } = require('../services/syncService');
 const { TENANT_MODELS } = require('../services/backupService');
 const { getBaseFilter } = require('../utils/queryHelper');
 const { authorizeAdmin } = require('../middleware/authorize');
+const Business = require('../models/Business');
+const Setting = require('../models/Setting');
+const Branch = require('../models/Branch');
+const Role = require('../models/Role');
 
 // ---------------------------------------------------------------------------
 // Local sync engine controls (used on the DESKTOP only; no-op on the cloud).
@@ -112,6 +116,30 @@ router.post('/push', async (req, res) => {
     }
 
     res.json({ applied });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+// GET /api/sync/bootstrap — the authenticated account's IDENTITY bundle, so a fresh
+// device can mirror it locally (with the SAME _ids) before pulling data. Returns ONLY
+// this caller's own identity (scoped by req.user / req.businessId) — no cross-tenant data.
+router.get('/bootstrap', async (req, res) => {
+  try {
+    if (!req.businessId) return res.status(400).json({ message: 'No business context' });
+    const [business, setting, branches, roles] = await Promise.all([
+      Business.findById(req.businessId).lean(),
+      Setting.findOne({ user: req.user._id }).lean(),
+      Branch.find({ business: req.businessId }).lean(),
+      Role.find({ business: req.businessId }).lean(),
+    ]);
+    res.json({
+      user: req.user, // password already stripped by authMiddleware (.select('-password'))
+      business: business || null,
+      setting: setting || null,
+      branches: branches || [],
+      roles: roles || [],
+    });
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
