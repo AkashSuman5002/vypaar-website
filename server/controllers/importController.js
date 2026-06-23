@@ -116,6 +116,9 @@ const FIELD_ALIASES = {
     paidAmount: ['paid', 'paidamount', 'amountpaid', 'received', 'receivedamount'],
     paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'],
     items: ['items', 'item', 'products', 'lineitems'],
+    itemName: ['product', 'productname', 'itemname'],
+    quantity: ['quantity', 'qty', 'units', 'qnty'],
+    rate: ['rate', 'unitprice', 'price', 'saleprice', 'sellingprice', 'unitrate'],
     taxableAmount: ['taxable', 'taxableamount', 'taxablevalue'],
     cgstTotal: ['cgst', 'cgsttotal', 'cgstamount'],
     sgstTotal: ['sgst', 'sgsttotal', 'sgstamount'],
@@ -128,6 +131,9 @@ const FIELD_ALIASES = {
     paidAmount: ['paid', 'paidamount', 'amountpaid'],
     paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'],
     items: ['items', 'item', 'products'],
+    itemName: ['product', 'productname', 'itemname'],
+    quantity: ['quantity', 'qty', 'units', 'qnty'],
+    rate: ['rate', 'unitprice', 'price', 'purchaseprice', 'costprice', 'unitrate'],
   },
   Expenses: {
     date: ['date', 'expensedate'],
@@ -278,8 +284,12 @@ const excelExecute = async (req, res) => {
                 // Build ONE summary line item from the row totals so the invoice
                 // is never empty, deriving the taxable base and a gstRate from the
                 // CGST+SGST provided. Link the product by name/barcode when found.
-                const itemName = (mapped.items && String(mapped.items).trim()) || mapped.customerName || 'Imported Item';
+                // Use the per-line columns when present (Product/Quantity/Rate), else
+                // fall back to a single summary line from the row totals.
+                const itemName = (mapped.itemName && String(mapped.itemName).trim()) || (mapped.items && String(mapped.items).trim()) || mapped.customerName || 'Imported Item';
+                const qty = parseFloat(mapped.quantity) || 1;
                 const taxable = parseFloat(mapped.taxableAmount) || (total - cgst - sgst) || total;
+                const rate = parseFloat(mapped.rate) || (qty ? taxable / qty : taxable);
                 const taxTotal = cgst + sgst;
                 const gstRate = taxable > 0 ? Math.round((taxTotal / taxable) * 100) : 0;
                 const product = await Product.findOne({
@@ -290,17 +300,17 @@ const excelExecute = async (req, res) => {
                   product: product ? product._id : undefined,
                   productName: product ? product.name : itemName,
                   hsn: product ? product.hsn : '',
-                  quantity: 1,
+                  quantity: qty,
                   unit: product ? product.unit : 'Pcs',
-                  rate: taxable,
-                  amount: total,
+                  rate,
+                  amount: total || (rate * qty),
                   gstRate,
                   taxableAmount: taxable,
                   cgst,
                   sgst,
                   igst: 0,
                 };
-                await Sale.create({ user: req.user._id, business: req.businessId, invoiceNumber: mapped.invoiceNumber || `IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: mapped.customerName || 'Unknown', date: mapped.date || new Date(), items: [item], totalItems: 1, totalQuantity: 1, taxableAmount: taxable, cgstTotal: cgst, sgstTotal: sgst, taxTotal, totalAmount: total, paidAmount: paid, remainingBalance: Math.max(0, total - paid), paymentMethod: mapped.paymentMethod || 'cash', paymentStatus: total <= paid ? 'paid' : (paid > 0 ? 'partial' : 'unpaid') });
+                await Sale.create({ user: req.user._id, business: req.businessId, invoiceNumber: mapped.invoiceNumber || `IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: mapped.customerName || 'Unknown', date: mapped.date || new Date(), items: [item], totalItems: 1, totalQuantity: qty, taxableAmount: taxable, cgstTotal: cgst, sgstTotal: sgst, taxTotal, totalAmount: total || (rate * qty), paidAmount: paid, remainingBalance: Math.max(0, (total || rate * qty) - paid), paymentMethod: mapped.paymentMethod || 'cash', paymentStatus: total <= paid ? 'paid' : (paid > 0 ? 'partial' : 'unpaid') });
                 results.sales++;
               } catch (e) { errors.push(`Sale ${mapped.invoiceNumber}: ${e.message}`); totalFailed++; }
             }
@@ -317,7 +327,10 @@ const excelExecute = async (req, res) => {
                 // so build ONE summary line item from the total to keep the bill
                 // non-empty. Treat the total as the taxable base (GST=0) since no
                 // tax split is supplied; link the product by name/barcode if found.
-                const itemName = (mapped.items && String(mapped.items).trim()) || 'Imported Item';
+                const itemName = (mapped.itemName && String(mapped.itemName).trim()) || (mapped.items && String(mapped.items).trim()) || 'Imported Item';
+                const qty = parseFloat(mapped.quantity) || 1;
+                const rate = parseFloat(mapped.rate) || (qty ? total / qty : total);
+                const amount = total || (rate * qty);
                 const product = await Product.findOne({
                   ...baseFilter,
                   $or: [{ name: itemName }, { barcode: itemName }],
@@ -325,11 +338,11 @@ const excelExecute = async (req, res) => {
                 const item = {
                   product: product ? product._id : undefined,
                   productName: product ? product.name : itemName,
-                  quantity: 1, // schema requires min 1
-                  rate: total,
-                  amount: total,
+                  quantity: qty, // schema requires min 1
+                  rate,
+                  amount,
                   gstRate: 0,
-                  taxableAmount: total,
+                  taxableAmount: amount,
                   cgst: 0,
                   sgst: 0,
                   igst: 0,
@@ -337,7 +350,7 @@ const excelExecute = async (req, res) => {
                 // Normalize paymentMethod to the Purchase enum [cash,bank,upi,cheque].
                 const pmRaw = (mapped.paymentMethod || 'cash').toLowerCase();
                 const pm = ['cash', 'bank', 'upi', 'cheque'].includes(pmRaw) ? pmRaw : 'cash';
-                await Purchase.create({ user: req.user._id, business: req.businessId, supplierName: mapped.supplierName || 'Unknown', billNumber: mapped.invoiceNumber || `PUR-IMP-${Date.now()}`, date: mapped.date || new Date(), items: [item], taxableAmount: total, totalAmount: total, paidAmount: paid, remainingBalance: Math.max(0, total - paid), paymentMethod: pm, paymentStatus: total <= paid ? 'paid' : (paid > 0 ? 'partial' : 'unpaid') });
+                await Purchase.create({ user: req.user._id, business: req.businessId, supplierName: mapped.supplierName || 'Unknown', billNumber: mapped.invoiceNumber || `PUR-IMP-${Date.now()}`, date: mapped.date || new Date(), items: [item], taxableAmount: amount, totalAmount: amount, paidAmount: paid, remainingBalance: Math.max(0, amount - paid), paymentMethod: pm, paymentStatus: amount <= paid ? 'paid' : (paid > 0 ? 'partial' : 'unpaid') });
                 results.purchases++;
               } catch (e) { errors.push(`Purchase ${mapped.invoiceNumber}: ${e.message}`); totalFailed++; }
             }
