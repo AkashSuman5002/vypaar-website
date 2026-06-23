@@ -20,6 +20,7 @@ const { startAutoBackup } = require('./services/backupService');
 const { startPaymentReminder } = require('./services/paymentReminderService');
 const { startServiceReminderCheck } = require('./services/serviceReminderScheduler');
 const { startSync } = require('./services/syncService');
+const cloudSyncClient = require('./services/cloudSyncClient');
 // Required once at startup so its VAPID keypair init (env or ephemeral) runs before any push send.
 require('./services/pushNotificationService');
 
@@ -330,7 +331,8 @@ startRecurringService();
 startAutoBackup();
 startPaymentReminder();
 startServiceReminderCheck();
-startSync(); // cloud multi-device sync (no-op unless CLOUD_MONGODB_URI is set)
+startSync(); // legacy direct-to-Atlas sync (no-op unless CLOUD_MONGODB_URI is set)
+cloudSyncClient.startSyncLoop(); // secure HTTP cloud sync (no-op unless CLOUD_API_URL is set)
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {

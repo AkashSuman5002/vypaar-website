@@ -133,4 +133,24 @@ const runCloudSync = async () => {
   return { pulled: appliedCount, pushed: pushedCount };
 };
 
-module.exports = { cloudLogin, setToken, hasToken, clearToken, runCloudSync, isConfigured, api };
+// Fire-and-forget a single sync pass (used right after login, and by the loop).
+let syncing = false;
+const triggerSync = () => {
+  if (!isConfigured() || !token || syncing) return;
+  syncing = true;
+  runCloudSync()
+    .then((r) => { if (r && (r.pulled || r.pushed)) console.log('[cloudsync]', JSON.stringify(r)); })
+    .catch((e) => console.warn('[cloudsync] error:', e.message))
+    .finally(() => { syncing = false; });
+};
+
+// Background loop: sync every `intervalMs` while logged in and online.
+let loopTimer = null;
+const startSyncLoop = (intervalMs = Number(process.env.SYNC_INTERVAL_MS) || 30000) => {
+  if (!isConfigured()) { console.log('[cloudsync] HTTP cloud sync DISABLED (no CLOUD_API_URL)'); return; }
+  if (loopTimer) clearInterval(loopTimer);
+  console.log(`[cloudsync] HTTP cloud sync ENABLED — interval ${intervalMs}ms`);
+  loopTimer = setInterval(triggerSync, intervalMs);
+};
+
+module.exports = { cloudLogin, setToken, hasToken, clearToken, runCloudSync, triggerSync, startSyncLoop, isConfigured, api };

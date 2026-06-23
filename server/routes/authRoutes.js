@@ -15,6 +15,10 @@ const { sendPasswordResetEmail } = require('../services/emailService');
 const { createOtp, verifyOtp, deliverOtp, isDev } = require('../utils/otpAuth');
 const { verifyTotp } = require('../utils/totp');
 const { withTransaction } = require('../utils/withTransaction');
+// Cloud-first auth (desktop in cloud mode). No-op on the cloud server itself and on a
+// purely local install (both have CLOUD_API_URL unset => cloudAuth.isCloudMode() false).
+const cloudAuth = require('../services/cloudAuth');
+const cloudSyncClient = require('../services/cloudSyncClient');
 
 const router = express.Router();
 
@@ -145,6 +149,24 @@ router.post('/register', authLimiter, async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 8 characters' });
     }
     const normalizedEmail = normalizeEmail(email);
+
+    // CLOUD MODE (desktop): create the account on the cloud, then mirror it into the
+    // local DB and issue a local session. Registration requires internet (the account
+    // is created on the cloud — there is no offline registration in a multi-device product).
+    if (cloudAuth.isCloudMode()) {
+      try {
+        const user = await cloudAuth.cloudRegisterAndMirror(name, normalizedEmail, password);
+        const full = await User.findById(user._id);
+        const token = generateToken(full);
+        res.cookie('token', token, TOKEN_COOKIE_OPTS);
+        cloudSyncClient.triggerSync(); // pull any existing cloud data immediately
+        return res.status(201).json({ ...full.toJSON() });
+      } catch (e) {
+        if (e.network) return res.status(503).json({ message: 'No internet connection. Creating an account needs internet.' });
+        return res.status(400).json({ message: e.message || 'Registration failed' });
+      }
+    }
+
     const existing = await User.findOne({ email: normalizedEmail });
     if (existing) {
       return res.status(400).json({ message: 'Email already registered' });
@@ -173,6 +195,31 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required' });
     }
     const normEmail = normalizeEmail(email);
+
+    // CLOUD MODE (desktop): authenticate against the cloud and mirror identity locally,
+    // then issue a local session. If the cloud is unreachable (offline) we fall through to
+    // local auth using the cached user + local password hash written on a previous login.
+    if (cloudAuth.isCloudMode()) {
+      try {
+        const cu = await cloudAuth.cloudLoginAndMirror(normEmail, password);
+        const full = await User.findById(cu._id);
+        if (full && full.twoFactorEnabled) {
+          return res.json({ twoFactorRequired: true, userId: full._id });
+        }
+        clearLoginFailures(normEmail);
+        const token = generateToken(full);
+        res.cookie('token', token, TOKEN_COOKIE_OPTS);
+        cloudSyncClient.triggerSync(); // pull this account's data from the cloud immediately
+        return res.json({ ...full.toJSON() });
+      } catch (e) {
+        if (e.cloudAuthFail) {
+          recordLoginFailure(normEmail);
+          return res.status(401).json({ message: 'Invalid email or password' });
+        }
+        // network/other -> fall through to OFFLINE local auth below.
+        console.warn('[cloudAuth] cloud login unavailable, trying offline local login:', e.message);
+      }
+    }
 
     // Per-account lockout: short-circuit BEFORE checking the password once too many recent
     // failures have accumulated for this email (see loginFailures map above).

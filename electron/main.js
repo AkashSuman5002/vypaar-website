@@ -36,22 +36,22 @@ function getJwtSecret() {
   return secret;
 }
 
-// Optional cloud-sync database URL for multi-device sync. Read from a small JSON
-// file in the user's app-data folder so sync can be enabled per-install WITHOUT
-// rebuilding: create `cloud-config.json` containing { "cloudUri": "mongodb+srv://..." }.
-// If the file is absent (or empty), the app runs as a normal offline single-PC
-// product — the backend's sync service is a no-op without this URL.
-// An env var (CLOUD_MONGODB_URI) takes precedence if set.
-function getCloudUri() {
-  if (process.env.CLOUD_MONGODB_URI) return process.env.CLOUD_MONGODB_URI;
+// Cloud API base URL for secure multi-device sync (Option B). This is the ONLY cloud
+// setting baked into the build — it is just a public URL (NO database credentials), so
+// it is safe to distribute. The desktop talks to this API with the user's login token;
+// the database password lives only on the cloud server. An optional `cloud-config.json`
+// ({ "apiUrl": "https://..." }) in the user's app-data folder overrides it for testing.
+const CLOUD_API_URL_DEFAULT = 'https://vypaar-website.onrender.com';
+function getCloudApiUrl() {
+  if (process.env.CLOUD_API_URL) return process.env.CLOUD_API_URL;
   const cfgFile = path.join(app.getPath('userData'), 'cloud-config.json');
   try {
     if (fs.existsSync(cfgFile)) {
       const cfg = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
-      if (cfg && typeof cfg.cloudUri === 'string' && cfg.cloudUri.trim()) return cfg.cloudUri.trim();
+      if (cfg && typeof cfg.apiUrl === 'string' && cfg.apiUrl.trim()) return cfg.apiUrl.trim();
     }
   } catch (_) {}
-  return '';
+  return CLOUD_API_URL_DEFAULT;
 }
 
 let mainWindow = null;
@@ -147,8 +147,9 @@ function startBackend() {
       // uninstall, reinstall and app updates (see server/config/paths.js).
       DATA_DIR: app.getPath('userData'),
       JWT_SECRET: getJwtSecret(),
-      // Multi-device cloud sync (empty => disabled; offline single-PC behaviour).
-      ...(getCloudUri() ? { CLOUD_MONGODB_URI: getCloudUri() } : {}),
+      // Secure multi-device sync via the cloud API (Option B). Only a public URL — never
+      // database credentials. The desktop syncs through this API with the user's token.
+      CLOUD_API_URL: getCloudApiUrl(),
       EXPOSE_DEV_OTP: 'true', // offline desktop: show the OTP on screen (no email/SMS needed)
       ...(mongoUri ? { MONGODB_URI: mongoUri } : {}),
     },
