@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
-import { AtSign, ShieldCheck, LogIn, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, ShieldCheck, LogIn, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 const ROLE_PERMISSIONS = {
   admin: ['*'], Admin: ['*'],
@@ -34,42 +34,23 @@ const redirectFor = (data) => {
 };
 
 const Login = () => {
-  const [step, setStep] = useState('identifier'); // 'identifier' | 'otp' | '2fa'
-  const [identifier, setIdentifier] = useState('');
-  const [otp, setOtp] = useState('');
-  const [devOtp, setDevOtp] = useState('');
+  const [step, setStep] = useState('login'); // 'login' | '2fa'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  // Set when the primary login (OTP) succeeds but the account has 2FA enabled.
+  // Set when password login succeeds but the account has 2FA enabled.
   const [twoFactorUserId, setTwoFactorUserId] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
-  const { loginOtp, loginVerify, loginTwoFactor } = useAuth();
+  const { login, loginTwoFactor } = useAuth();
   const navigate = useNavigate();
 
-  const handleSendOtp = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (!identifier.trim()) return toast.error('Enter your email or phone number');
+    if (!email.trim() || !password) return toast.error('Enter your email and password');
     setLoading(true);
     try {
-      const res = await loginOtp(identifier.trim());
-      setStep('otp');
-      if (res?.devOtp) {
-        setDevOtp(res.devOtp);
-        setOtp(res.devOtp);
-        toast.info(`Dev mode: your OTP is ${res.devOtp}`);
-      } else {
-        toast.success('A login code has been sent');
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not send code');
-    } finally { setLoading(false); }
-  };
-
-  const handleVerify = async (e) => {
-    e.preventDefault();
-    if (!otp || otp.length < 4) return toast.error('Enter the login code');
-    setLoading(true);
-    try {
-      const data = await loginVerify({ identifier: identifier.trim(), otp });
+      const data = await login(email.trim(), password);
       // Account has 2FA enabled: no session yet — prompt for the authenticator code.
       if (data?.twoFactorRequired) {
         setTwoFactorUserId(data.userId);
@@ -80,7 +61,7 @@ const Login = () => {
       toast.success('Login successful');
       navigate(redirectFor(data));
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      toast.error(err.response?.data?.message || 'Invalid email or password');
     } finally { setLoading(false); }
   };
 
@@ -103,17 +84,13 @@ const Login = () => {
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8 w-full max-w-md">
       <div className="text-center mb-8">
         <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
-          {step === 'identifier' ? <LogIn className="w-6 h-6 text-white" /> : <ShieldCheck className="w-6 h-6 text-white" />}
+          {step === '2fa' ? <ShieldCheck className="w-6 h-6 text-white" /> : <LogIn className="w-6 h-6 text-white" />}
         </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          {step === 'identifier' ? 'Welcome back' : step === '2fa' ? 'Two-factor authentication' : 'Enter your code'}
+          {step === '2fa' ? 'Two-factor authentication' : 'Welcome back'}
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1.5 text-sm">
-          {step === 'identifier'
-            ? 'Sign in with your email or phone'
-            : step === '2fa'
-              ? 'Enter the 6-digit code from your authenticator app'
-              : `We sent a code to ${identifier}`}
+          {step === '2fa' ? 'Enter the 6-digit code from your authenticator app' : 'Sign in with your email and password'}
         </p>
       </div>
 
@@ -131,47 +108,36 @@ const Login = () => {
           <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors disabled:opacity-50 shadow-sm">
             {loading ? 'Verifying...' : 'Verify & Sign In'}
           </button>
-          <button type="button" onClick={() => { setStep('identifier'); setOtp(''); setDevOtp(''); setTwoFactorCode(''); setTwoFactorUserId(''); }}
+          <button type="button" onClick={() => { setStep('login'); setTwoFactorCode(''); setTwoFactorUserId(''); }}
             className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
             <ArrowLeft className="w-3.5 h-3.5" /> Back to login
           </button>
         </form>
-      ) : step === 'identifier' ? (
-        <form onSubmit={handleSendOtp} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Email or Phone</label>
-            <div className="relative">
-              <AtSign className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-              <input type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required placeholder="you@example.com or 9876543210" className={inputCls} />
-            </div>
-          </div>
-          <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors disabled:opacity-50 shadow-sm">
-            {loading ? 'Sending code...' : 'Send Login Code'}
-          </button>
-        </form>
       ) : (
-        <form onSubmit={handleVerify} className="space-y-4">
-          {devOtp && (
-            <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-3 py-2">
-              Dev mode (no SMS gateway): your code is <strong>{devOtp}</strong>
-            </div>
-          )}
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Login Code</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Email Address</label>
             <div className="relative">
-              <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-              <input type="text" inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} required placeholder="6-digit code" maxLength={6} className={inputCls + ' tracking-widest'} autoFocus />
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" className={inputCls} autoFocus />
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+              <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Your password" className={inputCls + ' pr-10'} />
+              <button type="button" onClick={() => setShowPassword((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Link to="/forgot-password" className="text-sm text-blue-600 hover:underline font-medium">Forgot password?</Link>
           </div>
           <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors disabled:opacity-50 shadow-sm">
-            {loading ? 'Verifying...' : 'Verify & Sign In'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={() => { setStep('identifier'); setOtp(''); setDevOtp(''); }} className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-              <ArrowLeft className="w-3.5 h-3.5" /> Change
-            </button>
-            <button type="button" onClick={handleSendOtp} disabled={loading} className="text-sm text-blue-600 hover:underline font-medium disabled:opacity-50">Resend code</button>
-          </div>
         </form>
       )}
 
