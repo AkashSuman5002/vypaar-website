@@ -105,6 +105,8 @@ const FIELD_ALIASES = {
     costPrice: ['costprice', 'purchase', 'purchaseprice', 'purchaserate', 'cost', 'buyprice', 'purchaseunitprice', 'purchasecost'],
     description: ['description', 'desc', 'remarks', 'notes'],
     barcode: ['barcode', 'itemcode', 'sku', 'code'],
+    minStock: ['minstock', 'minimumstock', 'minstockalert', 'minimumstockalert', 'reorderlevel', 'lowstockalert', 'reorderpoint'],
+    storageLocation: ['storagelocation', 'warehouse', 'location', 'godown', 'rack', 'shelf', 'bin'],
   },
   Sales: {
     invoiceNumber: ['invoiceno', 'invoicenumber', 'billno', 'billnumber', 'invoice', 'voucherno'],
@@ -136,7 +138,7 @@ const FIELD_ALIASES = {
   },
   Stock: {
     productName: ['itemname', 'name', 'productname', 'item', 'product'],
-    quantity: ['quantity', 'qty', 'stock', 'units'],
+    quantity: ['quantity', 'qty', 'stock', 'units', 'currentstock', 'closingstock', 'availablestock'],
     type: ['type', 'movementtype', 'transactiontype', 'stocktype'],
     date: ['date', 'movementdate'],
     reference: ['reference', 'ref', 'remarks', 'notes'],
@@ -242,7 +244,7 @@ const excelExecute = async (req, res) => {
           case 'Items': {
             const inserts = data.map(row => {
               const mapped = mapRow(row, file.type, columnMapping && columnMapping[file.type]);
-              return { user: req.user._id, business: req.businessId, name: mapped.name || '', category: mapped.category || '', price: parseFloat(mapped.price) || 0, costPrice: parseFloat(mapped.costPrice) || 0, stock: parseInt(mapped.stock) || 0, gstRate: parseInt(mapped.gstRate) || 0, unit: mapped.unit || 'Pcs', hsn: mapped.hsn || '', barcode: mapped.barcode ? String(mapped.barcode).trim() : '', description: mapped.description || '', isActive: true };
+              return { user: req.user._id, business: req.businessId, name: mapped.name || '', category: mapped.category || '', price: parseFloat(mapped.price) || 0, costPrice: parseFloat(mapped.costPrice) || 0, stock: parseInt(mapped.stock) || 0, gstRate: parseInt(mapped.gstRate) || 0, unit: mapped.unit || 'Pcs', hsn: mapped.hsn || '', barcode: mapped.barcode ? String(mapped.barcode).trim() : '', minStock: parseInt(mapped.minStock) || 5, storageLocation: mapped.storageLocation ? String(mapped.storageLocation).trim() : '', description: mapped.description || '', isActive: true };
             });
             // Process in chunks for better performance
             for (let i = 0; i < inserts.length; i += CHUNK_SIZE) {
