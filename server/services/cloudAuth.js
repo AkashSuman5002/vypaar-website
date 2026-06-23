@@ -32,7 +32,8 @@ const tokenFromSetCookie = (res) => {
 const cloudFetch = async (path, opts = {}, token) => {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (token) headers.Authorization = 'Bearer ' + token;
-  const res = await fetch(api() + path, { ...opts, headers, signal: AbortSignal.timeout(25000) });
+  // Generous timeout: a free-tier cloud instance can take ~50s to wake from idle (cold start).
+  const res = await fetch(api() + path, { ...opts, headers, signal: AbortSignal.timeout(60000) });
   let data = null; try { data = await res.json(); } catch (_) {}
   return { res, data, status: res.status };
 };

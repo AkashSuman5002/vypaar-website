@@ -37,7 +37,7 @@ const cloudLogin = async (email, password) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(60000), // tolerate free-tier cold start (~50s)
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.message || `cloud login failed (${res.status})`);
