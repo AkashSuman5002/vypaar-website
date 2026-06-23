@@ -53,6 +53,17 @@ const hasValidSignature = (token, uid) => {
 const csrfProtection = (req, res, next) => {
   if (SAFE_METHODS.has(req.method)) return next();
 
+  // CSRF only protects COOKIE-based browser auth (the browser auto-sends the auth cookie
+  // cross-site). A non-browser API client that authenticates with an explicit
+  // `Authorization: Bearer <token>` header is NOT vulnerable to CSRF — an attacker site
+  // can't make the victim's browser attach that header. So requests authenticated purely
+  // via a Bearer token (e.g. the desktop sync client talking to the cloud API) are exempt.
+  // Browser/cookie requests are unaffected and still fully CSRF-protected below.
+  const authHeader = req.headers.authorization || '';
+  const hasBearer = authHeader.startsWith('Bearer ');
+  const hasAuthCookie = Boolean(req.cookies && req.cookies.token);
+  if (hasBearer && !hasAuthCookie) return next();
+
   const cookieToken = req.cookies?.[CSRF_COOKIE];
   const headerToken = req.get('x-csrf-token');
   const uid = req.user && req.user._id ? req.user._id.toString() : '';
