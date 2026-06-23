@@ -178,14 +178,9 @@ const excelPreview = async (req, res) => {
     for (const file of files) {
       const type = file.type;
       const data = file.data || [];
-      const mapping = columnMapping?.[type] || excelColumnMapping[type] || {};
-      const mapped = data.map(row => {
-        const obj = {};
-        for (const [vyaparCol, appField] of Object.entries(mapping)) {
-          obj[appField] = row[vyaparCol];
-        }
-        return obj;
-      });
+      // Use the SAME alias-based mapping as the real import so the preview matches
+      // exactly what will be imported (no more "preview looks empty" surprises).
+      const mapped = data.map(row => mapRow(row, type, columnMapping && columnMapping[type]));
       summary[type] = data.length;
       previews[type] = mapped.slice(0, 10);
     }
