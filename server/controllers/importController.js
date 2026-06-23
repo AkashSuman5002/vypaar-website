@@ -75,6 +75,100 @@ const excelColumnMapping = {
   Stock: { 'Item Name': 'productName', 'Quantity': 'quantity', 'Type': 'type', 'Date': 'date', 'Reference': 'reference' },
 };
 
+// Normalize a header for fuzzy matching: lowercase + strip every non-alphanumeric char.
+// So "Sale Price", "sale_price", "Sale  Price" and "SALEPRICE" all become "saleprice".
+const normHeader = (h) => String(h == null ? '' : h).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Per-type field -> accepted header aliases (already normalized). This is what fixes the
+// "import brings in blank columns" bug for ALL types: real-world spreadsheets use many
+// header spellings (Sale Price / Selling Price / MRP, Opening Stock / Qty, GST % / GST,
+// Purchase / Cost, Barcode, etc.), and we now match any of them instead of one exact name.
+const FIELD_ALIASES = {
+  Parties: {
+    name: ['partyname', 'name', 'customername', 'suppliername', 'party', 'companyname'],
+    phone: ['mobilenumber', 'phone', 'mobile', 'contact', 'phoneno', 'mobileno', 'contactnumber', 'phonenumber'],
+    gstNumber: ['gstnumber', 'gstin', 'gst', 'gstno'],
+    address: ['address', 'addr', 'billingaddress'],
+    email: ['email', 'emailaddress', 'mail', 'emailid'],
+    openingBalance: ['openingbalance', 'balance', 'opening', 'openingbal', 'obal'],
+    creditLimit: ['creditlimit', 'credit'],
+    type: ['type', 'partytype'],
+  },
+  Items: {
+    name: ['itemname', 'name', 'productname', 'item', 'product'],
+    category: ['category', 'cat', 'group', 'itemcategory'],
+    price: ['price', 'saleprice', 'sellingprice', 'mrp', 'rate', 'unitprice', 'salerate', 'sellprice', 'saleunitprice'],
+    stock: ['stock', 'openingstock', 'qty', 'quantity', 'currentstock', 'openingqty', 'stockqty', 'openingquantity'],
+    gstRate: ['gstrate', 'gst', 'gstpercent', 'tax', 'taxrate', 'gstpercentage'],
+    unit: ['unit', 'uom', 'units'],
+    hsn: ['hsn', 'hsncode', 'hsnsac', 'sac', 'hsnsaccode'],
+    costPrice: ['costprice', 'purchase', 'purchaseprice', 'purchaserate', 'cost', 'buyprice', 'purchaseunitprice', 'purchasecost'],
+    description: ['description', 'desc', 'remarks', 'notes'],
+    barcode: ['barcode', 'itemcode', 'sku', 'code'],
+  },
+  Sales: {
+    invoiceNumber: ['invoiceno', 'invoicenumber', 'billno', 'billnumber', 'invoice', 'voucherno'],
+    customerName: ['customer', 'customername', 'party', 'partyname', 'client', 'buyer'],
+    date: ['date', 'invoicedate', 'billdate', 'saledate'],
+    totalAmount: ['total', 'totalamount', 'grandtotal', 'amount', 'netamount', 'invoiceamount'],
+    paidAmount: ['paid', 'paidamount', 'amountpaid', 'received', 'receivedamount'],
+    paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'],
+    items: ['items', 'item', 'products', 'lineitems'],
+    taxableAmount: ['taxable', 'taxableamount', 'taxablevalue'],
+    cgstTotal: ['cgst', 'cgsttotal', 'cgstamount'],
+    sgstTotal: ['sgst', 'sgsttotal', 'sgstamount'],
+  },
+  Purchases: {
+    invoiceNumber: ['invoiceno', 'invoicenumber', 'billno', 'billnumber', 'invoice', 'purchaseno', 'voucherno'],
+    supplierName: ['supplier', 'suppliername', 'party', 'partyname', 'vendor', 'vendorname'],
+    date: ['date', 'invoicedate', 'billdate', 'purchasedate'],
+    totalAmount: ['total', 'totalamount', 'grandtotal', 'amount', 'netamount'],
+    paidAmount: ['paid', 'paidamount', 'amountpaid'],
+    paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'],
+    items: ['items', 'item', 'products'],
+  },
+  Expenses: {
+    date: ['date', 'expensedate'],
+    category: ['category', 'cat', 'expensecategory', 'type', 'expensetype'],
+    amount: ['amount', 'expenseamount', 'amt', 'total', 'totalamount'],
+    description: ['description', 'desc', 'notes', 'remarks', 'narration'],
+    paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'],
+  },
+  Stock: {
+    productName: ['itemname', 'name', 'productname', 'item', 'product'],
+    quantity: ['quantity', 'qty', 'stock', 'units'],
+    type: ['type', 'movementtype', 'transactiontype', 'stocktype'],
+    date: ['date', 'movementdate'],
+    reference: ['reference', 'ref', 'remarks', 'notes'],
+  },
+};
+
+// Build the { appField: value } object from a raw spreadsheet row by matching each field's
+// aliases against the row's (normalized) headers. A user-supplied explicit mapping
+// ({ 'Exact Header': 'appField' } from the UI's column-mapping step) takes precedence.
+const mapRow = (row, type, userMapping) => {
+  const mapped = {};
+  // Index the row by normalized header once.
+  const normRow = {};
+  for (const key of Object.keys(row || {})) {
+    const v = row[key];
+    if (v !== undefined && v !== null && String(v).trim() !== '') normRow[normHeader(key)] = v;
+  }
+  const aliases = FIELD_ALIASES[type] || {};
+  for (const [field, names] of Object.entries(aliases)) {
+    for (const n of names) {
+      if (normRow[n] !== undefined) { mapped[field] = normRow[n]; break; }
+    }
+  }
+  // Explicit user mapping wins over auto-detection.
+  if (userMapping) {
+    for (const [header, field] of Object.entries(userMapping)) {
+      if (row && row[header] !== undefined && String(row[header]).trim() !== '') mapped[field] = row[header];
+    }
+  }
+  return mapped;
+};
+
 const excelPreview = async (req, res) => {
   try {
     const { files, columnMapping } = req.body;
@@ -121,8 +215,7 @@ const excelExecute = async (req, res) => {
         switch (type) {
           case 'Parties': {
             for (const row of data) {
-              const mapped = {};
-              for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
+              const mapped = mapRow(row, file.type, columnMapping && columnMapping[file.type]);
               const doc = { user: req.user._id, business: req.businessId, name: mapped.name || '', phone: mapped.phone || '', gstNumber: mapped.gstNumber || '', address: mapped.address || '', email: mapped.email || '', openingBalance: parseFloat(mapped.openingBalance) || 0, creditLimit: parseFloat(mapped.creditLimit) || 0, isActive: true };
               const type = (mapped.type || 'Customer').toLowerCase();
               try {
@@ -153,9 +246,8 @@ const excelExecute = async (req, res) => {
           }
           case 'Items': {
             const inserts = data.map(row => {
-              const mapped = {};
-              for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
-              return { user: req.user._id, business: req.businessId, name: mapped.name || '', category: mapped.category || '', price: parseFloat(mapped.price) || 0, costPrice: parseFloat(mapped.costPrice) || 0, stock: parseInt(mapped.stock) || 0, gstRate: parseInt(mapped.gstRate) || 0, unit: mapped.unit || 'Pcs', hsn: mapped.hsn || '', description: mapped.description || '', isActive: true };
+              const mapped = mapRow(row, file.type, columnMapping && columnMapping[file.type]);
+              return { user: req.user._id, business: req.businessId, name: mapped.name || '', category: mapped.category || '', price: parseFloat(mapped.price) || 0, costPrice: parseFloat(mapped.costPrice) || 0, stock: parseInt(mapped.stock) || 0, gstRate: parseInt(mapped.gstRate) || 0, unit: mapped.unit || 'Pcs', hsn: mapped.hsn || '', barcode: mapped.barcode ? String(mapped.barcode).trim() : '', description: mapped.description || '', isActive: true };
             });
             // Process in chunks for better performance
             for (let i = 0; i < inserts.length; i += CHUNK_SIZE) {
@@ -178,8 +270,7 @@ const excelExecute = async (req, res) => {
           }
           case 'Sales': {
             for (const row of data) {
-              const mapped = {};
-              for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
+              const mapped = mapRow(row, file.type, columnMapping && columnMapping[file.type]);
               try {
                 const total = parseFloat(mapped.totalAmount) || 0;
                 const paid = parseFloat(mapped.paidAmount) || 0;
@@ -220,8 +311,7 @@ const excelExecute = async (req, res) => {
           }
           case 'Purchases': {
             for (const row of data) {
-              const mapped = {};
-              for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
+              const mapped = mapRow(row, file.type, columnMapping && columnMapping[file.type]);
               try {
                 const total = parseFloat(mapped.totalAmount) || 0;
                 const paid = parseFloat(mapped.paidAmount) || 0;
@@ -258,8 +348,7 @@ const excelExecute = async (req, res) => {
           }
           case 'Expenses': {
             for (const row of data) {
-              const mapped = {};
-              for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
+              const mapped = mapRow(row, file.type, columnMapping && columnMapping[file.type]);
               try {
                 // Transaction.type enum is [cash_in,cash_out,bank_in,bank_out];
                 // an expense is money out — bank_out when paid by bank/cheque/card,
@@ -277,8 +366,7 @@ const excelExecute = async (req, res) => {
           }
           case 'Stock': {
             for (const row of data) {
-              const mapped = {};
-              for (const [vc, af] of Object.entries(mapping)) mapped[af] = row[vc];
+              const mapped = mapRow(row, file.type, columnMapping && columnMapping[file.type]);
               try {
                 const rawQty = parseInt(mapped.quantity) || 0;
                 // Signed quantity: positive for "In", negative for "Out". The
@@ -411,6 +499,7 @@ const backupUpload = async (req, res) => {
     let backupDate = null;
     let dbType = 'Unknown';
 
+    await sqliteService.waitForInit();
     if (sqliteService.isSqlJsAvailable()) {
       try {
         const sql = sqliteService.openDatabase(dbPath);
@@ -458,6 +547,7 @@ const backupAnalyze = async (req, res) => {
     if (!history.uploadPath || !fs.existsSync(history.uploadPath)) {
       return res.status(422).json({ message: 'Could not read backup file: the uploaded backup is missing on the server' });
     }
+    await sqliteService.waitForInit();
     if (!sqliteService.isSqlJsAvailable()) {
       return res.status(422).json({ message: 'Could not read backup file: SQLite reader is unavailable on the server' });
     }
@@ -536,6 +626,7 @@ const backupExecute = async (req, res) => {
     if (!history.uploadPath || !fs.existsSync(history.uploadPath)) {
       return res.status(422).json({ message: 'Could not read backup file: the uploaded backup is missing on the server' });
     }
+    await sqliteService.waitForInit();
     if (!sqliteService.isSqlJsAvailable()) {
       return res.status(422).json({ message: 'Could not read backup file: SQLite reader is unavailable on the server' });
     }
