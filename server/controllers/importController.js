@@ -7,6 +7,7 @@ const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const StockMovement = require('../models/StockMovement');
 const Transaction = require('../models/Transaction');
+const Expense = require('../models/Expense');
 const sqliteService = require('../services/sqliteService');
 const path = require('path');
 const fs = require('fs');
@@ -366,9 +367,21 @@ const excelExecute = async (req, res) => {
                 // fields, so fold the category into description.)
                 const pm = (mapped.paymentMethod || 'cash').toLowerCase();
                 const txnType = ['bank', 'cheque', 'card', 'upi', 'neft', 'rtgs'].some(k => pm.includes(k)) ? 'bank_out' : 'cash_out';
-                const category = mapped.category || 'General';
-                const desc = mapped.description ? `${category}: ${mapped.description}` : category;
-                await Transaction.create({ user: req.user._id, business: req.businessId, type: txnType, amount: parseFloat(mapped.amount) || 0, description: desc, date: mapped.date || new Date(), partyType: 'expense', reference: 'Excel Import' });
+                const payMethod = ['cash', 'bank', 'upi', 'cheque', 'card'].find(k => pm.includes(k)) || 'cash';
+                const category = mapped.category || 'Other';
+                const amount = parseFloat(mapped.amount) || 0;
+                const date = mapped.date || new Date();
+                // The Expenses PAGE reads from the Expense collection, so create an
+                // Expense here (not just a cash/bank Transaction). Mirror a Transaction
+                // too so cash/bank balances stay correct.
+                const expense = await Expense.create({
+                  user: req.user._id, business: req.businessId,
+                  expenseNumber: `IMP-EXP-${Date.now().toString(36)}-${results.expenses}`,
+                  category, description: mapped.description || '',
+                  amount, tax: 0, totalAmount: amount,
+                  date, paymentMethod: payMethod, reference: 'Excel Import',
+                });
+                await Transaction.create({ user: req.user._id, business: req.businessId, type: txnType, amount, description: `Expense - ${category}: ${mapped.description || ''}`, date, partyType: 'expense', reference: 'Excel Import', referenceModel: 'Expense', referenceId: expense._id });
                 results.expenses++;
               } catch (e) { errors.push(`Expense: ${e.message}`); totalFailed++; }
             }
