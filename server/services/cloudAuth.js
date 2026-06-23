@@ -117,4 +117,18 @@ const cloudRegisterAndMirror = async (name, email, password) => {
   return cloudLoginAndMirror(email, password);
 };
 
-module.exports = { isCloudMode, cloudLoginAndMirror, cloudRegisterAndMirror };
+// Ask the cloud to send a password-reset email for this address. Returns the cloud's
+// (generic) response. Throws with .network=true if the cloud is unreachable.
+const cloudForgotPassword = async (email) => {
+  let r;
+  try {
+    r = await cloudFetch('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+  } catch (e) {
+    const err = new Error('cloud unreachable: ' + e.message);
+    err.network = true;
+    throw err;
+  }
+  return r.data || { message: 'If that account exists, a reset link has been sent.' };
+};
+
+module.exports = { isCloudMode, cloudLoginAndMirror, cloudRegisterAndMirror, cloudForgotPassword };

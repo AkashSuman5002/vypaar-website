@@ -19,6 +19,38 @@ const { withTransaction } = require('../utils/withTransaction');
 // purely local install (both have CLOUD_API_URL unset => cloudAuth.isCloudMode() false).
 const cloudAuth = require('../services/cloudAuth');
 const cloudSyncClient = require('../services/cloudSyncClient');
+const nodemailer = require('nodemailer');
+
+// Global SMTP transporter built from env vars (SMTP_HOST/PORT/USER/PASS), used for
+// SYSTEM emails like password-reset links. Configured on the cloud server only. Gmail
+// app passwords are shown with spaces but must be sent without them, so we strip them.
+let _envTransporter;
+const getEnvTransporter = () => {
+  if (_envTransporter !== undefined) return _envTransporter;
+  const host = process.env.SMTP_HOST;
+  if (!host) { _envTransporter = null; return null; }
+  _envTransporter = nodemailer.createTransport({
+    host,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: (process.env.SMTP_PASS || '').replace(/\s+/g, '') } : undefined,
+    connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 20000,
+  });
+  return _envTransporter;
+};
+// Returns true if the reset email was actually sent via env SMTP.
+const sendResetEmailViaEnvSmtp = async (to, resetUrl) => {
+  const t = getEnvTransporter();
+  if (!t) return false;
+  await t.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to,
+    subject: 'Reset your Vyapar password',
+    text: `We received a request to reset your Vyapar password.\n\nReset it here (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
+    html: `<p>We received a request to reset your <b>Vyapar</b> password.</p><p><a href="${resetUrl}">Click here to reset your password</a> (valid for 1 hour).</p><p>Or paste this link:<br>${resetUrl}</p><p>If you didn't request this, you can safely ignore this email.</p>`,
+  });
+  return true;
+};
 
 const router = express.Router();
 
@@ -493,10 +525,23 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
     if (!email) {
       return res.status(400).json({ message: 'Email is required' });
     }
+    const normEmail = normalizeEmail(email);
 
-    const user = await User.findOne({ email: normalizeEmail(email) });
+    // CLOUD MODE (desktop): the accounts AND the email service live on the cloud, so
+    // forward the request there. The cloud sends the reset email itself.
+    if (cloudAuth.isCloudMode()) {
+      try {
+        const r = await cloudAuth.cloudForgotPassword(normEmail);
+        return res.json(r);
+      } catch (e) {
+        if (e.network) return res.status(503).json({ message: 'No internet connection. Password reset needs internet.' });
+        // fall through to local handling on other errors
+      }
+    }
+
+    const user = await User.findOne({ email: normEmail });
     if (!user) {
-      return res.json({ message: 'If that account exists, a reset link has been generated.' });
+      return res.json({ message: 'If that account exists, a reset link has been sent.' });
     }
 
     const rawToken = crypto.randomBytes(32).toString('hex');
@@ -507,14 +552,14 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
     const clientUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, '');
     const resetUrl = `${clientUrl}/reset-password?token=${rawToken}`;
     try {
-      await sendPasswordResetEmail(user._id, { to: user.email, resetUrl });
+      // Prefer the global env SMTP (cloud server). Fall back to per-user SMTP settings.
+      const sent = await sendResetEmailViaEnvSmtp(user.email, resetUrl);
+      if (!sent) await sendPasswordResetEmail(user._id, { to: user.email, resetUrl });
     } catch (mailErr) {
-      // Email is best-effort; sendEmailNotification already swallows SMTP errors,
-      // but guard here too. Do not leak failure to the client (avoid account enumeration).
       console.error('[Auth] Failed to send password reset email:', mailErr.message);
     }
 
-    res.json({ message: 'If that account exists, a reset link has been generated.' });
+    res.json({ message: 'If that account exists, a reset link has been sent.' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

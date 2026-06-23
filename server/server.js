@@ -219,6 +219,40 @@ app.use('/api/gst-filing', require('./routes/gstFilingRoutes'));
 app.use('/api/currencies', require('./routes/currencyRoutes'));
 app.use('/api/sync', require('./routes/syncRoutes'));
 
+// Public password-reset web page (the link emailed by forgot-password points here).
+// Served by the CLOUD server so the link works in any browser; it POSTs the new
+// password to /api/auth/reset-password (which is public + CSRF-exempt). Self-contained
+// HTML so it works even though the cloud server doesn't serve the React app.
+app.get('/reset-password', (req, res) => {
+  res.set('Content-Type', 'text/html').send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reset your Vyapar password</title>
+<style>body{font-family:system-ui,Arial,sans-serif;background:#1e3a8a;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
+.card{background:#fff;border-radius:16px;padding:32px;width:340px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:14px;margin:0 0 20px}
+label{font-size:12px;color:#444;display:block;margin:12px 0 6px}
+input{width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+button{width:100%;margin-top:18px;padding:11px;background:#2563eb;color:#fff;border:0;border-radius:8px;font-size:14px;cursor:pointer}
+button:disabled{opacity:.5}.msg{margin-top:14px;font-size:14px;text-align:center}.ok{color:#16a34a}.err{color:#dc2626}</style></head>
+<body><div class="card"><h1>Reset password</h1><p class="sub">Enter a new password for your Vyapar account.</p>
+<label>New password</label><input id="p" type="password" placeholder="At least 8 characters">
+<label>Confirm password</label><input id="c" type="password" placeholder="Re-enter password">
+<button id="b" onclick="go()">Reset password</button><div id="m" class="msg"></div></div>
+<script>
+var params=new URLSearchParams(location.search);var token=params.get('token');
+var m=document.getElementById('m');if(!token){m.className='msg err';m.textContent='Invalid or missing reset link.';document.getElementById('b').disabled=true;}
+function go(){var p=document.getElementById('p').value,c=document.getElementById('c').value;
+if(p.length<8){m.className='msg err';m.textContent='Password must be at least 8 characters.';return;}
+if(p!==c){m.className='msg err';m.textContent='Passwords do not match.';return;}
+var b=document.getElementById('b');b.disabled=true;m.className='msg';m.textContent='Resetting...';
+fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,password:p})})
+.then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d}})})
+.then(function(x){if(x.ok){m.className='msg ok';m.textContent='Password reset! You can now log in with your new password.';}
+else{b.disabled=false;m.className='msg err';m.textContent=(x.d&&x.d.message)||'Reset failed.';}})
+.catch(function(){b.disabled=false;m.className='msg err';m.textContent='Network error.';});}
+</script></body></html>`);
+});
+
 // Business setup with multer for logo upload
 const businessRoutes = require('./routes/businessRoutes');
 app.use('/api/business', (req, res, next) => {
