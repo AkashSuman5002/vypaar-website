@@ -1,6 +1,6 @@
 {
   "name": "vyapar",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Vyapar desktop application (Electron wrapper around the MERN app)",
   "main": "electron/main.js",
   "author": "Vyapar",
@@ -31,7 +31,7 @@
       {
         "provider": "github",
         "owner": "AkashSuman5002",
-        "repo": "vypaar-electron",
+        "repo": "vypaar-website",
         "releaseType": "release"
       }
     ],
