@@ -72,11 +72,36 @@ const defaultMappings = {
 
 const appFields = {
   Parties: ['name', 'phone', 'gstNumber', 'address', 'email', 'openingBalance', 'creditLimit'],
-  Items: ['name', 'category', 'price', 'stock', 'gstRate', 'unit', 'hsn', 'costPrice'],
+  Items: ['name', 'category', 'price', 'stock', 'gstRate', 'unit', 'hsn', 'costPrice', 'barcode', 'description'],
   Sales: ['invoiceNumber', 'customerName', 'date', 'totalAmount', 'paidAmount', 'paymentMethod', 'taxableAmount', 'cgstTotal', 'sgstTotal'],
   Purchases: ['invoiceNumber', 'supplierName', 'date', 'totalAmount', 'paidAmount', 'paymentMethod'],
   Expenses: ['date', 'category', 'amount', 'description', 'paymentMethod'],
   Stock: ['productName', 'quantity', 'type', 'date', 'reference'],
+};
+
+// Normalize a header for fuzzy matching (mirrors the server): lowercase + strip
+// everything non-alphanumeric. "Sale Price" / "sale_price" / "GST %" -> "saleprice" / "gst".
+const normH = (h) => String(h == null ? '' : h).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// field -> accepted header aliases (normalized). Lets the wizard auto-detect YOUR file's
+// actual columns instead of only the fixed Vyapar names.
+const FIELD_ALIASES = {
+  Parties: { name: ['partyname', 'name', 'customername', 'suppliername', 'party', 'companyname'], phone: ['mobilenumber', 'phone', 'mobile', 'contact', 'phoneno', 'mobileno', 'contactnumber', 'phonenumber'], gstNumber: ['gstnumber', 'gstin', 'gst', 'gstno'], address: ['address', 'addr', 'billingaddress'], email: ['email', 'emailaddress', 'mail', 'emailid'], openingBalance: ['openingbalance', 'balance', 'opening', 'openingbal', 'obal'], creditLimit: ['creditlimit', 'credit'] },
+  Items: { name: ['itemname', 'name', 'productname', 'item', 'product'], category: ['category', 'cat', 'group', 'itemcategory'], price: ['price', 'saleprice', 'sellingprice', 'mrp', 'rate', 'unitprice', 'salerate', 'sellprice', 'saleunitprice'], stock: ['stock', 'openingstock', 'qty', 'quantity', 'currentstock', 'openingqty', 'stockqty', 'openingquantity'], gstRate: ['gstrate', 'gst', 'gstpercent', 'tax', 'taxrate', 'gstpercentage'], unit: ['unit', 'uom', 'units'], hsn: ['hsn', 'hsncode', 'hsnsac', 'sac', 'hsnsaccode'], costPrice: ['costprice', 'purchase', 'purchaseprice', 'purchaserate', 'cost', 'buyprice', 'purchaseunitprice', 'purchasecost'], description: ['description', 'desc', 'remarks', 'notes'], barcode: ['barcode', 'itemcode', 'sku', 'code'] },
+  Sales: { invoiceNumber: ['invoiceno', 'invoicenumber', 'billno', 'billnumber', 'invoice', 'voucherno'], customerName: ['customer', 'customername', 'party', 'partyname', 'client', 'buyer'], date: ['date', 'invoicedate', 'billdate', 'saledate'], totalAmount: ['total', 'totalamount', 'grandtotal', 'amount', 'netamount', 'invoiceamount'], paidAmount: ['paid', 'paidamount', 'amountpaid', 'received', 'receivedamount'], paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'], taxableAmount: ['taxable', 'taxableamount', 'taxablevalue'], cgstTotal: ['cgst', 'cgsttotal', 'cgstamount'], sgstTotal: ['sgst', 'sgsttotal', 'sgstamount'] },
+  Purchases: { invoiceNumber: ['invoiceno', 'invoicenumber', 'billno', 'billnumber', 'invoice', 'purchaseno', 'voucherno'], supplierName: ['supplier', 'suppliername', 'party', 'partyname', 'vendor', 'vendorname'], date: ['date', 'invoicedate', 'billdate', 'purchasedate'], totalAmount: ['total', 'totalamount', 'grandtotal', 'amount', 'netamount'], paidAmount: ['paid', 'paidamount', 'amountpaid'], paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'] },
+  Expenses: { date: ['date', 'expensedate'], category: ['category', 'cat', 'expensecategory', 'type', 'expensetype'], amount: ['amount', 'expenseamount', 'amt', 'total', 'totalamount'], description: ['description', 'desc', 'notes', 'remarks', 'narration'], paymentMethod: ['paymentmethod', 'paymentmode', 'mode', 'payment'] },
+  Stock: { productName: ['itemname', 'name', 'productname', 'item', 'product'], quantity: ['quantity', 'qty', 'stock', 'units'], type: ['type', 'movementtype', 'transactiontype', 'stocktype'], date: ['date', 'movementdate'], reference: ['reference', 'ref', 'remarks', 'notes'] },
+};
+
+// Given a file column header, return the app field it best matches (or '' if none).
+const detectField = (type, header) => {
+  const n = normH(header);
+  const aliases = FIELD_ALIASES[type] || {};
+  for (const [field, names] of Object.entries(aliases)) {
+    if (names.includes(n)) return field;
+  }
+  return '';
 };
 
 const ExcelImportWizard = ({ onComplete }) => {
@@ -147,34 +172,28 @@ const ExcelImportWizard = ({ onComplete }) => {
   const validateColumns = (type, data) => {
     if (!data || data.length === 0) return;
     const columns = Object.keys(data[0]);
-    const expectedColumns = defaultMappings[type]?.map(m => m.vyapar) || [];
-    const issues = [];
-    const matched = [];
-    for (const expected of expectedColumns) {
-      const found = columns.find(c => c.toLowerCase().trim() === expected.toLowerCase().trim());
-      if (found) {
-        matched.push(found);
-      } else {
-        issues.push({ severity: 'warning', message: `${expected} column not found` });
-      }
-    }
-    const extraCols = columns.filter(c => !expectedColumns.some(e => e.toLowerCase().trim() === c.toLowerCase().trim()));
-    setValidationResults(prev => ({ ...prev, [type]: { columns, matched, issues, extraCols, totalRows: data.length, valid: issues.length === 0 } }));
-    autoMapColumns(type, columns);
-  };
-
-  const autoMapColumns = (type, columns) => {
+    // Auto-detect each of YOUR file's columns to an app field via aliases.
     const mapping = {};
-    const defs = defaultMappings[type] || [];
-    for (const def of defs) {
-      const match = columns.find(c => c.toLowerCase().trim() === def.vyapar.toLowerCase().trim());
-      mapping[def.vyapar] = match ? def.field : '';
+    const matched = [];
+    const unrecognized = [];
+    for (const col of columns) {
+      const field = detectField(type, col);
+      mapping[col] = field;
+      if (field) matched.push(col); else unrecognized.push(col);
     }
+    // The only thing we truly need is a name/identifier column.
+    const keyField = (FIELD_ALIASES[type] && Object.keys(FIELD_ALIASES[type])[0]) || 'name';
+    const hasKey = Object.values(mapping).includes(keyField);
+    const issues = [];
+    if (!hasKey) issues.push({ severity: 'warning', message: `Could not find a "${keyField}" column — set it in Column Mapping` });
+    for (const col of unrecognized) issues.push({ severity: 'info', message: `"${col}" not auto-mapped — choose a field (or skip) in Column Mapping` });
+    setValidationResults(prev => ({ ...prev, [type]: { columns, matched, issues, unrecognized, totalRows: data.length, valid: hasKey } }));
     setColumnMappings(prev => ({ ...prev, [type]: mapping }));
   };
 
-  const updateMapping = (type, vyaparCol, field) => {
-    setColumnMappings(prev => ({ ...prev, [type]: { ...prev[type], [vyaparCol]: field } }));
+  // Map keyed by the FILE's actual column header -> app field ('' = don't import).
+  const updateMapping = (type, fileCol, field) => {
+    setColumnMappings(prev => ({ ...prev, [type]: { ...prev[type], [fileCol]: field } }));
   };
 
   const generatePreview = () => {
@@ -357,8 +376,10 @@ const ExcelImportWizard = ({ onComplete }) => {
               <div className="space-y-6">
                 {REQUIRED_TYPES.filter(t => parsedData[t]).map(type => {
                   const mapping = columnMappings[type] || {};
-                  const defs = defaultMappings[type] || [];
+                  // Iterate the ACTUAL columns in the uploaded file (not fixed defaults),
+                  // so every column in your sheet is shown and you can map or skip each.
                   const columns = validationResults[type]?.columns || [];
+                  const sample = (parsedData[type] && parsedData[type][0]) || {};
                   return (
                     <div key={type} className="bg-slate-50 dark:bg-gray-700/30 rounded-xl p-4">
                       <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2"><span className="text-lg">{typeIcons[type]}</span>{type}</h4>
@@ -366,19 +387,21 @@ const ExcelImportWizard = ({ onComplete }) => {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-slate-200 dark:border-gray-600">
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Vyapar Column</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Your Column</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 dark:text-slate-500">Sample</th>
                               <th className="px-3 py-2 text-center text-xs text-slate-400 w-8"></th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">App Field</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Import As</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {defs.map((def) => (
-                              <tr key={def.vyapar} className="border-b border-slate-100 dark:border-gray-700/50">
-                                <td className="px-3 py-2 text-sm text-slate-700 dark:text-slate-300">{def.vyapar}</td>
+                            {columns.map((col) => (
+                              <tr key={col} className="border-b border-slate-100 dark:border-gray-700/50">
+                                <td className="px-3 py-2 text-sm text-slate-700 dark:text-slate-300 whitespace-nowrap">{col}</td>
+                                <td className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500 max-w-[140px] truncate">{String(sample[col] ?? '').slice(0, 30)}</td>
                                 <td className="px-3 py-2 text-center text-slate-400"><ChevronRight className="w-4 h-4" /></td>
                                 <td className="px-3 py-2">
-                                  <select value={mapping[def.vyapar] || ''} onChange={(e) => updateMapping(type, def.vyapar, e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20">
-                                    <option value="">-- Skip --</option>
+                                  <select value={mapping[col] || ''} onChange={(e) => updateMapping(type, col, e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                                    <option value="">— Don't import —</option>
                                     {appFields[type]?.map(f => <option key={f} value={f}>{f}</option>)}
                                   </select>
                                 </td>
