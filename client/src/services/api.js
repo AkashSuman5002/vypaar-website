@@ -177,6 +177,7 @@ export const gstFilingAPI = {
   getGSTR2: (params) => API.get('/gst-filing/gstr2', { params }),
   getGSTR3B: (params) => API.get('/gst-filing/gstr3b', { params }),
   prepareGSTR1: (params) => API.get('/gst-filing/prepare-gstr1', { params }),
+  importGSTR2B: (data) => API.post('/gst-filing/import-2b', data),
   getFilings: () => API.get('/gst-filing/filings'),
   markFiled: (id, data) => API.put(`/gst-filing/filings/${id}/filed`, data),
 };
@@ -241,6 +242,8 @@ export const reportAPI = {
   getSaleOrderItem: (params) => API.get('/accounting/reports/sale-order-item', { params }),
   getItemDetail: (params) => API.get('/accounting/reports/item-detail', { params }),
   getStockDetail: (params) => API.get('/accounting/reports/stock-detail', { params }),
+  getStockReconciliation: (params) => API.get('/accounting/reports/stock-reconciliation', { params }),
+  getGodownStock: (params) => API.get('/accounting/reports/godown-stock', { params }),
   getItemWiseProfitLoss: (params) => API.get('/accounting/reports/item-wise-profit-loss', { params }),
   getItemCategoryProfitLoss: (params) => API.get('/accounting/reports/item-category-profit-loss', { params }),
   getItemReportByParty: (params) => API.get('/accounting/reports/item-report-by-party', { params }),

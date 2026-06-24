@@ -48,7 +48,9 @@ const saleSchema = new mongoose.Schema({
   warehouse: { type: String, trim: true },
 
   invoiceNumber: { type: String, required: true, trim: true },
-  type: { type: String, enum: ['invoice', 'quotation', 'order', 'challan', 'credit_note', 'return', 'estimate', 'proforma'], default: 'invoice', index: true },
+  type: { type: String, enum: ['invoice', 'quotation', 'order', 'challan', 'credit_note', 'debit_note', 'return', 'estimate', 'proforma'], default: 'invoice', index: true },
+  // GST supply classification for GSTR-9 (regular / SEZ / deemed export / export).
+  gstSupplyType: { type: String, enum: ['regular', 'sez', 'deemed_export', 'export'], default: 'regular' },
   status: { type: String, enum: ['draft', 'confirmed', 'cancelled'], default: 'confirmed', index: true },
   date: { type: Date, default: Date.now, index: true },
   dueDate: { type: Date },
@@ -97,6 +99,8 @@ const saleSchema = new mongoose.Schema({
 
   tcsAmount: { type: Number, default: 0, min: 0 },
   tdsAmount: { type: Number, default: 0, min: 0 },
+  tcsSection: { type: String, default: '', trim: true },
+  tdsSection: { type: String, default: '', trim: true },
 
   payments: [salePaymentSchema],
   paidAmount: { type: Number, default: 0, min: 0 },

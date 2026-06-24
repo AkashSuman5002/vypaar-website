@@ -42,6 +42,8 @@ journalEntrySchema.index({ user: 1, referenceType: 1, referenceId: 1 });
 journalEntrySchema.index({ business: 1, referenceType: 1, referenceId: 1 });
 journalEntrySchema.index({ user: 1, entryDate: -1 });
 journalEntrySchema.index({ business: 1, entryDate: -1 });
+// Trial Balance / P&L / Balance Sheet all query { user, isPosted, entryDate } — index it.
+journalEntrySchema.index({ user: 1, isPosted: 1, entryDate: -1 });
 journalEntrySchema.index({ 'lines.account': 1 });
 
 // Enforce double-entry balance: total debit must equal total credit (within rounding

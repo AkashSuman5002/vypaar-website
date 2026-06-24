@@ -28,8 +28,12 @@ const purchaseSchema = new mongoose.Schema({
   cgstTotal: { type: Number, default: 0, min: 0 },
   sgstTotal: { type: Number, default: 0, min: 0 },
   igstTotal: { type: Number, default: 0, min: 0 },
+  cessTotal: { type: Number, default: 0, min: 0 },
+  // Sec.17(5) blocked credit: when true, this purchase's ITC is ineligible (GSTR-9).
+  ineligibleITC: { type: Boolean, default: false },
   tcsAmount: { type: Number, default: 0, min: 0 },
   tdsAmount: { type: Number, default: 0, min: 0 },
+  tdsSection: { type: String, default: '', trim: true },
   totalAmount: { type: Number, required: true, min: 0 },
   paidAmount: { type: Number, default: 0, min: 0 },
   remainingBalance: { type: Number, default: 0, min: 0 },
@@ -39,6 +43,8 @@ const purchaseSchema = new mongoose.Schema({
   notes: { type: String, trim: true },
   returnReason: { type: String, trim: true },
   isInterState: { type: Boolean, default: false },
+  // Inward supply liable to GST under reverse charge (purchaser pays the tax).
+  reverseCharge: { type: Boolean, default: false },
 }, { timestamps: true });
 
 purchaseSchema.index({ user: 1, date: -1 });

@@ -97,6 +97,11 @@ const reportConfig = {
     { key: 'unit', label: 'Unit' }, { key: 'price', label: 'Price', align: 'right', render: (v) => `₹${(v || 0).toLocaleString()}` },
     { key: 'stock', label: 'Stock', align: 'right' },
   ], icon: 'stock' },
+  'Godown Stock': { columns: [
+    { key: 'godown', label: 'Godown' }, { key: 'item', label: 'Item' },
+    { key: 'quantity', label: 'Qty', align: 'right' },
+    { key: 'value', label: 'Stock Value', align: 'right', render: (v) => `₹${(v || 0).toLocaleString()}` },
+  ], icon: 'stock' },
   'Sale/Purchase Report By Item Category': { columns: [
     { key: 'category', label: 'Category' }, { key: 'sales', label: 'Sales', align: 'right', render: (v) => `₹${(v || 0).toLocaleString()}` },
     { key: 'purchases', label: 'Purchases', align: 'right', render: (v) => `₹${(v || 0).toLocaleString()}` },
@@ -235,6 +240,7 @@ const apiMap = {
   'SAC Report': (params) => reportAPI.getSAC(params).then(r => (r.data.sacSummary||[]).map(s => ({sac:s.sac,description:s.description||'-',value:s.taxableAmount||s.value}))),
   'Stock Summary': (params) => stockAPI.getValuation().then(r => (r.data.valuation||[]).map(s => ({item:s.name||s.product,sku:s.sku||'-',category:s.category||'-',qty:s.quantity||0,value:s.value||0}))),
   'Low Stock Summary': (params) => productAPI.getAll({lowStock:true}).then(r => (r.data.products||r.data||[]).filter(p => p.stock <= (p.minStock||5)).map(p => ({item:p.name,sku:p.sku||'-',current:p.stock,min:p.minStock||5}))),
+  'Godown Stock': (params) => reportAPI.getGodownStock(params).then(r => (r.data.entries||[]).map(e => ({godown:e.godown,item:e.item,quantity:e.quantity,value:e.value}))),
   'Bank Statement': (params) => reportAPI.getBankStatement(params).then(r => (r.data.entries||[]).map(e => ({date:e.date?new Date(e.date).toLocaleDateString('en-IN'):'-',particular:e.description||e.partyName||'-',deposit:e.credit||0,withdrawal:e.debit||0,balance:e.balance||0}))),
   'Discount Report': (params) => reportAPI.getDiscountReport(params).then(r => (r.data.entries||[]).map(d => ({invoice:d.invoiceNo||'-',customer:d.partyName||'-',discount:d.discountAmount||0,net:d.netAmount||0}))),
   'Expense': (params) => reportAPI.getExpenseReport(params).then(r => (r.data.entries||[]).map(e => ({date:e.date?new Date(e.date).toLocaleDateString('en-IN'):'-',category:e.category||'General',description:e.description||'-',amount:e.totalAmount||0}))),

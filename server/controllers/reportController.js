@@ -10,7 +10,33 @@ const Account = require('../models/Account');
 const Expense = require('../models/Expense');
 const PurchaseReturn = require('../models/PurchaseReturn');
 const GstRecord = require('../models/GstRecord');
+const Godown = require('../models/Godown');
+const mongoose = require('mongoose');
 const { getBaseFilter, getSettingQuery } = require('../utils/queryHelper');
+const {
+  isB2B,
+  buildDayBookEntries,
+  bankStatementRows,
+  bankAccountNeedles,
+  transactionMatchesAccount,
+  buildProfitLossLineItems,
+  stockValueAsOf,
+  agingBucket,
+  buildHsnSummary,
+  reconcileStock,
+  computeTdsTcs,
+  buildGodownStock,
+} = require('../utils/reportHelpers');
+
+// getBaseFilter returns ids that Model.find() auto-casts, but aggregation $match
+// does not — build an explicitly-cast copy for use inside aggregate pipelines.
+const toAggBase = (baseFilter) => {
+  const toId = (v) => (v instanceof mongoose.Types.ObjectId ? v : new mongoose.Types.ObjectId(v));
+  const out = {};
+  if (baseFilter.business !== undefined) out.business = toId(baseFilter.business);
+  if (baseFilter.user !== undefined) out.user = toId(baseFilter.user);
+  return out;
+};
 
 // Frontend report pages are inconsistent: some send `dateFrom`/`dateTo`, others
 // send `startDate`/`endDate`. Normalize both onto `req.query.startDate`/`endDate`
@@ -116,7 +142,9 @@ const getProfitReport = async (req, res) => {
     const totalPurchases = purchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
     const totalCreditNotes = creditNotes.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
     const totalDebitNotes = debitNotes.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
-    const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+    // Fix 10: expenses include their tax (totalAmount = amount + tax), matching the
+    // accounting-view P&L so the two figures agree.
+    const totalExpenses = expenses.reduce((s, e) => s + (e.totalAmount || e.amount || 0), 0);
     const netSales = totalSales - totalGST;
 
     let totalCOGS = 0;
@@ -133,92 +161,87 @@ const getProfitReport = async (req, res) => {
 
     const grossProfit = netSales - totalCOGS;
 
-    // Closing stock = current inventory value = sum over stockable products of
-    // (stock * costPrice). Falls back to selling price only when no cost is set.
-    // NOTE: Opening-stock history is not snapshotted anywhere in the data model,
-    // so opening stock cannot be derived accurately for an arbitrary period and is
-    // left at 0. Implementing a real opening figure requires periodic inventory
-    // snapshots (or replaying StockMovement balances to the period start date).
-    const closingStock = products.reduce((sum, p) => {
-      if (p.type === 'service') return sum;
-      const unitCost = p.costPrice || p.purchasePrice || p.price || 0;
-      return sum + (p.stock || 0) * unitCost;
-    }, 0);
-    const openingStock = 0;
+    // Opening & closing stock are derived by replaying the StockMovement ledger:
+    // stock as of a date = currentStock - (net signed movements after that date).
+    // Opening = value at the period start; closing = value at the period end. With no
+    // date range both fall back to the current inventory value. Valued at current cost
+    // (costPrice), consistent with the closing figure.
+    const aggBase = toAggBase(baseFilter);
+    const movedAfter = async (cutoff) => {
+      const rows = await StockMovement.aggregate([
+        { $match: { ...aggBase, date: { $gt: cutoff } } },
+        { $group: { _id: '$product', moved: { $sum: '$quantity' } } },
+      ]);
+      const m = {};
+      rows.forEach((r) => { if (r._id) m[r._id.toString()] = r.moved; });
+      return m;
+    };
 
-    // Categorize expenses
+    let openingStock = 0;
+    let closingStock = stockValueAsOf(products, {}); // current inventory value
+    if (startDate) {
+      // Opening is the value at the START of startDate, i.e. exclude movements on/after it.
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const startCutoff = new Date(start.getTime() - 1);
+      openingStock = stockValueAsOf(products, await movedAfter(startCutoff));
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      closingStock = stockValueAsOf(products, await movedAfter(end));
+    }
+
+    // Categorize expenses into direct vs indirect, keeping each bucket's own
+    // line items separate (so the Direct/Indirect sections don't show the same list).
     const expenseBreakdown = {
       directExpenses: 0,
       indirectExpenses: 0,
-      items: [],
+      directItems: [],
+      indirectItems: [],
     };
     expenses.forEach((e) => {
       const cat = (e.category || 'other').toLowerCase();
-      const item = { name: e.description || e.category || 'Expense', amount: e.amount || 0 };
-      expenseBreakdown.items.push(item);
+      const amt = e.totalAmount || e.amount || 0;
+      const item = { name: e.description || e.category || 'Expense', amount: amt };
       if (cat.includes('direct') || cat.includes('manufactur') || cat.includes('petrol') || cat.includes('discount')) {
-        expenseBreakdown.directExpenses += e.amount || 0;
+        expenseBreakdown.directExpenses += amt;
+        expenseBreakdown.directItems.push(item);
       } else {
-        expenseBreakdown.indirectExpenses += e.amount || 0;
+        expenseBreakdown.indirectExpenses += amt;
+        expenseBreakdown.indirectItems.push(item);
       }
     });
 
-    // Build Vyapar-style flat line items
-    const lineItems = [
-      { label: 'Sale (+)', amount: totalSales, type: 'income' },
-      { label: 'Credit Note (-)', amount: totalCreditNotes, type: 'expense' },
-      { label: 'Sale FA (+)', amount: 0, type: 'income' },
-      { label: 'Purchase (-)', amount: totalPurchases, type: 'expense' },
-      { label: 'Debit Note (+)', amount: totalDebitNotes, type: 'income' },
-      { label: 'Purchase FA (-)', amount: 0, type: 'expense' },
-    ];
-
-    // Add sub-items under Direct Expenses
-    lineItems.push({ label: 'Direct Expenses(-)', amount: expenseBreakdown.directExpenses, type: 'section', children: expenseBreakdown.items.filter((e) => e.amount > 0) });
-
-    // Tax items
-    lineItems.push(
-      { label: 'Tax Payable (-)', amount: totalGST, type: 'section', children: [
-        { label: 'GST Payable (-)', amount: totalGST, type: 'expense' },
-        { label: 'TCS Payable (-)', amount: 0, type: 'expense' },
-      ]},
-      { label: 'Tax Receivable (+)', amount: purchaseGST, type: 'section', children: [
-        { label: 'GST Receivable (+)', amount: purchaseGST, type: 'income' },
-        { label: 'TCS Receivable (+)', amount: 0, type: 'income' },
-        { label: 'TDS Receivable (+)', amount: 0, type: 'income' },
-      ]},
-    );
-
-    // Stock items
-    lineItems.push(
-      { label: 'Opening Stock (-)', amount: openingStock, type: 'expense' },
-      { label: 'Closing Stock (+)', amount: closingStock, type: 'income' },
-      { label: 'Opening Stock FA (-)', amount: 0, type: 'expense' },
-      { label: 'Closing Stock FA (+)', amount: 0, type: 'income' },
-    );
-
-    lineItems.push({ label: 'Gross Profit', amount: grossProfit, type: 'total' });
-    lineItems.push({ label: 'Other Income (+)', amount: 0, type: 'income' });
-
-    // Indirect Expenses
-    lineItems.push({
-      label: 'Indirect Expenses(-)',
-      amount: expenseBreakdown.indirectExpenses,
-      type: 'section',
-      children: expenseBreakdown.items.filter((e) => e.amount > 0),
+    // Build the Vyapar-style P&L so the line items reconcile to Gross/Net Profit.
+    // Gross/Net Profit are derived FROM these same rows (sale - purchase ± stock -
+    // direct expenses - net tax), not from a separate COGS formula, so the breakdown
+    // always sums to the totals shown. COGS is still returned for reference.
+    const { lineItems, grossProfit: reconciledGrossProfit, netProfit } = buildProfitLossLineItems({
+      totalSales,
+      totalCreditNotes,
+      totalPurchases,
+      totalDebitNotes,
+      directExpenses: expenseBreakdown.directExpenses,
+      indirectExpenses: expenseBreakdown.indirectExpenses,
+      directItems: expenseBreakdown.directItems,
+      indirectItems: expenseBreakdown.indirectItems,
+      totalGST,
+      purchaseGST,
+      openingStock,
+      closingStock,
     });
-
-    lineItems.push({ label: 'Net Profit', amount: grossProfit - totalExpenses, type: 'total' });
 
     res.json({
       totalSales,
       totalPurchases,
       totalCOGS,
-      grossProfit,
+      cogsGrossProfit: grossProfit,
+      grossProfit: reconciledGrossProfit,
       totalGST,
       purchaseGST,
       totalExpenses,
-      netProfit: grossProfit - totalExpenses,
+      netProfit,
       openingStock,
       closingStock,
       salesCount: sales.length,
@@ -294,8 +317,9 @@ const getGSTR1 = async (req, res) => {
 
     const sales = await Sale.find(filter).sort({ date: -1 }).populate('customer', 'name gstNumber');
 
-    const b2b = sales.filter((s) => s.customer && s.customerName !== 'Walk-in');
-    const b2c = sales.filter((s) => !s.customer || s.customerName === 'Walk-in');
+    // B2B requires a registered customer with a GSTIN; everything else is B2C.
+    const b2b = sales.filter((s) => isB2B(s.customer));
+    const b2c = sales.filter((s) => !isB2B(s.customer));
 
     const summary = {
       totalInvoices: sales.length,
@@ -395,9 +419,10 @@ const getGSTR9Report = async (req, res) => {
     const dateFilter = { date: { $gte: startDate, $lte: endDate } };
     const fyLabel = `${startDate.getFullYear()}-${endDate.getFullYear()}`;
 
-    const [sales, creditNotes, purchases, purchaseReturns, transactions] = await Promise.all([
+    const [sales, creditNotes, debitNotesList, purchases, purchaseReturns, transactions] = await Promise.all([
       Sale.find({ ...baseFilter, ...dateFilter, type: 'invoice' }).lean(),
       Sale.find({ ...baseFilter, ...dateFilter, type: 'credit_note' }).lean(),
+      Sale.find({ ...baseFilter, ...dateFilter, type: 'debit_note' }).lean(),
       Purchase.find({ ...baseFilter, ...dateFilter }).lean(),
       PurchaseReturn.find({ ...baseFilter, returnDate: { $gte: startDate, $lte: endDate } }).lean(),
       Transaction.find({ ...baseFilter, date: { $gte: startDate, $lte: endDate } }).lean(),
@@ -409,9 +434,11 @@ const getGSTR9Report = async (req, res) => {
     // ── PART II: Outward Supplies ──────────────────────────────
     const b2b = sales.filter(s => s.customer && s.customerGst);
     const b2c = sales.filter(s => !s.customer || !s.customerGst || s.customerName === 'Walk-in');
-    const exportsData = sales.filter(s => (s.placeOfSupply || '').toLowerCase().includes('outside') || (s.placeOfSupply || '').toLowerCase().includes('export'));
-    const sezData = sales.filter(s => false);
-    const deemedExports = sales.filter(s => false);
+    const exportsData = sales.filter(s => s.gstSupplyType === 'export'
+      || (s.placeOfSupply || '').toLowerCase().includes('outside')
+      || (s.placeOfSupply || '').toLowerCase().includes('export'));
+    const sezData = sales.filter(s => s.gstSupplyType === 'sez');
+    const deemedExports = sales.filter(s => s.gstSupplyType === 'deemed_export');
 
     const rateBuckets = (list) => {
       const rates = {};
@@ -439,7 +466,13 @@ const getGSTR9Report = async (req, res) => {
       igst: total(creditNotes, 'igstTotal'),
       cess: total(creditNotes, 'cessTotal'),
     };
-    const dnTotal = { taxableValue: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 };
+    const dnTotal = {
+      taxableValue: total(debitNotesList, 'taxableAmount'),
+      cgst: total(debitNotesList, 'cgstTotal'),
+      sgst: total(debitNotesList, 'sgstTotal'),
+      igst: total(debitNotesList, 'igstTotal'),
+      cess: total(debitNotesList, 'cessTotal'),
+    };
 
     // Advances from Transactions (prepaid/received advances)
     const advances = transactions.filter(t => t.type === 'payment' && t.paymentMode === 'advance');
@@ -461,38 +494,45 @@ const getGSTR9Report = async (req, res) => {
       rateWiseB2B,
       rateWiseB2C,
       exports: { taxableValue: total(exportsData, 'taxableAmount'), cgst: total(exportsData, 'cgstTotal'), sgst: total(exportsData, 'sgstTotal'), igst: total(exportsData, 'igstTotal'), cess: total(exportsData, 'cessTotal') },
-      // SEZ supplies & deemed exports have no flag/field in the model — left at 0.
-      sezSupplies: { taxableValue: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 },
-      deemedExports: { taxableValue: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 },
+      // SEZ supplies & deemed exports sourced from Sale.gstSupplyType.
+      sezSupplies: { taxableValue: total(sezData, 'taxableAmount'), cgst: total(sezData, 'cgstTotal'), sgst: total(sezData, 'sgstTotal'), igst: total(sezData, 'igstTotal'), cess: total(sezData, 'cessTotal') },
+      deemedExports: { taxableValue: total(deemedExports, 'taxableAmount'), cgst: total(deemedExports, 'cgstTotal'), sgst: total(deemedExports, 'sgstTotal'), igst: total(deemedExports, 'igstTotal'), cess: total(deemedExports, 'cessTotal') },
       reverseChargeOutward: reverseChargeTotal,
       creditNotes: { count: creditNotes.length, ...cnTotal },
-      // Outward debit notes: Sale.type enum has no 'debit_note', so none can be
-      // sourced — kept at 0 rather than fabricated.
-      debitNotes: { count: 0, ...dnTotal },
+      // Outward debit notes sourced from Sale.type === 'debit_note'.
+      debitNotes: { count: debitNotesList.length, ...dnTotal },
       advances: advancesTotal,
       adjustments: { taxableValue: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 },
     };
 
     // ── PART III: Input Tax Credit ────────────────────────────
+    // Eligible ITC excludes Sec.17(5) blocked purchases; those are disclosed separately.
+    const eligiblePurchases = purchases.filter(p => !p.ineligibleITC);
+    const blockedPurchases = purchases.filter(p => p.ineligibleITC);
     const itcAvailed = {
-      cgst: total(purchases, 'cgstTotal'),
-      sgst: total(purchases, 'sgstTotal'),
-      igst: total(purchases, 'igstTotal'),
-      cess: 0,
+      cgst: total(eligiblePurchases, 'cgstTotal'),
+      sgst: total(eligiblePurchases, 'sgstTotal'),
+      igst: total(eligiblePurchases, 'igstTotal'),
+      cess: total(eligiblePurchases, 'cessTotal'),
     };
     const itcReversed = {
       cgst: total(purchaseReturns, 'cgstTotal'),
       sgst: total(purchaseReturns, 'sgstTotal'),
       igst: total(purchaseReturns, 'igstTotal'),
-      cess: 0,
+      cess: total(purchaseReturns, 'cessTotal'),
     };
     const netITC = {
       cgst: Math.max(0, itcAvailed.cgst - itcReversed.cgst),
       sgst: Math.max(0, itcAvailed.sgst - itcReversed.sgst),
       igst: Math.max(0, itcAvailed.igst - itcReversed.igst),
-      cess: 0,
+      cess: Math.max(0, itcAvailed.cess - itcReversed.cess),
     };
-    const ineligibleITC = { cgst: 0, sgst: 0, igst: 0, cess: 0 };
+    const ineligibleITC = {
+      cgst: total(blockedPurchases, 'cgstTotal'),
+      sgst: total(blockedPurchases, 'sgstTotal'),
+      igst: total(blockedPurchases, 'igstTotal'),
+      cess: total(blockedPurchases, 'cessTotal'),
+    };
 
     const part3 = {
       itcAvailed: { ...itcAvailed, total: itcAvailed.cgst + itcAvailed.sgst + itcAvailed.igst + itcAvailed.cess },
@@ -553,13 +593,11 @@ const getGSTR9Report = async (req, res) => {
       meta: { totalSales: sales.length, totalPurchases: purchases.length, totalCreditNotes: creditNotes.length },
       // Fields kept at 0 because the current data model captures no source for them.
       // Returned explicitly so consumers don't mistake 0 for a verified nil value.
+      // SEZ/deemed exports, outward debit notes, ITC cess and Sec.17(5) ineligible ITC
+      // are now sourced from the data model (Sale.gstSupplyType / type='debit_note',
+      // Purchase.cessTotal / ineligibleITC, PurchaseReturn.cessTotal). They populate
+      // once transactions carry those values; historical rows default to regular/0/false.
       unsourcedFields: [
-        { field: 'part2.sezSupplies', reason: 'No SEZ flag on Sale documents' },
-        { field: 'part2.deemedExports', reason: 'No deemed-export flag on Sale documents' },
-        { field: 'part2.debitNotes', reason: "Sale.type enum has no 'debit_note' value" },
-        { field: 'part3.itcAvailed.cess', reason: 'Purchase model stores no cess field' },
-        { field: 'part3.itcReversed.cess', reason: 'PurchaseReturn model stores no cess field' },
-        { field: 'part3.ineligibleITC', reason: 'No ineligible-ITC (Sec.17(5)) classification on Purchase items' },
         { field: 'part6.demandRaised/demandPaid/interestPaid', reason: 'No demand/interest records in the data model' },
       ],
     });
@@ -574,18 +612,9 @@ const getHSNSummary = async (req, res) => {
     const filter = { ...baseFilter, type: 'invoice' };
     const sales = await Sale.find(filter);
 
-    const hsnMap = {};
-    sales.forEach((s) => {
-      s.items.forEach((item) => {
-        const hsn = item.hsn || 'GENERAL';
-        if (!hsnMap[hsn]) hsnMap[hsn] = { hsn, quantity: 0, taxableAmount: 0, gstAmount: 0 };
-        hsnMap[hsn].quantity += item.quantity;
-        hsnMap[hsn].taxableAmount += item.taxableAmount || 0;
-        hsnMap[hsn].gstAmount += (item.cgst || 0) + (item.sgst || 0) + (item.igst || 0);
-      });
-    });
-
-    res.json({ hsnSummary: Object.values(hsnMap) });
+    // Grouped by HSN + rate + UQC (unit), with the rate and per-head tax shown, as
+    // the GST portal's HSN summary requires.
+    res.json({ hsnSummary: buildHsnSummary(sales) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -695,12 +724,11 @@ const getDayBook = async (req, res) => {
       filter.date = { $gte: new Date(startDate), $lt: end };
     }
 
-    const transactions = await Transaction.find(filter).sort({ date: -1 });
-
-    let runningBalance = 0;
-    const entries = transactions.map((t) => {
+    // Cash/bank movements (these capture every actual money in/out, including the
+    // received/paid portion of invoices, bills, expenses and manual payments).
+    const transactions = await Transaction.find(filter).lean();
+    const cashRows = transactions.map((t) => {
       const isIn = t.type?.includes('in');
-      runningBalance += isIn ? t.amount : -t.amount;
       return {
         _id: t._id,
         date: t.date,
@@ -708,10 +736,37 @@ const getDayBook = async (req, res) => {
         particular: t.description || '-',
         moneyIn: isIn ? t.amount : 0,
         moneyOut: isIn ? 0 : t.amount,
-        balance: runningBalance,
         type: t.type,
       };
     });
+
+    // Credit (unpaid) sales/purchases so the voucher itself appears in the Day Book
+    // even when no cash changed hands. These carry no money in/out, so they never
+    // distort the running cash balance.
+    const saleFilter = { ...filter, type: 'invoice', remainingBalance: { $gt: 0 } };
+    const purchaseFilter = { ...filter, remainingBalance: { $gt: 0 } };
+    const [creditSales, creditPurchases] = await Promise.all([
+      Sale.find(saleFilter).select('date invoiceNumber customerName remainingBalance').lean(),
+      Purchase.find(purchaseFilter).select('date billNumber supplierName remainingBalance').lean(),
+    ]);
+    const creditRows = [
+      ...creditSales.map((s) => ({
+        date: s.date,
+        voucher: s.invoiceNumber || '-',
+        particular: `Credit Sale - ${s.customerName || 'Party'}`,
+        type: 'credit_sale',
+        dueAmount: s.remainingBalance || 0,
+      })),
+      ...creditPurchases.map((p) => ({
+        date: p.date,
+        voucher: p.billNumber || '-',
+        particular: `Credit Purchase - ${p.supplierName || 'Party'}`,
+        type: 'credit_purchase',
+        dueAmount: p.remainingBalance || 0,
+      })),
+    ];
+
+    const entries = buildDayBookEntries(cashRows, creditRows);
 
     res.json({ entries });
   } catch (err) {
@@ -732,13 +787,12 @@ const getOutstandingReport = async (req, res) => {
     };
     const now = new Date();
 
+    // Age by the due date (fall back to invoice date when no credit terms were set),
+    // so "days overdue" reflects when payment was actually due, not when invoiced.
     sales.forEach((s) => {
-      const daysDiff = Math.floor((now - new Date(s.date)) / (1000 * 60 * 60 * 24));
-      let bucket = '90+';
-      if (daysDiff <= 30) bucket = '0-30';
-      else if (daysDiff <= 60) bucket = '31-60';
-      else if (daysDiff <= 90) bucket = '61-90';
-      aging[bucket].push(s);
+      const refDate = s.dueDate || s.date;
+      const daysDiff = Math.floor((now - new Date(refDate)) / (1000 * 60 * 60 * 24));
+      aging[agingBucket(daysDiff)].push(s);
     });
 
     const totalOutstanding = sales.reduce((s, sale) => s + sale.remainingBalance, 0);
@@ -788,15 +842,13 @@ const getGSTR2 = async (req, res) => {
         date: p.date ? new Date(p.date).toLocaleDateString('en-IN') : '-',
         value: p.totalAmount || 0,
         rate,
-        // NOTE: Purchase has no cess field stored, so cess/cessRate cannot be sourced.
         cessRate: 0,
         taxableValue,
-        // NOTE: Purchase model has no reverseCharge flag; cannot be derived, defaulting to 'N'.
-        reverseCharge: 'N',
+        reverseCharge: p.reverseCharge ? 'Y' : 'N',
         igst,
         cgst,
         sgst,
-        cess: 0,
+        cess: p.cessTotal || 0,
         pos: p.supplier?.state || '-',
       };
     });
@@ -852,6 +904,20 @@ const TDS_THRESHOLD = 30000;
 const TCS_RATE = 1;
 const TCS_THRESHOLD = 50000;
 
+// Fix 14: rates/thresholds and default section codes are configurable per business
+// via Settings (preferences.taxes); the constants above are only the fallback.
+const taxConfig = (setting) => {
+  const t = setting?.preferences?.taxes || {};
+  return {
+    tdsRate: t.tdsRate != null ? Number(t.tdsRate) : TDS_RATE,
+    tdsThreshold: t.tdsThreshold != null ? Number(t.tdsThreshold) : TDS_THRESHOLD,
+    tcsRate: t.tcsRate != null ? Number(t.tcsRate) : TCS_RATE,
+    tcsThreshold: t.tcsThreshold != null ? Number(t.tcsThreshold) : TCS_THRESHOLD,
+    tdsSection: t.tdsSection || '194Q',
+    tcsSection: t.tcsSection || '206C(1H)',
+  };
+};
+
 function getQuarter(date) {
   const d = new Date(date);
   const month = d.getMonth();
@@ -878,6 +944,7 @@ const getTDSReceivable = async (req, res) => {
     if (!enableTDS) {
       return res.json({ enabled: false, entries: [], totalTDS: 0, summary: { totalTaxableAmount: 0, totalTDS: 0, entryCount: 0 } });
     }
+    const cfg = taxConfig(userSetting);
 
     const sales = await Sale.find(filter)
       .sort({ date: -1 })
@@ -890,34 +957,22 @@ const getTDSReceivable = async (req, res) => {
 
     for (const sale of sales) {
       const taxableAmount = sale.taxableAmount || sale.totalAmount || 0;
-      // Prefer the real stored TDS amount; only estimate when none was recorded.
-      const storedTds = Number(sale.tdsAmount) || 0;
-      let tdsAmount;
-      let estimated;
-      let tdsPct;
-      if (storedTds > 0) {
-        tdsAmount = Math.round(storedTds * 100) / 100;
-        estimated = false;
-        tdsPct = taxableAmount ? Math.round((tdsAmount / taxableAmount) * 10000) / 100 : null;
-      } else {
-        if (taxableAmount <= TDS_THRESHOLD) continue;
-        tdsAmount = Math.round((taxableAmount * TDS_RATE) / 100 * 100) / 100;
-        estimated = true;
-        estimatedCount += 1;
-        tdsPct = TDS_RATE;
-      }
-      totalTDS += tdsAmount;
+      const r = computeTdsTcs(taxableAmount, sale.tdsAmount, { rate: cfg.tdsRate, threshold: cfg.tdsThreshold });
+      if (!r) continue;
+      if (r.estimated) estimatedCount += 1;
+      totalTDS += r.amount;
       totalTaxableAmount += taxableAmount;
 
       entries.push({
         date: sale.date,
         partyName: sale.customerName || sale.customer?.name || 'Walk-in',
         invoiceNo: sale.invoiceNumber || '-',
+        section: sale.tdsSection || cfg.tdsSection,
         taxableAmount,
-        tdsPct,
-        tdsAmount,
-        estimated,
-        receivableAmount: taxableAmount - tdsAmount,
+        tdsPct: r.pct,
+        tdsAmount: r.amount,
+        estimated: r.estimated,
+        receivableAmount: taxableAmount - r.amount,
       });
     }
 
@@ -925,7 +980,7 @@ const getTDSReceivable = async (req, res) => {
       enabled: true,
       entries,
       totalTDS,
-      summary: { totalTaxableAmount, totalTDS, entryCount: entries.length, estimatedCount, estimatedRate: TDS_RATE, estimatedThreshold: TDS_THRESHOLD },
+      summary: { totalTaxableAmount, totalTDS, entryCount: entries.length, estimatedCount, estimatedRate: cfg.tdsRate, estimatedThreshold: cfg.tdsThreshold, section: cfg.tdsSection },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -948,6 +1003,7 @@ const getTDSPayable = async (req, res) => {
     if (!enableTDS) {
       return res.json({ enabled: false, entries: [], totalTDS: 0, summary: { totalTaxableAmount: 0, totalTDS: 0, entryCount: 0 } });
     }
+    const cfg = taxConfig(userSetting);
 
     const purchases = await Purchase.find(filter)
       .sort({ date: -1 })
@@ -960,34 +1016,22 @@ const getTDSPayable = async (req, res) => {
 
     for (const purchase of purchases) {
       const taxableAmount = purchase.taxableAmount || purchase.totalAmount || 0;
-      // Prefer the real stored TDS amount; only estimate when none was recorded.
-      const storedTds = Number(purchase.tdsAmount) || 0;
-      let tdsAmount;
-      let estimated;
-      let tdsPct;
-      if (storedTds > 0) {
-        tdsAmount = Math.round(storedTds * 100) / 100;
-        estimated = false;
-        tdsPct = taxableAmount ? Math.round((tdsAmount / taxableAmount) * 10000) / 100 : null;
-      } else {
-        if (taxableAmount <= TDS_THRESHOLD) continue;
-        tdsAmount = Math.round((taxableAmount * TDS_RATE) / 100 * 100) / 100;
-        estimated = true;
-        estimatedCount += 1;
-        tdsPct = TDS_RATE;
-      }
-      totalTDS += tdsAmount;
+      const r = computeTdsTcs(taxableAmount, purchase.tdsAmount, { rate: cfg.tdsRate, threshold: cfg.tdsThreshold });
+      if (!r) continue;
+      if (r.estimated) estimatedCount += 1;
+      totalTDS += r.amount;
       totalTaxableAmount += taxableAmount;
 
       entries.push({
         date: purchase.date,
         vendorName: purchase.supplierName || purchase.supplier?.name || 'Unknown',
         billNo: purchase.billNumber || '-',
+        section: purchase.tdsSection || cfg.tdsSection,
         taxableAmount,
-        tdsPct,
-        tdsAmount,
-        estimated,
-        payableAmount: taxableAmount - tdsAmount,
+        tdsPct: r.pct,
+        tdsAmount: r.amount,
+        estimated: r.estimated,
+        payableAmount: taxableAmount - r.amount,
       });
     }
 
@@ -995,7 +1039,7 @@ const getTDSPayable = async (req, res) => {
       enabled: true,
       entries,
       totalTDS,
-      summary: { totalTaxableAmount, totalTDS, entryCount: entries.length, estimatedCount, estimatedRate: TDS_RATE, estimatedThreshold: TDS_THRESHOLD },
+      summary: { totalTaxableAmount, totalTDS, entryCount: entries.length, estimatedCount, estimatedRate: cfg.tdsRate, estimatedThreshold: cfg.tdsThreshold, section: cfg.tdsSection },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1018,6 +1062,7 @@ const getTCSReceivable = async (req, res) => {
     if (!enableTCS) {
       return res.json({ enabled: false, entries: [], totalTCS: 0, summary: { totalTaxableAmount: 0, totalTCS: 0, entryCount: 0 } });
     }
+    const cfg = taxConfig(userSetting);
 
     const sales = await Sale.find(filter)
       .sort({ date: -1 })
@@ -1030,34 +1075,22 @@ const getTCSReceivable = async (req, res) => {
 
     for (const sale of sales) {
       const taxableAmount = sale.taxableAmount || sale.totalAmount || 0;
-      // Prefer the real stored TCS amount; only estimate when none was recorded.
-      const storedTcs = Number(sale.tcsAmount) || 0;
-      let tcsAmount;
-      let estimated;
-      let tcsPct;
-      if (storedTcs > 0) {
-        tcsAmount = Math.round(storedTcs * 100) / 100;
-        estimated = false;
-        tcsPct = taxableAmount ? Math.round((tcsAmount / taxableAmount) * 10000) / 100 : null;
-      } else {
-        if (taxableAmount <= TCS_THRESHOLD) continue;
-        tcsAmount = Math.round((taxableAmount * TCS_RATE) / 100 * 100) / 100;
-        estimated = true;
-        estimatedCount += 1;
-        tcsPct = TCS_RATE;
-      }
-      totalTCS += tcsAmount;
+      const r = computeTdsTcs(taxableAmount, sale.tcsAmount, { rate: cfg.tcsRate, threshold: cfg.tcsThreshold });
+      if (!r) continue;
+      if (r.estimated) estimatedCount += 1;
+      totalTCS += r.amount;
       totalTaxableAmount += taxableAmount;
 
       entries.push({
         date: sale.date,
         partyName: sale.customerName || sale.customer?.name || 'Walk-in',
         invoiceNo: sale.invoiceNumber || '-',
+        section: sale.tcsSection || cfg.tcsSection,
         taxableAmount,
-        tcsPct,
-        tcsAmount,
-        estimated,
-        receivableAmount: taxableAmount + tcsAmount,
+        tcsPct: r.pct,
+        tcsAmount: r.amount,
+        estimated: r.estimated,
+        receivableAmount: taxableAmount + r.amount,
       });
     }
 
@@ -1065,7 +1098,7 @@ const getTCSReceivable = async (req, res) => {
       enabled: true,
       entries,
       totalTCS,
-      summary: { totalTaxableAmount, totalTCS, entryCount: entries.length, estimatedCount, estimatedRate: TCS_RATE, estimatedThreshold: TCS_THRESHOLD },
+      summary: { totalTaxableAmount, totalTCS, entryCount: entries.length, estimatedCount, estimatedRate: cfg.tcsRate, estimatedThreshold: cfg.tcsThreshold, section: cfg.tcsSection },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1088,14 +1121,14 @@ const getForm27EQ = async (req, res) => {
     if (!enableTCS) {
       return res.json({ enabled: false, sections: [], summary: { totalTransactionAmount: 0, totalTCS: 0, entryCount: 0 } });
     }
+    const cfg = taxConfig(userSetting);
 
     const sales = await Sale.find(filter)
       .sort({ date: -1 })
       .populate('customer', 'name gstNumber panNumber');
 
-    const businessSetting = await Setting.findOne(getSettingQuery(req));
-    const collectorName = businessSetting?.businessName || 'N/A';
-    const tan = businessSetting?.gstNumber || 'N/A';
+    const collectorName = userSetting?.businessName || 'N/A';
+    const tan = userSetting?.gstNumber || 'N/A';
 
     const sections = [];
     let totalTCS = 0;
@@ -1104,23 +1137,10 @@ const getForm27EQ = async (req, res) => {
 
     for (const sale of sales) {
       const taxableAmount = sale.taxableAmount || sale.totalAmount || 0;
-      // Prefer the real stored TCS amount; only estimate when none was recorded.
-      const storedTcs = Number(sale.tcsAmount) || 0;
-      let tcsAmount;
-      let estimated;
-      let tcsPct;
-      if (storedTcs > 0) {
-        tcsAmount = Math.round(storedTcs * 100) / 100;
-        estimated = false;
-        tcsPct = taxableAmount ? Math.round((tcsAmount / taxableAmount) * 10000) / 100 : null;
-      } else {
-        if (taxableAmount <= TCS_THRESHOLD) continue;
-        tcsAmount = Math.round((taxableAmount * TCS_RATE) / 100 * 100) / 100;
-        estimated = true;
-        estimatedCount += 1;
-        tcsPct = TCS_RATE;
-      }
-      totalTCS += tcsAmount;
+      const r = computeTdsTcs(taxableAmount, sale.tcsAmount, { rate: cfg.tcsRate, threshold: cfg.tcsThreshold });
+      if (!r) continue;
+      if (r.estimated) estimatedCount += 1;
+      totalTCS += r.amount;
       totalTransactionAmount += taxableAmount;
 
       const customerPan = sale.customer?.panNumber || sale.customerGst?.substring(2, 12) || 'N/A';
@@ -1130,17 +1150,18 @@ const getForm27EQ = async (req, res) => {
         tan,
         partyName: sale.customerName || sale.customer?.name || 'Walk-in',
         pan: customerPan,
+        section: sale.tcsSection || cfg.tcsSection,
         transactionAmount: taxableAmount,
-        tcsPct,
-        tcsAmount,
-        estimated,
+        tcsPct: r.pct,
+        tcsAmount: r.amount,
+        estimated: r.estimated,
       });
     }
 
     res.json({
       enabled: true,
       sections,
-      summary: { totalTransactionAmount, totalTCS, entryCount: sections.length, estimatedCount, estimatedRate: TCS_RATE, estimatedThreshold: TCS_THRESHOLD },
+      summary: { totalTransactionAmount, totalTCS, entryCount: sections.length, estimatedCount, estimatedRate: cfg.tcsRate, estimatedThreshold: cfg.tcsThreshold, section: cfg.tcsSection },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1151,28 +1172,30 @@ const getBankStatement = async (req, res) => {
   try {
     const baseFilter = getBaseFilter(req);
     const { startDate, endDate } = req.query;
+    const { accountId } = req.query;
     const filter = { ...baseFilter, type: /bank/ };
     if (startDate && endDate) {
       const end = new Date(endDate);
       end.setDate(end.getDate() + 1);
       filter.date = { $gte: new Date(startDate), $lt: end };
     }
-    const transactions = await Transaction.find(filter).sort({ date: 1 });
-    let runningBalance = 0;
-    const entries = transactions.map((t) => {
-      const isIn = t.type === 'bank_in';
-      runningBalance += isIn ? t.amount : -t.amount;
-      return {
-        date: t.date,
-        voucherType: t.type,
-        voucherNo: t.reference || '-',
-        partyName: t.partyName || '-',
-        description: t.description || '-',
-        debit: isIn ? 0 : t.amount,
-        credit: isIn ? t.amount : 0,
-        balance: runningBalance,
-      };
-    });
+    let transactions = await Transaction.find(filter).lean();
+
+    // When a specific bank account is chosen, narrow to its transactions and start
+    // the running balance from that account's opening balance, so the Balance column
+    // reflects only the selected account (Transactions carry no account id, so we
+    // match on the account's identifying text — name / bank name / account number).
+    let openingBalance = 0;
+    if (accountId && accountId !== 'all') {
+      const account = await Account.findOne({ ...baseFilter, _id: accountId }).lean();
+      if (account) {
+        const needles = bankAccountNeedles(account);
+        transactions = transactions.filter((t) => transactionMatchesAccount(t, needles));
+        openingBalance = account.openingBalance || 0;
+      }
+    }
+
+    const entries = bankStatementRows(transactions, openingBalance);
     const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
     const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
     res.json({ entries, totalDebit, totalCredit });
@@ -1786,9 +1809,14 @@ const getStockDetail = async (req, res) => {
     if (startDate && endDate) {
       filter.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
     }
+    // Paginate instead of silently truncating at 500 rows (which hid older movements).
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const total = await StockMovement.countDocuments(filter);
     const movements = await StockMovement.find(filter)
       .sort({ date: -1 })
-      .limit(500)
+      .skip(offset)
+      .limit(limit)
       .lean();
 
     const saleIds = [];
@@ -1829,7 +1857,7 @@ const getStockDetail = async (req, res) => {
         balance: m.balanceAfter || 0,
       };
     });
-    res.json({ entries, total: entries.length });
+    res.json({ entries, total, count: entries.length, limit, offset });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2409,6 +2437,56 @@ const getItemWiseDiscount = async (req, res) => {
   }
 };
 
+// Fix 17: Stock reconciliation — compares each product's snapshot quantity
+// (Product.stock) against the running balance implied by the StockMovement ledger
+// (latest balanceAfter), surfacing any drift between the two sources of truth.
+const getStockReconciliation = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const aggBase = toAggBase(baseFilter);
+    const [products, ledgerAgg] = await Promise.all([
+      Product.find({ ...baseFilter, isActive: true, type: { $ne: 'service' } }).select('name stock type').lean(),
+      StockMovement.aggregate([
+        { $match: aggBase },
+        { $sort: { date: 1, _id: 1 } },
+        { $group: { _id: '$product', qty: { $last: '$balanceAfter' } } },
+      ]),
+    ]);
+    const ledgerQtyById = {};
+    ledgerAgg.forEach((r) => { if (r._id) ledgerQtyById[r._id.toString()] = r.qty; });
+    const { rows, summary } = reconcileStock(products, ledgerQtyById);
+    res.json({ entries: rows, summary });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Fix 20: Godown-wise stock — the per-godown distribution of each product's stock
+// (Product.godownStock[]) flattened into one row per (godown, item), with valuation.
+const getGodownStock = async (req, res) => {
+  try {
+    const baseFilter = getBaseFilter(req);
+    const { godownId } = req.query;
+    const [products, godowns] = await Promise.all([
+      Product.find({ ...baseFilter, isActive: true, type: { $ne: 'service' } })
+        .select('name costPrice purchasePrice price type godownStock').lean(),
+      Godown.find({ ...baseFilter }).select('name').lean(),
+    ]);
+    const godownNameById = {};
+    godowns.forEach((g) => { godownNameById[g._id.toString()] = g.name; });
+
+    let entries = buildGodownStock(products, godownNameById);
+    if (godownId) {
+      const name = godownNameById[String(godownId)];
+      if (name) entries = entries.filter((e) => e.godown === name);
+    }
+    const totalValue = entries.reduce((s, e) => s + e.value, 0);
+    res.json({ entries, totalValue, godowns: godowns.map((g) => ({ _id: g._id, name: g.name })) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // Wrap every handler so dateFrom/dateTo are normalized to startDate/endDate
 // before the handler runs. This guarantees consistent date-range filtering
 // regardless of which query-param names a given frontend report page sends.
@@ -2442,6 +2520,8 @@ const handlers = {
   getSaleOrderItem,
   getItemDetail,
   getStockDetail,
+  getStockReconciliation,
+  getGodownStock,
   getDiscountReport,
   getLoanStatement,
   getExpenseCategoryReport,

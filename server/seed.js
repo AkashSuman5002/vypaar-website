@@ -12,6 +12,9 @@ const Purchase = require('./models/Purchase');
 const Sale = require('./models/Sale');
 const Transaction = require('./models/Transaction');
 const Account = require('./models/Account');
+const StockMovement = require('./models/StockMovement');
+const JournalEntry = require('./models/JournalEntry');
+const { seedAccounts, postJournalEntry } = require('./controllers/accountingController');
 
 const customersData = [
   { name: 'Aarav Sharma', phone: '9876543210', email: 'aarav.sharma@email.com', address: '42, Lake View Apartments, Andheri West, Mumbai - 400053' },
@@ -113,6 +116,8 @@ const seed = async () => {
         Sale.deleteMany({ user: user._id }),
         Transaction.deleteMany({ user: user._id }),
         Account.deleteMany({ user: user._id }),
+        StockMovement.deleteMany({ user: user._id }),
+        JournalEntry.deleteMany({ user: user._id }),
       ]);
 
       const today = new Date();
@@ -185,15 +190,28 @@ const seed = async () => {
         d.setDate(d.getDate() - p.dateOffset);
         const prod = products.find((pr) => pr.name === p.product);
         if (prod) prod.stock += p.quantity;
+        const rate = p.quantity ? p.amount / p.quantity : p.amount;
+        // Schema-conformant Purchase (items[] + required totalAmount), so it is
+        // actually saved and shows up in purchase/stock/accounting reports.
         return {
           user: user._id,
           supplier: supplierMap[p.supplierName],
           supplierName: p.supplierName,
+          billNumber: `BILL-${String(i + 1).padStart(4, '0')}`,
           date: d,
-          product: p.product,
-          productId: prod ? prod._id : null,
-          quantity: p.quantity,
-          amount: p.amount,
+          items: [{
+            product: prod ? prod._id : null,
+            productName: p.product,
+            quantity: p.quantity,
+            rate,
+            amount: p.amount,
+            taxableAmount: p.amount,
+          }],
+          taxableAmount: p.amount,
+          totalAmount: p.amount,
+          paidAmount: p.amount,
+          remainingBalance: 0,
+          paymentStatus: 'paid',
         };
       });
       await Purchase.insertMany(purchases);
@@ -312,6 +330,91 @@ const seed = async () => {
         invoicePrefix: 'INV-',
       });
       console.log('  ✓ 1 setting');
+
+      // ── Stock ledger + double-entry accounting for the seeded data ──
+      // Previously the seeder wrote Sales/Purchases directly and only adjusted
+      // Product.stock, so the Stock Movement, Stock Reconciliation, Trial Balance,
+      // P&L and Balance Sheet reports were all empty on seeded data. Build the
+      // StockMovement ledger and post balanced journal entries so they populate.
+      try {
+        await seedAccounts(user._id, null);
+        const accs = await Account.find({ user: user._id });
+        const byCode = {};
+        accs.forEach((a) => { byCode[a.code] = a; });
+        const line = (code, debit, credit) => {
+          const a = byCode[code];
+          return a ? { account: a._id, accountName: a.name, accountType: a.type, debit, credit } : null;
+        };
+
+        const seededPurchases = await Purchase.find({ user: user._id }).lean();
+        const seededSales = await Sale.find({ user: user._id }).lean();
+
+        // Stock movements, applied oldest -> newest with a running per-product balance.
+        const events = [
+          ...seededPurchases.map((p) => ({ kind: 'purchase', date: p.date, doc: p })),
+          ...seededSales.map((s) => ({ kind: 'sale', date: s.date, doc: s })),
+        ].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const running = {};
+        const movements = [];
+        for (const ev of events) {
+          const doc = ev.doc;
+          const isPurchase = ev.kind === 'purchase';
+          for (const it of (doc.items || [])) {
+            if (!it.product) continue;
+            const id = it.product.toString();
+            const qty = it.quantity || 0;
+            const before = running[id] || 0;
+            const after = isPurchase ? before + qty : before - qty;
+            running[id] = after;
+            movements.push({
+              user: user._id,
+              product: it.product,
+              productName: it.productName,
+              type: isPurchase ? 'purchase' : 'sale',
+              quantity: isPurchase ? qty : -qty,
+              balanceBefore: before,
+              balanceAfter: after,
+              date: doc.date,
+              referenceType: isPurchase ? 'Purchase' : 'Sale',
+              referenceId: doc._id,
+              referenceNumber: isPurchase ? (doc.billNumber || '') : (doc.invoiceNumber || ''),
+            });
+          }
+        }
+        if (movements.length) await StockMovement.insertMany(movements);
+
+        // Balanced journal entries: purchases (Dr Purchase / Cr Cash) and sales
+        // (Dr Cash+Receivable / Cr Sales + Output CGST/SGST).
+        let jeSeq = 0;
+        for (const p of seededPurchases) {
+          const amt = p.totalAmount || 0;
+          const lines = [line('5002', amt, 0), line('1001', 0, amt)].filter(Boolean);
+          if (lines.length === 2 && amt > 0) {
+            jeSeq += 1;
+            try {
+              await postJournalEntry(user._id, { entryNumber: `JE-S${String(jeSeq).padStart(5, '0')}`, entryDate: p.date, referenceType: 'purchase', referenceId: p._id, referenceNumber: p.billNumber || '', lines }, null);
+            } catch (e) { /* skip edge cases */ }
+          }
+        }
+        for (const s of seededSales) {
+          const lines = [
+            (s.paidAmount || 0) > 0 ? line('1001', s.paidAmount, 0) : null,
+            (s.remainingBalance || 0) > 0 ? line('1101', s.remainingBalance, 0) : null,
+            line('4001', 0, s.taxableAmount || 0),
+            (s.cgstTotal || 0) > 0 ? line('2112', 0, s.cgstTotal) : null,
+            (s.sgstTotal || 0) > 0 ? line('2113', 0, s.sgstTotal) : null,
+          ].filter(Boolean);
+          if (lines.length >= 2) {
+            jeSeq += 1;
+            try {
+              await postJournalEntry(user._id, { entryNumber: `JE-S${String(jeSeq).padStart(5, '0')}`, entryDate: s.date, referenceType: 'sale', referenceId: s._id, referenceNumber: s.invoiceNumber || '', lines }, null);
+            } catch (e) { /* skip unbalanced rounding edge cases */ }
+          }
+        }
+        console.log(`  ✓ ${movements.length} stock movements + ${jeSeq} journal entries`);
+      } catch (e) {
+        console.warn('  ! accounting/stock seeding skipped:', e.message);
+      }
 
       console.log(`  ✓ ${salesData.length} invoices`);
       console.log(`✅ Seeded complete for: ${user.email}\n`);

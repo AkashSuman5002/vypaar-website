@@ -104,6 +104,8 @@ router.get('/reports/sale-orders', authorize('reports:view'), reportCtrl.getSale
 router.get('/reports/sale-order-item', authorize('reports:view'), reportCtrl.getSaleOrderItem);
 router.get('/reports/item-detail', authorize('reports:view'), reportCtrl.getItemDetail);
 router.get('/reports/stock-detail', authorize('reports:view'), reportCtrl.getStockDetail);
+router.get('/reports/stock-reconciliation', authorize('reports:view'), reportCtrl.getStockReconciliation);
+router.get('/reports/godown-stock', authorize('reports:view'), reportCtrl.getGodownStock);
 router.get('/reports/item-wise-profit-loss', authorize('reports:view'), reportCtrl.getItemWiseProfitLoss);
 router.get('/reports/item-category-profit-loss', authorize('reports:view'), reportCtrl.getItemCategoryProfitLoss);
 router.get('/reports/item-report-by-party', authorize('reports:view'), reportCtrl.getItemReportByParty);

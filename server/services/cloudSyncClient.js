@@ -16,6 +16,7 @@
 
 const mongoose = require('mongoose');
 const { TENANT_MODELS } = require('./backupService');
+const { shouldApplyRemote, advanceCursor } = require('../utils/syncHelpers');
 
 const api = () => (process.env.CLOUD_API_URL || '').replace(/\/+$/, '');
 const isConfigured = () => Boolean(api());
@@ -70,13 +71,18 @@ const applyToLocal = async (collections) => {
     try { Model = mongoose.model(modelName); } catch (_) { continue; }
     for (const doc of docs) {
       const id = doc._id;
-      const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
-      // Last-write-wins: skip if local copy is newer/equal.
+      // Last-write-wins: skip if the local copy is newer/equal.
       const existing = id ? await Model.findById(id).select('updatedAt').lean() : null;
-      if (existing && existing.updatedAt && new Date(existing.updatedAt).getTime() >= ts) continue;
+      if (!shouldApplyRemote(existing && existing.updatedAt, doc.updatedAt)) continue;
       const clean = { ...doc };
       delete clean.__v;
-      await Model.replaceOne({ _id: id }, clean, { upsert: true });
+      // CRITICAL: preserve the remote `updatedAt` instead of letting Mongoose
+      // re-stamp it to "now". Re-stamping made every pulled doc look locally
+      // modified, so it was pushed back, re-stamped on the cloud, pulled again…
+      // an endless echo loop ({pulled:N,pushed:N} every cycle). With timestamps
+      // off here, an unchanged doc has remote === local on the next pass and is
+      // skipped, so sync converges to {pulled:0,pushed:0}.
+      await Model.replaceOne({ _id: id }, clean, { upsert: true, timestamps: false });
       applied++;
     }
   }
@@ -133,15 +139,45 @@ const runCloudSync = async () => {
   return { pulled: appliedCount, pushed: pushedCount };
 };
 
+// Live sync health, surfaced via getStatus() for an in-app indicator/endpoint.
+const status = {
+  configured: false,
+  authenticated: false,
+  online: null,        // true/false after the first attempt
+  syncing: false,
+  lastSyncAt: null,    // ISO time of the last successful pass
+  lastResult: null,    // { pulled, pushed }
+  lastError: null,     // message of the last failed pass
+};
+const getStatus = () => ({
+  ...status,
+  configured: isConfigured(),
+  authenticated: hasToken(),
+});
+
 // Fire-and-forget a single sync pass (used right after login, and by the loop).
 let syncing = false;
 const triggerSync = () => {
   if (!isConfigured() || !token || syncing) return;
   syncing = true;
+  status.syncing = true;
   runCloudSync()
-    .then((r) => { if (r && (r.pulled || r.pushed)) console.log('[cloudsync]', JSON.stringify(r)); })
-    .catch((e) => console.warn('[cloudsync] error:', e.message))
-    .finally(() => { syncing = false; });
+    .then((r) => {
+      if (r && (r.pulled || r.pushed)) console.log('[cloudsync]', JSON.stringify(r));
+      if (!r || !r.skipped) {
+        status.online = true;
+        status.lastError = null;
+        status.lastSyncAt = new Date().toISOString();
+        if (r && (r.pulled != null || r.pushed != null)) status.lastResult = { pulled: r.pulled || 0, pushed: r.pushed || 0 };
+      }
+    })
+    .catch((e) => {
+      // Network/cold-start failures mean offline; a 401 means re-login needed.
+      status.online = !/fetch failed|ENOTFOUND|ECONN|timeout|network/i.test(e.message || '');
+      status.lastError = e.message;
+      console.warn('[cloudsync] error:', e.message);
+    })
+    .finally(() => { syncing = false; status.syncing = false; });
 };
 
 // Background loop: sync every `intervalMs` while logged in and online.
@@ -153,4 +189,4 @@ const startSyncLoop = (intervalMs = Number(process.env.SYNC_INTERVAL_MS) || 3000
   loopTimer = setInterval(triggerSync, intervalMs);
 };
 
-module.exports = { cloudLogin, setToken, hasToken, clearToken, runCloudSync, triggerSync, startSyncLoop, isConfigured, api };
+module.exports = { cloudLogin, setToken, hasToken, clearToken, runCloudSync, triggerSync, startSyncLoop, isConfigured, api, getStatus };

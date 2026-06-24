@@ -11,6 +11,9 @@ const expenseItemSchema = new mongoose.Schema({
   amount: { type: Number, default: 0 },
   gstRate: { type: Number, default: 0 },
   gstAmount: { type: Number, default: 0 },
+  cgst: { type: Number, default: 0 },
+  sgst: { type: Number, default: 0 },
+  igst: { type: Number, default: 0 },
 }, { _id: false });
 
 const expenseSchema = new mongoose.Schema({
@@ -21,6 +24,11 @@ const expenseSchema = new mongoose.Schema({
   description: { type: String },
   amount: { type: Number, required: true, min: 0 },
   tax: { type: Number, default: 0 },
+  // GST split of `tax` (intra-state expenses fill cgst/sgst; inter-state fills igst).
+  cgstTotal: { type: Number, default: 0 },
+  sgstTotal: { type: Number, default: 0 },
+  igstTotal: { type: Number, default: 0 },
+  isInterState: { type: Boolean, default: false },
   totalAmount: { type: Number, required: true, min: 0 },
   date: { type: Date, default: Date.now },
   paymentMethod: { type: String, default: 'cash' },

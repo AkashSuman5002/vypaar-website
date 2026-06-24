@@ -5,7 +5,7 @@ import ReportFilters from '../../components/reports/common/ReportFilters';
 import ReportTable from '../../components/reports/common/ReportTable';
 import ReportSummary from '../../components/reports/common/ReportSummary';
 import EmptyState from '../../components/reports/common/EmptyState';
-import { transactionAPI } from '../../services/api';
+import { reportAPI } from '../../services/api';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
 import { exportToExcel, printReport } from '../../utils/exportUtils';
 
@@ -60,24 +60,10 @@ const DayBookReport = () => {
           params.dateFrom = dates.start;
           params.dateTo = dates.end;
         }
-        params.limit = 5000;
-        const res = await transactionAPI.getAll(params);
-        let balance = 0;
-        const processed = (res.data?.data || []).map(item => {
-          const isIn = item.type?.includes('_in');
-          const moneyIn = isIn ? Math.abs(item.amount || 0) : 0;
-          const moneyOut = isIn ? 0 : Math.abs(item.amount || 0);
-          balance += isIn ? moneyIn : -moneyOut;
-          return {
-            ...item,
-            voucher: item.reference,
-            particular: item.description,
-            moneyIn,
-            moneyOut,
-            balance,
-          };
-        });
-        setData(processed);
+        // The Day Book endpoint merges cash/bank movements with credit (unpaid)
+        // sales/purchases and returns a correct chronological running balance.
+        const res = await reportAPI.getDayBook(params);
+        setData(res.data?.entries || []);
       } catch (err) {
         console.error('Failed to load', err);
       } finally {

@@ -7,6 +7,7 @@ const { createNotification } = require('../controllers/notificationController');
 const { sendEmailNotification } = require('../services/emailService');
 const { withTransaction } = require('../utils/withTransaction');
 const { getNextSequence } = require('../utils/nextNumber');
+const { splitGstTotal } = require('../utils/reportHelpers');
 
 // Seed value = current max numeric EXP- expense number for this tenant (prefix
 // stripped). Used only to seed the counter on its first use over existing data.
@@ -69,6 +70,10 @@ const createExpense = async (req, res) => {
     const amount = rawAmount ?? (req.body.totalAmount ? req.body.totalAmount - (rawTax || 0) : 0);
     const tax = rawTax ?? 0;
     const totalAmount = amount + tax;
+    // Split the expense tax into CGST/SGST (intra-state) or IGST (inter-state) so it
+    // can feed ITC reporting instead of sitting as one undifferentiated `tax` lump.
+    const isInterState = req.body.isInterState === true;
+    const { cgstTotal, sgstTotal, igstTotal } = splitGstTotal(tax, isInterState);
 
     let expense;
     await withTransaction(async (session) => {
@@ -85,7 +90,8 @@ const createExpense = async (req, res) => {
     }
     [expense] = await Expense.create([
       getCreateData(req, { expenseNumber, category: category || 'Other', description,
-        amount, tax, totalAmount, date, paymentMethod: paymentMethod || 'cash',
+        amount, tax, cgstTotal, sgstTotal, igstTotal, isInterState, totalAmount, date,
+        paymentMethod: paymentMethod || 'cash',
         reference, notes, paidTo, items: items || [], receiptImage,
         isRecurring, recurringInterval }),
     ], { session });
@@ -178,10 +184,12 @@ const updateExpense = async (req, res) => {
     const amount = rawAmount ?? (sentTotal ? sentTotal - (rawTax || 0) : expense.amount);
     const tax = rawTax ?? expense.tax;
     const totalAmount = amount + tax;
+    const isInterState = req.body.isInterState ?? expense.isInterState ?? false;
+    const { cgstTotal, sgstTotal, igstTotal } = splitGstTotal(tax, isInterState);
 
     let updated;
     await withTransaction(async (session) => {
-    updated = await Expense.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, { date, expenseNumber, category, description, paymentMethod, items, roundOff, amount, tax, totalAmount, reference, paidTo, receiptImage, notes }, { new: true, session });
+    updated = await Expense.findOneAndUpdate({ _id: req.params.id, ...baseFilter }, { date, expenseNumber, category, description, paymentMethod, items, roundOff, amount, tax, cgstTotal, sgstTotal, igstTotal, isInterState, totalAmount, reference, paidTo, receiptImage, notes }, { new: true, session });
 
     const txnType = (paymentMethod || expense.paymentMethod) === 'cash' ? 'cash_out' : 'bank_out';
     await Transaction.findOneAndUpdate(

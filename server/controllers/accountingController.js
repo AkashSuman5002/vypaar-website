@@ -8,6 +8,7 @@ const Expense = require('../models/Expense');
 const Setting = require('../models/Setting');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { withTransaction } = require('../utils/withTransaction');
+const { aggregateLedgerByAccount } = require('../utils/reportHelpers');
 
 // Seed default chart of accounts for a new user+business (runs once per user+business)
 const seedAccounts = async (userId, businessId) => {
@@ -103,20 +104,13 @@ const getAccounts = async (req, res) => {
     // Query ALL journal entries for this user (ignore business filter) to compute balances correctly
     // JournalEntries may have been created with different business context or before business feature
     const entries = await JournalEntry.find({ user: userId, isPosted: true });
+    const ledger = aggregateLedgerByAccount(entries);
     const accountsWithBalance = [];
     for (const acc of accounts) {
-      let totalDebit = 0;
-      let totalCredit = 0;
-      let hasJournalEntries = false;
-      entries.forEach((je) => {
-        je.lines.forEach((line) => {
-          if (line.account.toString() === acc._id.toString()) {
-            totalDebit += line.debit;
-            totalCredit += line.credit;
-            hasJournalEntries = true;
-          }
-        });
-      });
+      const t = ledger.get(acc._id.toString());
+      const totalDebit = t ? t.debit : 0;
+      const totalCredit = t ? t.credit : 0;
+      const hasJournalEntries = !!t;
       // Use journal entry computed balance if entries exist, otherwise use stored balance
       // (stored balance was correctly updated via $inc during sale/purchase/payment creation)
       const balance = hasJournalEntries
@@ -233,7 +227,7 @@ const getTrialBalance = async (req, res) => {
   try {
     const setting = await Setting.findOne({ user: req.user._id });
     if (setting?.preferences?.accounting?.enableAccounting === false) {
-      return res.json({ accounts: [], totalDebit: 0, totalCredit: 0 });
+      return res.json({ accounts: [], totalDebit: 0, totalCredit: 0, accountingDisabled: true });
     }
     const baseFilter = getBaseFilter(req);
     let { startDate, endDate } = req.query;
@@ -244,18 +238,12 @@ const getTrialBalance = async (req, res) => {
 
     const accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
     const entries = await JournalEntry.find(journalFilter);
+    const ledger = aggregateLedgerByAccount(entries);
 
     const result = accounts.map((acc) => {
-      let totalDebit = 0;
-      let totalCredit = 0;
-      entries.forEach((je) => {
-        je.lines.forEach((line) => {
-          if (line.account.toString() === acc._id.toString()) {
-            totalDebit += line.debit;
-            totalCredit += line.credit;
-          }
-        });
-      });
+      const t = ledger.get(acc._id.toString()) || { debit: 0, credit: 0 };
+      const totalDebit = t.debit;
+      const totalCredit = t.credit;
       const balance = ['asset', 'expense'].includes(acc.type)
         ? totalDebit - totalCredit
         : totalCredit - totalDebit;
@@ -301,18 +289,10 @@ const calcProfitLoss = async (baseFilter, query, userId) => {
     Expense.find(expenseFilter).lean(),
   ]);
 
+  const ledger = aggregateLedgerByAccount(entries);
   const calculateBalance = (acc) => {
-    let totalCredit = 0;
-    let totalDebit = 0;
-    entries.forEach((je) => {
-      je.lines.forEach((line) => {
-        if (line.account.toString() === acc._id.toString()) {
-          totalDebit += line.debit;
-          totalCredit += line.credit;
-        }
-      });
-    });
-    return totalCredit - totalDebit;
+    const t = ledger.get(acc._id.toString()) || { debit: 0, credit: 0 };
+    return t.credit - t.debit;
   };
 
   const income = incomeAccounts.map((a) => ({ name: a.name, amount: calculateBalance(a), category: a.category, parent: a.parent }));
@@ -407,7 +387,7 @@ const getProfitLoss = async (req, res) => {
   try {
     const setting = await Setting.findOne({ user: req.user._id });
     if (setting?.preferences?.accounting?.enableAccounting === false) {
-      return res.json({ revenue: 0, expenses: 0, netProfit: 0, revenueItems: [], expenseItems: [] });
+      return res.json({ revenue: 0, expenses: 0, netProfit: 0, revenueItems: [], expenseItems: [], accountingDisabled: true });
     }
     const baseFilter = getBaseFilter(req);
     const result = await calcProfitLoss(baseFilter, req.query, req.user._id);
@@ -421,34 +401,46 @@ const getBalanceSheet = async (req, res) => {
   try {
     const setting = await Setting.findOne({ user: req.user._id });
     if (setting?.preferences?.accounting?.enableAccounting === false) {
-      return res.json({ assets: [], liabilities: [], equity: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0 });
+      return res.json({ assets: [], liabilities: [], equity: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0, accountingDisabled: true });
     }
     const baseFilter = getBaseFilter(req);
+    const { endDate } = req.query;
     const accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
-    const entries = await JournalEntry.find({ user: req.user._id, isPosted: true });
+
+    // A balance sheet is a snapshot "as of" a date: include every posted entry up to
+    // and including endDate (not just a single period, and not all-time when a date is
+    // chosen). Without bounding by endDate, balances drifted out of sync with the
+    // period retained-earnings figure and Assets != Liabilities + Equity.
+    const entryFilter = { user: req.user._id, isPosted: true };
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      entryFilter.entryDate = { $lte: end };
+    }
+    const entries = await JournalEntry.find(entryFilter);
+    const ledger = aggregateLedgerByAccount(entries);
 
     const getBalance = (acc) => {
-      let d = 0, c = 0;
-      entries.forEach((je) => {
-        je.lines.forEach((line) => {
-          if (line.account.toString() === acc._id.toString()) {
-            d += line.debit; c += line.credit;
-          }
-        });
-      });
-      return ['asset', 'expense'].includes(acc.type) ? d - c : c - d;
+      const t = ledger.get(acc._id.toString()) || { debit: 0, credit: 0 };
+      return ['asset', 'expense'].includes(acc.type) ? t.debit - t.credit : t.credit - t.debit;
     };
 
     const assets = accounts.filter((a) => a.type === 'asset').map((a) => ({ name: a.name, amount: getBalance(a) }));
     const liabilities = accounts.filter((a) => a.type === 'liability').map((a) => ({ name: a.name, amount: getBalance(a) }));
     const equity = accounts.filter((a) => a.type === 'equity').map((a) => ({ name: a.name, amount: getBalance(a) }));
-    const pl = await calcProfitLoss(baseFilter, req.query, req.user._id);
 
-    // The current-period net income (income - expense) is retained earnings and
-    // belongs in equity. Without it, Assets != Liabilities + Equity. Add it as an
-    // explicit equity line so the accounting equation balances.
-    const periodProfit = pl.netProfit || 0;
-    equity.push({ name: 'Retained Earnings (Current Period)', amount: periodProfit });
+    // Retained earnings = net income (income - expense) computed from the SAME posted
+    // entries used for the balances above. Deriving it from the identical entry set
+    // (rather than a separately date-filtered P&L) guarantees Assets = Liabilities +
+    // Equity by construction, for any "as of" date.
+    const incomeTotal = accounts
+      .filter((a) => a.type === 'income')
+      .reduce((s, a) => s + getBalance(a), 0);
+    const expenseTotal = accounts
+      .filter((a) => a.type === 'expense')
+      .reduce((s, a) => s + getBalance(a), 0);
+    const periodProfit = incomeTotal - expenseTotal;
+    equity.push({ name: 'Retained Earnings', amount: periodProfit });
 
     const totalAssets = assets.reduce((s, a) => s + a.amount, 0);
     const totalLiabilities = liabilities.reduce((s, l) => s + l.amount, 0);
@@ -458,7 +450,7 @@ const getBalanceSheet = async (req, res) => {
       assets,
       liabilities,
       equity,
-      profitLoss: pl.netProfit,
+      profitLoss: periodProfit,
       totalAssets,
       totalLiabilities,
       totalEquity,
@@ -504,18 +496,10 @@ const getBankAccounts = async (req, res) => {
     });
     const totalBankTxnBalance = (txnMap.bank_in || 0) - (txnMap.bank_out || 0);
 
+    const ledger = aggregateLedgerByAccount(entries);
     const accountsWithBalance = accounts.map(acc => {
-      let totalDebit = 0, totalCredit = 0, hasEntries = false;
-      entries.forEach(je => {
-        je.lines.forEach(line => {
-          if (line.account.toString() === acc._id.toString()) {
-            totalDebit += line.debit;
-            totalCredit += line.credit;
-            hasEntries = true;
-          }
-        });
-      });
-      const balance = hasEntries ? (totalDebit - totalCredit) : (acc.balance || 0);
+      const t = ledger.get(acc._id.toString());
+      const balance = t ? (t.debit - t.credit) : (acc.balance || 0);
       return { ...acc.toObject(), balance };
     });
 

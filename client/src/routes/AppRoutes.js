@@ -289,6 +289,7 @@ const AppRoutes = () => {
           <Route path="stock-detail" element={<StockDetail />} />
           <Route path="stock-aging" element={<StockAging />} />
           <Route path="item-detail" element={<ItemDetail />} />
+          <Route path="godown-stock" element={<GenericReport reportName="Godown Stock" />} />
           <Route path="sale-purchase-report-by-item-category" element={<GenericReport reportName="Sale/Purchase Report By Item Category" />} />
           <Route path="stock-summary-report-by-item-category" element={<GenericReport reportName="Stock Summary Report By Item Category" />} />
           <Route path="item-wise-discount" element={<GenericReport reportName="Item Wise Discount" />} />

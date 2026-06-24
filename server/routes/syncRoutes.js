@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const { runSync, getStatus, isEnabled } = require('../services/syncService');
+const cloudSyncClient = require('../services/cloudSyncClient');
 const { TENANT_MODELS } = require('../services/backupService');
 const { getBaseFilter } = require('../utils/queryHelper');
 const { authorizeAdmin } = require('../middleware/authorize');
@@ -14,9 +15,11 @@ const Role = require('../models/Role');
 // Local sync engine controls (used on the DESKTOP only; no-op on the cloud).
 // ---------------------------------------------------------------------------
 
-// Current sync status (enabled? connected? last pass summary).
+// Current sync status. Includes both the (mostly-unused) direct-Mongo engine and
+// the active HTTP cloud-sync client so the desktop UI can show a live indicator
+// (online/offline, last synced, last error / re-login needed).
 router.get('/status', (req, res) => {
-  res.json(getStatus());
+  res.json({ ...getStatus(), cloud: cloudSyncClient.getStatus() });
 });
 
 // Trigger an immediate local sync pass (admin only).
@@ -107,7 +110,12 @@ router.post('/push', async (req, res) => {
       });
 
       try {
-        const r = await Model.bulkWrite(ops, { ordered: false });
+        // timestamps:false PRESERVES the incoming `updatedAt` instead of re-stamping
+        // it to "now". Re-stamping on every push made each synced doc look freshly
+        // changed, so every device re-pulled and re-pushed it forever (the
+        // {pulled:N,pushed:N} echo loop) and broke last-write-wins. Preserving it lets
+        // an unchanged doc keep its original timestamp so sync converges to 0/0.
+        const r = await Model.bulkWrite(ops, { ordered: false, timestamps: false });
         applied[key] = (r.upsertedCount || 0) + (r.modifiedCount || 0) + (r.matchedCount || 0) + (r.insertedCount || 0);
       } catch (bulkErr) {
         // ordered:false means valid ops still applied; report partial + the reason.

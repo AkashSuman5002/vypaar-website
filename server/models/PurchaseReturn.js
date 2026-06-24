@@ -34,6 +34,7 @@ const purchaseReturnSchema = mongoose.Schema({
   cgstTotal: { type: Number, default: 0 },
   sgstTotal: { type: Number, default: 0 },
   igstTotal: { type: Number, default: 0 },
+  cessTotal: { type: Number, default: 0 },
   totalAmount: { type: Number, default: 0 },
   reason: { type: String },
   returnReason: { type: String, trim: true },

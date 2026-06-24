@@ -82,13 +82,16 @@ const BankStatement = () => {
       try {
         const params = {};
         if (dates.start && dates.end) { params.startDate = dates.start; params.endDate = dates.end; }
+        // Let the server narrow to the chosen account and compute that account's
+        // running balance (Balance column) rather than a balance across all banks.
+        if (selectedBank && selectedBank !== 'all') params.accountId = selectedBank;
         const res = await reportAPI.getBankStatement(params);
         setData(res.data.entries || []);
       } catch (err) { console.error('Failed to load bank statement', err); }
       finally { setLoading(false); }
     };
     fetchData();
-  }, [dates]);
+  }, [dates, selectedBank]);
 
   const totalDebit = filteredData.reduce((s, d) => s + (d.debit || 0), 0);
   const totalCredit = filteredData.reduce((s, d) => s + (d.credit || 0), 0);
