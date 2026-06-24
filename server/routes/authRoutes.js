@@ -244,12 +244,15 @@ router.post('/login', authLimiter, async (req, res) => {
         cloudSyncClient.triggerSync(); // pull this account's data from the cloud immediately
         return res.json({ ...full.toJSON() });
       } catch (e) {
-        if (e.cloudAuthFail) {
-          recordLoginFailure(normEmail);
-          return res.status(401).json({ message: 'Invalid email or password' });
+        // Whether the cloud REJECTED the credentials or was simply unreachable, fall
+        // through to LOCAL auth below. A team member / sub-user added on THIS device
+        // lives only in the local DB (it is never provisioned to the cloud), so the
+        // cloud genuinely doesn't know it and returns 401 — that must NOT block a
+        // valid local login. Local auth below still rejects a wrong email/password,
+        // so this does not weaken security for real cloud accounts.
+        if (!e.cloudAuthFail) {
+          console.warn('[cloudAuth] cloud login unavailable, trying offline local login:', e.message);
         }
-        // network/other -> fall through to OFFLINE local auth below.
-        console.warn('[cloudAuth] cloud login unavailable, trying offline local login:', e.message);
       }
     }
 
