@@ -1,6 +1,6 @@
 {
   "name": "vyapar",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Vyapar desktop application (Electron wrapper around the MERN app)",
   "main": "electron/main.js",
   "author": "Vyapar",
@@ -18,12 +18,14 @@
     "concurrently": "^10.0.3",
     "electron": "^42.4.1",
     "electron-builder": "^26.15.3",
+    "javascript-obfuscator": "^5.4.3",
     "wait-on": "^9.0.10"
   },
   "build": {
     "appId": "com.vyapar.desktop",
     "productName": "Vyapar",
     "asar": false,
+    "afterPack": "build-resources/afterPack.js",
     "directories": {
       "output": "dist"
     },
@@ -50,7 +52,7 @@
       "!server/whatsapp-sessions/**",
       "!server/backups/**",
       "!server/exports/**",
-      "!server/uploads/imports/**",
+      "!server/uploads/**",
       "!server/*.log",
       "!server/.migration-done"
     ],
