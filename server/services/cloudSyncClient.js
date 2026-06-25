@@ -25,10 +25,30 @@ const STATE_COLLECTION = 'syncstate';
 const stateColl = () => mongoose.connection.db.collection(STATE_COLLECTION);
 
 let token = null; // cloud JWT used as a Bearer token
+const TOKEN_DOC_ID = 'cloudtoken';
 
-const setToken = (t) => { token = t || null; };
+// Persist the cloud JWT in the local DB so background sync survives app restarts.
+// Without this the token lived only in memory: after a relaunch the local session
+// was still valid (so the user was never re-prompted to log in), but the cloud token
+// was gone, so the sync loop silently did nothing and data stopped syncing until a
+// manual logout/login. The JWT carries its own expiry; on expiry the cloud returns
+// 401 and we clear it, prompting a re-login.
+const persistToken = (t) => {
+  try {
+    stateColl().updateOne({ _id: TOKEN_DOC_ID }, { $set: { token: t || null, savedAt: new Date() } }, { upsert: true }).catch(() => {});
+  } catch (_) { /* DB not ready yet — ignore */ }
+};
+const loadPersistedToken = async () => {
+  try {
+    const doc = await stateColl().findOne({ _id: TOKEN_DOC_ID });
+    if (doc && doc.token) token = doc.token;
+  } catch (_) { /* ignore */ }
+  return token;
+};
+
+const setToken = (t) => { token = t || null; persistToken(t); };
 const hasToken = () => Boolean(token);
-const clearToken = () => { token = null; };
+const clearToken = () => { token = null; persistToken(null); };
 
 // Log in to the CLOUD and capture the JWT (returned by the cloud as an httpOnly
 // `token` cookie). A Node HTTP client can read Set-Cookie, so we lift the JWT out
@@ -180,13 +200,19 @@ const triggerSync = () => {
     .finally(() => { syncing = false; status.syncing = false; });
 };
 
-// Background loop: sync every `intervalMs` while logged in and online.
+// Background loop: sync every `intervalMs`. On startup it restores the cloud token
+// saved on a previous login (so sync resumes after an app restart without forcing a
+// re-login) and immediately attempts one sync.
 let loopTimer = null;
 const startSyncLoop = (intervalMs = Number(process.env.SYNC_INTERVAL_MS) || 30000) => {
   if (!isConfigured()) { console.log('[cloudsync] HTTP cloud sync DISABLED (no CLOUD_API_URL)'); return; }
   if (loopTimer) clearInterval(loopTimer);
   console.log(`[cloudsync] HTTP cloud sync ENABLED — interval ${intervalMs}ms`);
   loopTimer = setInterval(triggerSync, intervalMs);
+  // Restore a persisted token, then sync right away so data flows without re-login.
+  loadPersistedToken().then((t) => {
+    if (t) { console.log('[cloudsync] restored saved cloud session — syncing'); triggerSync(); }
+  });
 };
 
 module.exports = { cloudLogin, setToken, hasToken, clearToken, runCloudSync, triggerSync, startSyncLoop, isConfigured, api, getStatus };
