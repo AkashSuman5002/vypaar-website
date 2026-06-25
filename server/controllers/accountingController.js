@@ -5,6 +5,8 @@ const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const Transaction = require('../models/Transaction');
 const Expense = require('../models/Expense');
+const Customer = require('../models/Customer');
+const Supplier = require('../models/Supplier');
 const Setting = require('../models/Setting');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { withTransaction } = require('../utils/withTransaction');
@@ -230,39 +232,139 @@ const getTrialBalance = async (req, res) => {
       return res.json({ accounts: [], totalDebit: 0, totalCredit: 0, accountingDisabled: true });
     }
     const baseFilter = getBaseFilter(req);
-    let { startDate, endDate } = req.query;
+    let { endDate } = req.query;
     const journalFilter = { user: req.user._id, isPosted: true };
-    if (startDate && endDate) {
-      journalFilter.entryDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    // A trial balance is an as-of-date snapshot: include every posted entry up to and
+    // including the end date (cumulative). Filtering to a [startDate, endDate] window
+    // would drop opening balances accumulated before the start date and misrepresent
+    // the report, so only the end date bounds it.
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      journalFilter.entryDate = { $lt: end };
     }
 
-    const accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
-    const entries = await JournalEntry.find(journalFilter);
+    const [accounts, entries, customers, suppliers] = await Promise.all([
+      Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 }),
+      JournalEntry.find(journalFilter),
+      Customer.find({ ...baseFilter }).select('name openingBalance').lean(),
+      Supplier.find({ ...baseFilter }).select('name openingBalance').lean(),
+    ]);
     const ledger = aggregateLedgerByAccount(entries);
-
-    const result = accounts.map((acc) => {
+    const jeBalance = (acc) => {
       const t = ledger.get(acc._id.toString()) || { debit: 0, credit: 0 };
-      const totalDebit = t.debit;
-      const totalCredit = t.credit;
-      const balance = ['asset', 'expense'].includes(acc.type)
-        ? totalDebit - totalCredit
-        : totalCredit - totalDebit;
-      return {
-        _id: acc._id,
-        name: acc.name,
-        code: acc.code,
-        type: acc.type,
-        category: acc.category,
-        debit: totalDebit,
-        credit: totalCredit,
-        balance,
-      };
+      return ['asset', 'expense'].includes(acc.type) ? t.debit - t.credit : t.credit - t.debit;
+    };
+
+    // Legacy flat list (kept for any older consumer of this endpoint).
+    const flatAccounts = accounts.map((acc) => {
+      const t = ledger.get(acc._id.toString()) || { debit: 0, credit: 0 };
+      const balance = ['asset', 'expense'].includes(acc.type) ? t.debit - t.credit : t.credit - t.debit;
+      return { _id: acc._id, name: acc.name, code: acc.code, type: acc.type, category: acc.category, debit: t.debit, credit: t.credit, balance };
     });
 
-    const totalDebit = result.reduce((s, r) => s + r.debit, 0);
-    const totalCredit = result.reduce((s, r) => s + r.credit, 0);
+    // ---- Vyapar-style grouped Trial Balance -------------------------------
+    // A leaf shows its closing balance in EITHER the debit or credit column based
+    // on the account's natural side (assets/expenses = debit; liabilities/equity/
+    // income = credit); a negative balance flips to the other column.
+    const leaf = (name, amount, nature) => {
+      const a = round2(amount);
+      return nature === 'debit'
+        ? { name, debit: a > 0 ? a : 0, credit: a < 0 ? -a : 0 }
+        : { name, credit: a > 0 ? a : 0, debit: a < 0 ? -a : 0 };
+    };
+    const sumD = (arr) => round2(arr.reduce((s, i) => s + (i.debit || 0), 0));
+    const sumC = (arr) => round2(arr.reduce((s, i) => s + (i.credit || 0), 0));
+    const gnode = (name, children) => ({ name, debit: sumD(children), credit: sumC(children), children });
+    // GL leaves by category. `useJe` pulls the JE-derived balance (income/expense,
+    // which only arise from transactions); otherwise the stored running balance,
+    // which carries seeded opening balances the JE ledger doesn't.
+    const glByCat = (cats, nature, useJe) => accounts
+      .filter((a) => cats.includes(a.category))
+      .map((a) => leaf(a.name, useJe ? jeBalance(a) : (a.balance || 0), nature))
+      .filter((x) => x.debit > 0.005 || x.credit > 0.005);
 
-    res.json({ accounts: result, totalDebit, totalCredit, balanced: Math.abs(totalDebit - totalCredit) < 0.01 });
+    // Parties: positive customer balance = Sundry Debtor (debit); positive supplier
+    // balance = Sundry Creditor (credit). Negatives are advances and flip sides.
+    const debtorLeaves = [];
+    const creditorLeaves = [];
+    for (const c of customers) {
+      const b = round2(c.openingBalance || 0);
+      if (b > 0.005) debtorLeaves.push({ name: c.name, debit: b, credit: 0 });
+      else if (b < -0.005) creditorLeaves.push({ name: `${c.name} (advance)`, debit: 0, credit: -b });
+    }
+    for (const s of suppliers) {
+      const b = round2(s.openingBalance || 0);
+      if (b > 0.005) creditorLeaves.push({ name: s.name, debit: 0, credit: b });
+      else if (b < -0.005) debtorLeaves.push({ name: `${s.name} (advance)`, debit: -b, credit: 0 });
+    }
+    debtorLeaves.sort((a, b) => a.name.localeCompare(b.name));
+    creditorLeaves.sort((a, b) => a.name.localeCompare(b.name));
+    const totalDebtors = sumD(debtorLeaves);
+    const totalCreditors = sumC(creditorLeaves);
+
+    const assets = gnode('Assets', [
+      gnode('Fixed Assets', glByCat(['fixed_asset'], 'debit', false)),
+      gnode('Non Current Assets', glByCat(['non_current_asset'], 'debit', false)),
+      gnode('Current Assets', [
+        gnode('Sundry Debtors', debtorLeaves),
+        gnode('Input Duties & Taxes', glByCat(['input_duties', 'gst_collectible'], 'debit', false)),
+        gnode('Bank Accounts', glByCat(['bank'], 'debit', false)),
+        gnode('Cash Accounts', glByCat(['cash'], 'debit', false)),
+        gnode('Other Current Assets', glByCat(['current_asset', 'inventory'], 'debit', false)),
+      ]),
+      gnode('Other Assets', glByCat(['other_asset'], 'debit', false)),
+    ]);
+    const liabilities = gnode('Equities & Liabilities', [
+      gnode('Capital Account', glByCat(['capital', 'drawings', 'retained_earnings'], 'credit', false)),
+      gnode('Long-term Liabilities', glByCat(['long_term_liability', 'loan'], 'credit', false)),
+      gnode('Current Liabilities', [
+        gnode('Sundry Creditors', creditorLeaves),
+        gnode('Outward Duties & Taxes', glByCat(['output_duties', 'gst_payable', 'tax_payable'], 'credit', false)),
+        gnode('Other Current Liabilities', glByCat(['current_liability'], 'credit', false)),
+      ]),
+      gnode('Other Liabilities', []),
+    ]);
+    const incomes = gnode('Incomes', [
+      gnode('Sale Accounts', glByCat(['sales'], 'credit', true)),
+      gnode('Other Incomes (Direct)', glByCat(['direct_income'], 'credit', true)),
+      gnode('Other Incomes (Indirect)', glByCat(['indirect_income', 'other_income'], 'credit', true)),
+    ]);
+    const expenses = gnode('Expenses', [
+      gnode('Purchase Accounts', glByCat(['purchase'], 'debit', true)),
+      gnode('Direct Expenses', glByCat(['direct_expense'], 'debit', true)),
+      gnode('Indirect Expenses', glByCat(['indirect_expense'], 'debit', true)),
+    ]);
+
+    // Difference in Opening Balance: contra lines for the party opening balances that
+    // have no GL counter-entry, so total debit ties to total credit (like Vyapar).
+    const preGroups = [assets, liabilities, incomes, expenses];
+    const debitBefore = round2(preGroups.reduce((s, g) => s + g.debit, 0));
+    const creditBefore = round2(preGroups.reduce((s, g) => s + g.credit, 0));
+    const diffChildren = [
+      { name: 'Sundry Debtor Opening Balance', debit: 0, credit: totalDebtors },
+      { name: 'Sundry Creditor Opening Balance', debit: totalCreditors, credit: 0 },
+    ];
+    const residual = round2((debitBefore + totalCreditors) - (creditBefore + totalDebtors));
+    if (Math.abs(residual) > 0.005) {
+      diffChildren.push(residual > 0
+        ? { name: 'Other Opening Differences', debit: 0, credit: residual }
+        : { name: 'Other Opening Differences', debit: -residual, credit: 0 });
+    }
+    const diffGroup = gnode('Difference in Opening Balance', diffChildren);
+
+    const groups = [assets, liabilities, incomes, expenses, diffGroup];
+    const totalDebit = round2(groups.reduce((s, g) => s + g.debit, 0));
+    const totalCredit = round2(groups.reduce((s, g) => s + g.credit, 0));
+
+    res.json({
+      asOn: endDate || null,
+      groups,
+      totalDebit,
+      totalCredit,
+      balanced: Math.abs(totalDebit - totalCredit) < 0.5,
+      accounts: flatAccounts, // legacy flat shape
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -397,20 +499,31 @@ const getProfitLoss = async (req, res) => {
   }
 };
 
+// Vyapar-style Balance Sheet: a Tally/Vyapar grouped statement built from the live
+// sub-ledgers (party balances, cash/bank, taxes, capital) rather than only the GL
+// account types. It groups GL accounts by their `category`, lists Sundry Debtors /
+// Creditors party-wise from the actual Customer/Supplier balances, and parks any
+// un-contra'd party opening balances in a "Difference in Opening Balance" line so the
+// two sides always tie out — exactly like the real Vyapar desktop report.
+const round2 = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+
 const getBalanceSheet = async (req, res) => {
   try {
     const setting = await Setting.findOne({ user: req.user._id });
     if (setting?.preferences?.accounting?.enableAccounting === false) {
-      return res.json({ assets: [], liabilities: [], equity: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0, accountingDisabled: true });
+      return res.json({ groups: { assets: [], liabilities: [] }, assets: [], liabilities: [], equity: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0, accountingDisabled: true });
     }
     const baseFilter = getBaseFilter(req);
     const { endDate } = req.query;
-    const accounts = await Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 });
 
-    // A balance sheet is a snapshot "as of" a date: include every posted entry up to
-    // and including endDate (not just a single period, and not all-time when a date is
-    // chosen). Without bounding by endDate, balances drifted out of sync with the
-    // period retained-earnings figure and Assets != Liabilities + Equity.
+    const [accounts, customers, suppliers] = await Promise.all([
+      Account.find({ ...baseFilter, isActive: true }).sort({ code: 1 }),
+      Customer.find({ ...baseFilter }).select('name openingBalance').lean(),
+      Supplier.find({ ...baseFilter }).select('name openingBalance').lean(),
+    ]);
+
+    // Net Income (Profit) for the period = income - expense from posted journal entries
+    // up to and including endDate (a snapshot "as of" that date).
     const entryFilter = { user: req.user._id, isPosted: true };
     if (endDate) {
       const end = new Date(endDate);
@@ -419,41 +532,114 @@ const getBalanceSheet = async (req, res) => {
     }
     const entries = await JournalEntry.find(entryFilter);
     const ledger = aggregateLedgerByAccount(entries);
-
-    const getBalance = (acc) => {
+    const jeBalance = (acc) => {
       const t = ledger.get(acc._id.toString()) || { debit: 0, credit: 0 };
       return ['asset', 'expense'].includes(acc.type) ? t.debit - t.credit : t.credit - t.debit;
     };
+    const incomeTotal = accounts.filter((a) => a.type === 'income').reduce((s, a) => s + jeBalance(a), 0);
+    const expenseTotal = accounts.filter((a) => a.type === 'expense').reduce((s, a) => s + jeBalance(a), 0);
+    const netProfit = round2(incomeTotal - expenseTotal);
 
-    const assets = accounts.filter((a) => a.type === 'asset').map((a) => ({ name: a.name, amount: getBalance(a) }));
-    const liabilities = accounts.filter((a) => a.type === 'liability').map((a) => ({ name: a.name, amount: getBalance(a) }));
-    const equity = accounts.filter((a) => a.type === 'equity').map((a) => ({ name: a.name, amount: getBalance(a) }));
+    // Helpers ----------------------------------------------------------------
+    const sum = (arr) => round2(arr.reduce((s, i) => s + (i.amount || 0), 0));
+    const node = (name, children) => ({ name, amount: sum(children), children });
+    // Leaf lines from GL accounts whose category is in `cats` (uses the stored running
+    // balance, which carries seeded opening balances the JE ledger doesn't). Receivable
+    // and payable control accounts are deliberately NOT grouped here — parties below
+    // represent them, so including them too would double-count.
+    const byCat = (cats) => accounts
+      .filter((a) => cats.includes(a.category))
+      .map((a) => ({ name: a.name, amount: round2(a.balance || 0) }))
+      .filter((x) => Math.abs(x.amount) > 0.005);
 
-    // Retained earnings = net income (income - expense) computed from the SAME posted
-    // entries used for the balances above. Deriving it from the identical entry set
-    // (rather than a separately date-filtered P&L) guarantees Assets = Liabilities +
-    // Equity by construction, for any "as of" date.
-    const incomeTotal = accounts
-      .filter((a) => a.type === 'income')
-      .reduce((s, a) => s + getBalance(a), 0);
-    const expenseTotal = accounts
-      .filter((a) => a.type === 'expense')
-      .reduce((s, a) => s + getBalance(a), 0);
-    const periodProfit = incomeTotal - expenseTotal;
-    equity.push({ name: 'Retained Earnings', amount: periodProfit });
+    // Parties: a positive customer balance is a receivable (Sundry Debtor); a positive
+    // supplier balance is a payable (Sundry Creditor). Negative balances are advances
+    // and flip to the opposite side.
+    const sundryDebtors = [];
+    const sundryCreditors = [];
+    for (const c of customers) {
+      const b = round2(c.openingBalance || 0);
+      if (b > 0.005) sundryDebtors.push({ name: c.name, amount: b });
+      else if (b < -0.005) sundryCreditors.push({ name: `${c.name} (advance)`, amount: -b });
+    }
+    for (const s of suppliers) {
+      const b = round2(s.openingBalance || 0);
+      if (b > 0.005) sundryCreditors.push({ name: s.name, amount: b });
+      else if (b < -0.005) sundryDebtors.push({ name: `${s.name} (advance)`, amount: -b });
+    }
+    sundryDebtors.sort((a, b) => a.name.localeCompare(b.name));
+    sundryCreditors.sort((a, b) => a.name.localeCompare(b.name));
+    const totalDebtors = sum(sundryDebtors);
+    const totalCreditors = sum(sundryCreditors);
 
-    const totalAssets = assets.reduce((s, a) => s + a.amount, 0);
-    const totalLiabilities = liabilities.reduce((s, l) => s + l.amount, 0);
-    const totalEquity = equity.reduce((s, e) => s + e.amount, 0);
+    // ---- ASSETS -------------------------------------------------------------
+    const currentAssets = node('Current Assets', [
+      node('Sundry Debtors', sundryDebtors),
+      node('Input Duties & Taxes', byCat(['input_duties', 'gst_collectible'])),
+      node('Bank Accounts', byCat(['bank'])),
+      node('Cash Accounts', byCat(['cash'])),
+      node('Other Current Assets', byCat(['current_asset', 'inventory', 'other_asset'])),
+    ]);
+    const fixedAssets = node('Fixed Assets', byCat(['fixed_asset']));
+    const nonCurrentAssets = node('Non Current Assets', byCat(['non_current_asset']));
+    const assetGroups = [currentAssets, fixedAssets, nonCurrentAssets];
+    const totalAssets = sum(assetGroups);
+
+    // ---- EQUITIES & LIABILITIES --------------------------------------------
+    const ownerEquity = byCat(['capital', 'drawings']);
+    const capitalAccount = node('Capital Account', [
+      node("Owner's Equity", ownerEquity.length ? ownerEquity : [{ name: "Owner's Equity [Default]", amount: 0 }]),
+      node('Reserves & Surplus', [
+        { name: 'Net Income (Profit)', amount: netProfit },
+        { name: 'Revaluation Reserve', amount: 0 },
+        { name: 'Retained Earnings', amount: sum(byCat(['retained_earnings'])) },
+      ]),
+    ]);
+    const longTermLiabilities = node('Long-term Liabilities', byCat(['long_term_liability', 'loan']));
+    const sundryCreditorsNode = node('Sundry Creditors', sundryCreditors);
+    const outwardDuties = node('Outward Duties & Taxes', byCat(['output_duties', 'gst_payable', 'tax_payable']));
+    const otherCurrentLiabilities = node('Other Current Liabilities', byCat(['current_liability']));
+
+    // Everything on the Equities & Liabilities side except the balancing plug.
+    const leBeforePlug = sum([capitalAccount, longTermLiabilities, sundryCreditorsNode, outwardDuties, otherCurrentLiabilities]);
+
+    // Difference in Opening Balance: the plug that makes both sides tie out. Its
+    // children mirror Vyapar's presentation (debtor / creditor opening balances).
+    const plug = round2(totalAssets - leBeforePlug);
+    const diffChildren = [
+      { name: 'Sundry Debtor Opening Balance', amount: totalDebtors },
+      { name: 'Sundry Creditor Opening Balance', amount: -totalCreditors },
+    ];
+    const residual = round2(plug - sum(diffChildren));
+    if (Math.abs(residual) > 0.005) diffChildren.push({ name: 'Other Opening Differences', amount: residual });
+    const differenceInOpeningBalance = { name: 'Difference in Opening Balance', amount: plug, children: diffChildren };
+
+    const liabilityGroups = [capitalAccount, longTermLiabilities, sundryCreditorsNode, outwardDuties, otherCurrentLiabilities, differenceInOpeningBalance];
+    const totalLiabilities = sum(liabilityGroups);
+
+    // Legacy flat arrays kept so existing consumers (Excel export, older callers) still work.
+    const flatten = (groups) => {
+      const out = [];
+      const walk = (n) => {
+        if (n.children && n.children.length) n.children.forEach(walk);
+        else out.push({ name: n.name, amount: n.amount });
+      };
+      groups.forEach(walk);
+      return out;
+    };
 
     res.json({
-      assets,
-      liabilities,
-      equity,
-      profitLoss: periodProfit,
+      asOn: endDate || null,
+      groups: { assets: assetGroups, liabilities: liabilityGroups },
+      profitLoss: netProfit,
       totalAssets,
-      totalLiabilities,
-      totalEquity,
+      totalLiabilities, // total of the Equities & Liabilities side
+      totalEquity: capitalAccount.amount,
+      balanced: Math.abs(totalAssets - totalLiabilities) < 0.5,
+      // legacy flat shape
+      assets: flatten(assetGroups),
+      liabilities: flatten([longTermLiabilities, sundryCreditorsNode, outwardDuties, otherCurrentLiabilities, differenceInOpeningBalance]),
+      equity: flatten([capitalAccount]),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
