@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const { runSync, getStatus, isEnabled } = require('../services/syncService');
 const cloudSyncClient = require('../services/cloudSyncClient');
 const { TENANT_MODELS } = require('../services/backupService');
+const { collectIdentity, pushIdentity, maxIdentityTs } = require('../utils/identitySync');
 const { getBaseFilter } = require('../utils/queryHelper');
 const { authorizeAdmin } = require('../middleware/authorize');
 const Business = require('../models/Business');
@@ -70,6 +71,13 @@ router.get('/pull', async (req, res) => {
       }
     }
 
+    // Identity models (staff logins, roles, branches, settings, business profile)
+    // so a user's devices share the same accounts/config — see utils/identitySync.js.
+    const identity = await collectIdentity(req.businessId, since);
+    Object.assign(collections, identity);
+    const idTs = maxIdentityTs(identity);
+    if (idTs > maxTs) maxTs = idTs;
+
     res.json({
       serverTime: new Date().toISOString(),
       cursor: maxTs ? new Date(maxTs).toISOString() : (since ? since.toISOString() : null),
@@ -122,6 +130,10 @@ router.post('/push', async (req, res) => {
         applied[key] = bulkErr.result ? (bulkErr.result.nUpserted + bulkErr.result.nModified) : 0;
       }
     }
+
+    // Identity models — scoped upsert into this tenant only (own business/users).
+    const identityApplied = await pushIdentity(req.businessId, incoming);
+    Object.assign(applied, identityApplied);
 
     res.json({ applied });
   } catch (e) {

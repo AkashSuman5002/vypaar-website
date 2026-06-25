@@ -16,6 +16,7 @@
 
 const mongoose = require('mongoose');
 const { TENANT_MODELS } = require('./backupService');
+const { IDENTITY_MODELS, collectIdentity } = require('../utils/identitySync');
 const { shouldApplyRemote, advanceCursor } = require('../utils/syncHelpers');
 
 const api = () => (process.env.CLOUD_API_URL || '').replace(/\/+$/, '');
@@ -82,9 +83,24 @@ const pullFromCloud = async (since) => {
   return res.json(); // { collections, cursor, serverTime }
 };
 
+// Resolve the business this device is logged in as (from the cloud token's user id),
+// so identity collection only ever touches the CURRENT business's accounts/config —
+// never any other business that happens to sit in the same local DB.
+const currentBusinessId = async () => {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf8'));
+    const u = await mongoose.model('User').findById(payload.id).select('business').lean();
+    return u && u.business ? u.business : null;
+  } catch (_) { return null; }
+};
+
 const applyToLocal = async (collections) => {
   let applied = 0;
-  for (const [key, modelName] of Object.entries(TENANT_MODELS)) {
+  // Apply business DATA and IDENTITY (staff/roles/branches/settings/business) the
+  // same way — last-write-wins, preserving the remote updatedAt so sync converges.
+  const ALL_MODELS = { ...TENANT_MODELS, ...IDENTITY_MODELS };
+  for (const [key, modelName] of Object.entries(ALL_MODELS)) {
     const docs = Array.isArray(collections[key]) ? collections[key] : [];
     if (!docs.length) continue;
     let Model;
@@ -125,6 +141,21 @@ const collectLocalChanges = async (since) => {
       for (const d of docs) { const t = d.updatedAt ? new Date(d.updatedAt).getTime() : 0; if (t > maxTs) maxTs = t; }
     }
   }
+
+  // Identity (staff logins, roles, branches, settings, business profile), scoped to
+  // THIS business only so other businesses in the local DB never leak to the cloud.
+  const businessId = await currentBusinessId();
+  if (businessId) {
+    const identity = await collectIdentity(businessId, since);
+    for (const [key, docs] of Object.entries(identity)) {
+      if (Array.isArray(docs) && docs.length) {
+        collections[key] = docs;
+        count += docs.length;
+        for (const d of docs) { const t = d.updatedAt ? new Date(d.updatedAt).getTime() : 0; if (t > maxTs) maxTs = t; }
+      }
+    }
+  }
+
   return { collections, count, newCursor: maxTs ? new Date(maxTs).toISOString() : since };
 };
 
