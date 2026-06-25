@@ -112,7 +112,7 @@ const getStockValuation = async (req, res) => {
       valueAtCost: (p.stock || 0) * (p.costPrice || 0),
       valueAtPrice: (p.stock || 0) * (p.price || 0),
       minStock: p.minStock,
-      lowStock: p.stock <= p.minStock,
+      lowStock: p.type !== 'service' && p.stock <= p.minStock,
     }));
 
     const totalValue = valuation.reduce((s, v) => s + v.valueAtCost, 0);
@@ -218,7 +218,7 @@ const getValuationByMethod = async (req, res) => {
         price: p.price,
         valueAtCost: (p.stock || 0) * costPrice,
         valueAtPrice: (p.stock || 0) * (p.price || 0),
-        lowStock: p.stock <= (p.minStock || 5),
+        lowStock: p.type !== 'service' && p.stock <= (p.minStock || 5),
       };
     });
 

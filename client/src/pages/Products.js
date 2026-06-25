@@ -1383,7 +1383,9 @@ const ProductDetailModal = ({ productId, onClose }) => {
 
   if (!product) return null;
 
-  const isLowStock = product.stock <= (product.minStock || 5);
+  const isService = product.type === 'service';
+  // Services don't track inventory, so they can never be "low stock".
+  const isLowStock = !isService && product.stock <= (product.minStock || 5);
   const Icon = product.type === 'service' ? ClipboardList : Package;
 
   return (
@@ -1413,7 +1415,7 @@ const ProductDetailModal = ({ productId, onClose }) => {
             {[
               { label: 'Selling Price', value: formatCurrency(product.price), color: 'blue' },
               { label: 'Purchase Price', value: formatCurrency(product.costPrice || 0), color: 'emerald' },
-              { label: 'Stock', value: `${product.stock || 0} ${product.unit || ''}`, color: isLowStock ? 'red' : 'slate' },
+              { label: 'Stock', value: isService ? 'N/A' : `${product.stock || 0} ${product.unit || ''}`, color: isLowStock ? 'red' : 'slate' },
               { label: 'GST Rate', value: `${product.gstRate || 0}%`, color: 'purple' },
             ].map((s, idx) => (
               <div key={idx} className={`bg-${s.color}-50 dark:bg-${s.color}-500/10 rounded-xl p-3 border border-${s.color}-100 dark:border-${s.color}-500/20`}>
@@ -1444,7 +1446,9 @@ const ProductDetailModal = ({ productId, onClose }) => {
             )}
             <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-gray-700/30 rounded-lg">
               <span className="text-slate-500 dark:text-slate-400">Status</span>
-              {isLowStock ? (
+              {isService ? (
+                <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 px-2 py-0.5 rounded-md">Service</span>
+              ) : isLowStock ? (
                 <span className="text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-md">Low Stock</span>
               ) : (
                 <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md">In Stock</span>

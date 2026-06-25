@@ -94,7 +94,7 @@ router.get('/verify', authorize('settings:view'), async (req, res) => {
 
     // Stock
     const stockMovements = await StockMovement.countDocuments({ user: userId });
-    const lowStockProducts = await Product.countDocuments({ user: userId, $expr: { $lte: ['$stock', '$minStock'] }, minStock: { $gt: 0 } });
+    const lowStockProducts = await Product.countDocuments({ user: userId, type: { $ne: 'service' }, $expr: { $lte: ['$stock', '$minStock'] }, minStock: { $gt: 0 } });
     const negativeStockProducts = await Product.countDocuments({ user: userId, stock: { $lt: 0 } });
     const stockIssues = [];
     if (stockMovements === 0 && productCount > 0) stockIssues.push('No stock movement history');

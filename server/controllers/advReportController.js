@@ -57,7 +57,7 @@ const getProductReport = async (req, res) => {
       price: p.price,
       costPrice: p.costPrice,
       minStock: p.minStock,
-      lowStock: p.stock <= p.minStock,
+      lowStock: p.type !== 'service' && p.stock <= p.minStock,
     }));
     res.json(report);
   } catch (error) {
