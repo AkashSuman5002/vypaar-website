@@ -1,4 +1,7 @@
 require('dotenv').config({ path: __dirname + '/.env' });
+// MUST be first (before any model compiles): registers the global plugin that
+// records a Tombstone on delete, so deletions propagate across devices.
+require('./utils/tombstonePlugin');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

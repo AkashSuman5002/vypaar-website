@@ -5,6 +5,7 @@ const { runSync, getStatus, isEnabled } = require('../services/syncService');
 const cloudSyncClient = require('../services/cloudSyncClient');
 const { TENANT_MODELS } = require('../services/backupService');
 const { collectIdentity, pushIdentity, maxIdentityTs } = require('../utils/identitySync');
+const { collectTombstones, applyTombstones, maxTombstoneTs } = require('../utils/tombstoneSync');
 const { getBaseFilter } = require('../utils/queryHelper');
 const { authorizeAdmin } = require('../middleware/authorize');
 const Business = require('../models/Business');
@@ -78,6 +79,11 @@ router.get('/pull', async (req, res) => {
     const idTs = maxIdentityTs(identity);
     if (idTs > maxTs) maxTs = idTs;
 
+    // Deletions (tombstones) so a delete on one device removes the doc everywhere.
+    collections.tombstones = await collectTombstones(req.businessId, since);
+    const tTs = maxTombstoneTs(collections.tombstones);
+    if (tTs > maxTs) maxTs = tTs;
+
     res.json({
       serverTime: new Date().toISOString(),
       cursor: maxTs ? new Date(maxTs).toISOString() : (since ? since.toISOString() : null),
@@ -134,6 +140,10 @@ router.post('/push', async (req, res) => {
     // Identity models — scoped upsert into this tenant only (own business/users).
     const identityApplied = await pushIdentity(req.businessId, incoming);
     Object.assign(applied, identityApplied);
+
+    // Deletions — apply incoming tombstones (delete the referenced docs on the cloud,
+    // scoped to this tenant) so other devices then pull the deletion too.
+    applied.tombstones = await applyTombstones(incoming.tombstones, req.businessId);
 
     res.json({ applied });
   } catch (e) {

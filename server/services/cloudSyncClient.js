@@ -17,6 +17,7 @@
 const mongoose = require('mongoose');
 const { TENANT_MODELS } = require('./backupService');
 const { IDENTITY_MODELS, collectIdentity } = require('../utils/identitySync');
+const { collectTombstones, applyTombstones } = require('../utils/tombstoneSync');
 const { shouldApplyRemote, advanceCursor } = require('../utils/syncHelpers');
 
 const api = () => (process.env.CLOUD_API_URL || '').replace(/\/+$/, '');
@@ -122,6 +123,10 @@ const applyToLocal = async (collections) => {
       applied++;
     }
   }
+  // Apply deletions AFTER all upserts (so a freshly-pulled doc isn't deleted then
+  // re-created in the wrong order). Conservative: only deletes docs not modified
+  // after the deletion time. See utils/tombstoneSync.js.
+  applied += await applyTombstones(collections.tombstones, null);
   return applied;
 };
 
@@ -153,6 +158,14 @@ const collectLocalChanges = async (since) => {
         count += docs.length;
         for (const d of docs) { const t = d.updatedAt ? new Date(d.updatedAt).getTime() : 0; if (t > maxTs) maxTs = t; }
       }
+    }
+
+    // Deletions made on this device, to push up so other devices delete too.
+    const tombstones = await collectTombstones(businessId, since);
+    if (tombstones.length) {
+      collections.tombstones = tombstones;
+      count += tombstones.length;
+      for (const t of tombstones) { const ts = t.updatedAt ? new Date(t.updatedAt).getTime() : 0; if (ts > maxTs) maxTs = ts; }
     }
   }
 
