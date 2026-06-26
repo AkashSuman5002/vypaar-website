@@ -109,7 +109,16 @@ router.post('/push', async (req, res) => {
       let Model;
       try { Model = mongoose.model(modelName); } catch (_) { continue; }
 
-      const ops = docs.map((doc) => {
+      // Use replaceOne PER DOC (not bulkWrite). On the deployed Mongoose, bulkWrite did
+      // NOT honor timestamps:false and re-stamped updatedAt to "now" on every push — so
+      // every doc looked freshly changed and the sync re-pulled/re-pushed ALL records
+      // forever ({pulled:N,pushed:N} echo loop), which never converged and, on a slow
+      // connection, timed out before the cursor could advance. replaceOne with
+      // timestamps:false IS honored here (identity sync already relies on it), so the
+      // incoming updatedAt is preserved, unchanged docs keep their timestamp, and sync
+      // converges to small incremental passes.
+      let n = 0;
+      for (const doc of docs) {
         const clean = { ...doc };
         const id = clean._id;
         delete clean._id;
@@ -117,28 +126,14 @@ router.post('/push', async (req, res) => {
         // SERVER-AUTHORITATIVE: force this tenant; preserve authorship if present.
         const setDoc = { ...clean, business: req.businessId };
         if (!setDoc.user && req.user) setDoc.user = req.user._id;
-        if (!id) return { insertOne: { document: setDoc } };
-        // Match only docs that ALREADY belong to this business — a foreign _id won't match
-        // (and can't be hijacked: a global _id collision would fail the insert, not leak).
-        // PER-OPERATION timestamps:false — preserves the incoming updatedAt instead of
-        // re-stamping it to "now". The bulkWrite-level option wasn't honored on the
-        // deployed Mongoose, which re-stamped every pushed doc => the {pulled:N,pushed:N}
-        // echo loop that never converges. Per-op is reliably respected.
-        return { updateOne: { filter: { _id: id, ...base }, update: { $set: setDoc }, upsert: true, timestamps: false } };
-      });
-
-      try {
-        // timestamps:false PRESERVES the incoming `updatedAt` instead of re-stamping
-        // it to "now". Re-stamping on every push made each synced doc look freshly
-        // changed, so every device re-pulled and re-pushed it forever (the
-        // {pulled:N,pushed:N} echo loop) and broke last-write-wins. Preserving it lets
-        // an unchanged doc keep its original timestamp so sync converges to 0/0.
-        const r = await Model.bulkWrite(ops, { ordered: false, timestamps: false });
-        applied[key] = (r.upsertedCount || 0) + (r.modifiedCount || 0) + (r.matchedCount || 0) + (r.insertedCount || 0);
-      } catch (bulkErr) {
-        // ordered:false means valid ops still applied; report partial + the reason.
-        applied[key] = bulkErr.result ? (bulkErr.result.nUpserted + bulkErr.result.nModified) : 0;
+        try {
+          if (!id) { await Model.create(setDoc); n++; }
+          // Match only docs that ALREADY belong to this business — a foreign _id won't
+          // match (and can't be hijacked: a global _id collision fails, not leaks).
+          else { await Model.replaceOne({ _id: id, ...base }, setDoc, { upsert: true, timestamps: false }); n++; }
+        } catch (_) { /* skip a conflicting doc, keep going */ }
       }
+      applied[key] = n;
     }
 
     // Identity models — scoped upsert into this tenant only (own business/users).
