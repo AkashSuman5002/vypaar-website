@@ -98,19 +98,23 @@ const updateSettings = async (req, res) => {
     // File uploads. The route registers multer with .fields() so logo and
     // signature can be uploaded independently (req.files). A legacy single-file
     // upload (req.file under the generic 'file' field) is treated as a logo.
+    // Store uploads as base64 data URLs IN the Setting doc (not as files on disk),
+    // so logo/signature sync to every device with the rest of the settings. Old
+    // path-based values ("/uploads/..") still render — display + PDF handle both.
+    const toDataUrl = (f) => `data:${f.mimetype || 'image/png'};base64,${f.buffer.toString('base64')}`;
     if (req.files) {
       if (req.files.logo && req.files.logo[0]) {
-        settings.logo = `/uploads/${req.files.logo[0].filename}`;
+        settings.logo = toDataUrl(req.files.logo[0]);
       }
       if (req.files.signature && req.files.signature[0]) {
-        settings.signature = `uploads/${req.files.signature[0].filename}`;
+        settings.signature = toDataUrl(req.files.signature[0]);
       }
       // Generic 'file' field (used by the signature uploader) → store as signature.
       if (req.files.file && req.files.file[0]) {
-        settings.signature = `uploads/${req.files.file[0].filename}`;
+        settings.signature = toDataUrl(req.files.file[0]);
       }
     } else if (req.file) {
-      settings.logo = `/uploads/${req.file.filename}`;
+      settings.logo = toDataUrl(req.file);
     }
 
     const updated = await settings.save();

@@ -153,7 +153,7 @@ const Sales = () => {
     let bizName = 'Your Business', bizAddr = '', bizPhone = '', bizEmail = '', bizGst = '', bizLogo = '';
     try {
       const { data } = await settingAPI.get();
-      if (data) { bizName = data.businessName || bizName; bizAddr = data.address || ''; bizPhone = data.phone || ''; bizEmail = data.email || ''; bizGst = data.gstNumber || ''; bizLogo = data.logo ? `${API.defaults.baseURL.replace('/api', '')}/${data.logo}` : ''; }
+      if (data) { bizName = data.businessName || bizName; bizAddr = data.address || ''; bizPhone = data.phone || ''; bizEmail = data.email || ''; bizGst = data.gstNumber || ''; bizLogo = data.logo ? (String(data.logo).startsWith('data:') ? data.logo : `${API.defaults.baseURL.replace('/api', '')}/${data.logo}`) : ''; }
     } catch {}
     const w = window.open('', '_blank');
     const statusColor = sale.paymentStatus === 'paid' ? '#059669' : sale.paymentStatus === 'partial' ? '#d97706' : '#dc2626';

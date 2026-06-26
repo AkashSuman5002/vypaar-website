@@ -7,6 +7,23 @@ const fs = require('fs');
 const { getBaseFilter, getSettingQuery } = require('../utils/queryHelper');
 const { DATA_DIR } = require('../config/paths');
 
+// Resolve a settings logo into something PDFKit's doc.image() accepts. Newer logos
+// are stored as base64 data URLs (so they sync between devices) — decode those to a
+// Buffer. Older logos are "/uploads/.." files on disk — return the path if it exists.
+// Returns null when there's no usable image, so the caller can skip drawing it.
+const resolveLogoForPdf = (logo) => {
+  if (!logo) return null;
+  const s = String(logo);
+  if (s.startsWith('data:')) {
+    const comma = s.indexOf(',');
+    if (comma === -1) return null;
+    try { return Buffer.from(s.slice(comma + 1), 'base64'); } catch (_) { return null; }
+  }
+  const rel = s.startsWith('/') ? s.substring(1) : s;
+  const p = path.join(DATA_DIR, rel);
+  return fs.existsSync(p) ? p : null;
+};
+
 const hexToRgb = (hex) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : { r: 37, g: 99, b: 235 };
@@ -287,13 +304,14 @@ const generateInvoicePDF = async (req, res) => {
     let headerY = topMargin;
 
     if (showCompanyLogo && settings?.logo) {
-      const logoRel = settings.logo.startsWith('/') ? settings.logo.substring(1) : settings.logo;
-      const logoPath = path.join(DATA_DIR, logoRel);
-      if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, marginLeft, headerY, { width: isThermal ? 40 : 60 });
-        if (isThermal) {
-          headerY += 45;
-        }
+      const logoSrc = resolveLogoForPdf(settings.logo);
+      if (logoSrc) {
+        try {
+          doc.image(logoSrc, marginLeft, headerY, { width: isThermal ? 40 : 60 });
+          if (isThermal) {
+            headerY += 45;
+          }
+        } catch (_) { /* bad image data — skip the logo rather than fail the PDF */ }
       }
     }
 
@@ -773,11 +791,12 @@ const generatePurchasePDF = async (req, res) => {
     let headerY = topMargin;
 
     if (showCompanyLogo && settings?.logo) {
-      const logoRel = settings.logo.startsWith('/') ? settings.logo.substring(1) : settings.logo;
-      const logoPath = path.join(DATA_DIR, logoRel);
-      if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, marginLeft, headerY, { width: isThermal ? 40 : 60 });
-        if (isThermal) headerY += 45;
+      const logoSrc = resolveLogoForPdf(settings.logo);
+      if (logoSrc) {
+        try {
+          doc.image(logoSrc, marginLeft, headerY, { width: isThermal ? 40 : 60 });
+          if (isThermal) headerY += 45;
+        } catch (_) { /* bad image data — skip the logo rather than fail the PDF */ }
       }
     }
 

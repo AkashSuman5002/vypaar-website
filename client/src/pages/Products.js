@@ -422,10 +422,14 @@ const Products = () => {
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
-    const newImages = files.map(f => URL.createObjectURL(f));
-    setImages(prev => {
-      const updated = [...prev, ...newImages].slice(0, 5);
-      return updated;
+    // Read as base64 data URLs (not createObjectURL blob: URLs). blob: URLs are
+    // temporary in-memory handles that break on reload and can't be saved/synced;
+    // a data URL is the actual image bytes, so it persists in the DB and syncs to
+    // every device along with the product.
+    files.forEach((f) => {
+      const reader = new FileReader();
+      reader.onload = () => setImages(prev => [...prev, reader.result].slice(0, 5));
+      reader.readAsDataURL(f);
     });
   };
 

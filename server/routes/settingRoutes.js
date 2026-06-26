@@ -13,10 +13,11 @@ const { UPLOADS_DIR } = require('../config/paths');
 const UPLOAD_DIR = UPLOADS_DIR;
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`),
-});
+// memoryStorage (not diskStorage): we keep the uploaded bytes in memory so the
+// controller can store the image as a base64 data URL IN THE DATABASE. That makes
+// logo/signature sync across devices (they ride along with the synced Setting doc)
+// instead of being a file that only exists on the PC it was uploaded on.
+const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
