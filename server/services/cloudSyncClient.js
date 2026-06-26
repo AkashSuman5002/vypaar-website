@@ -312,7 +312,7 @@ const triggerSync = () => {
 // saved on a previous login (so sync resumes after an app restart without forcing a
 // re-login) and immediately attempts one sync.
 let loopTimer = null;
-const startSyncLoop = (intervalMs = Number(process.env.SYNC_INTERVAL_MS) || 30000) => {
+const startSyncLoop = (intervalMs = Number(process.env.SYNC_INTERVAL_MS) || 15000) => {
   if (!isConfigured()) { console.log('[cloudsync] HTTP cloud sync DISABLED (no CLOUD_API_URL)'); return; }
   if (loopTimer) clearInterval(loopTimer);
   console.log(`[cloudsync] HTTP cloud sync ENABLED — interval ${intervalMs}ms`);
