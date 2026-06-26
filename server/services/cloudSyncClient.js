@@ -76,12 +76,36 @@ const loadCursors = async () => (await stateColl().findOne({ _id: 'cloudcursors'
 const saveCursors = async (c) => { await stateColl().updateOne({ _id: 'cloudcursors' }, { $set: c }, { upsert: true }); };
 
 // --- PULL: cloud -> local --------------------------------------------------
-const pullFromCloud = async (since) => {
-  const url = api() + '/api/sync/pull' + (since ? ('?since=' + encodeURIComponent(since)) : '');
-  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(60000) });
+// Docs per request when chunking. Small enough that the free cloud tier never times
+// out processing/serving a batch, big enough to stay fast.
+const CHUNK = 50;
+
+// A "payload too big" failure (free server gave up): 502/503/504, a timeout or a reset.
+// When we see one we fall back from a single all-at-once request to small chunks.
+const isPayloadError = (e) => /\b(502|503|504)\b|timeout|aborted|ECONNRESET|fetch failed/i.test((e && e.message) || '');
+
+const pullRequest = async (params) => {
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(api() + '/api/sync/pull' + (qs ? '?' + qs : ''), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(60000) });
   if (res.status === 401) { clearToken(); throw new Error('unauthorized (token expired) — re-login required'); }
   if (!res.ok) throw new Error(`pull failed (${res.status})`);
   return res.json(); // { collections, cursor, serverTime }
+};
+
+// Pull ONE tenant collection fully, paginated (applied as we go). Returns {applied, cursor}.
+const pullCollectionPaged = async (key, since) => {
+  let applied = 0, skip = 0, cursor = since;
+  for (;;) {
+    const params = { only: key, limit: String(CHUNK), skip: String(skip) };
+    if (since) params.since = since;
+    const data = await pullRequest(params);
+    applied += await applyToLocal(data.collections || {});
+    if (data.cursor && (!cursor || new Date(data.cursor) > new Date(cursor))) cursor = data.cursor;
+    const got = (data.collections && Array.isArray(data.collections[key])) ? data.collections[key].length : 0;
+    if (got < CHUNK) break; // last page
+    skip += CHUNK;
+  }
+  return { applied, cursor };
 };
 
 // Resolve the business this device is logged in as (from the cloud token's user id),
@@ -185,22 +209,62 @@ const pushToCloud = async (collections) => {
 };
 
 // One full sync pass: pull cloud -> local, then push local -> cloud.
+// Strategy: try ONE fast request each way (instant when little has changed). If the
+// free cloud tier chokes on a big transfer (502/timeout), fall back to small CHUNKed
+// requests so even a large catch-up always completes. So normal use is fast and big
+// catch-ups are reliable — like a real app.
 const runCloudSync = async () => {
   if (!isConfigured()) return { skipped: 'CLOUD_API_URL not set' };
   if (!token) return { skipped: 'not authenticated to cloud' };
 
   const cursors = await loadCursors();
 
-  const pulled = await pullFromCloud(cursors.pull);
-  const appliedCount = await applyToLocal(pulled.collections || {});
-  cursors.pull = pulled.cursor || cursors.pull;
+  // ---- PULL ----
+  let pulledCount = 0;
+  try {
+    const pulled = await pullRequest(cursors.pull ? { since: cursors.pull } : {});
+    pulledCount = await applyToLocal(pulled.collections || {});
+    cursors.pull = pulled.cursor || cursors.pull;
+  } catch (e) {
+    if (!isPayloadError(e)) throw e;
+    // chunked fallback: each tenant collection paginated, then identity + tombstones
+    let newPull = cursors.pull;
+    const advance = (cur) => { if (cur && (!newPull || new Date(cur) > new Date(newPull))) newPull = cur; };
+    for (const key of Object.keys(TENANT_MODELS)) {
+      const r = await pullCollectionPaged(key, cursors.pull);
+      pulledCount += r.applied; advance(r.cursor);
+    }
+    const idd = await pullRequest(cursors.pull ? { only: 'identity', since: cursors.pull } : { only: 'identity' });
+    pulledCount += await applyToLocal(idd.collections || {}); advance(idd.cursor);
+    const tsd = await pullRequest(cursors.pull ? { only: 'tombstones', since: cursors.pull } : { only: 'tombstones' });
+    pulledCount += await applyToLocal(tsd.collections || {}); advance(tsd.cursor);
+    cursors.pull = newPull;
+  }
 
+  // ---- PUSH ----
   const { collections, count, newCursor } = await collectLocalChanges(cursors.push);
   let pushedCount = 0;
-  if (count > 0) { await pushToCloud(collections); pushedCount = count; cursors.push = newCursor; }
+  if (count > 0) {
+    try {
+      await pushToCloud(collections);
+      pushedCount = count;
+    } catch (e) {
+      if (!isPayloadError(e)) throw e;
+      // chunked fallback: push each collection in CHUNK-sized batches
+      pushedCount = 0;
+      for (const [key, docs] of Object.entries(collections)) {
+        if (!Array.isArray(docs) || !docs.length) continue;
+        for (let i = 0; i < docs.length; i += CHUNK) {
+          await pushToCloud({ [key]: docs.slice(i, i + CHUNK) });
+          pushedCount += Math.min(CHUNK, docs.length - i);
+        }
+      }
+    }
+    cursors.push = newCursor;
+  }
 
   await saveCursors(cursors);
-  return { pulled: appliedCount, pushed: pushedCount };
+  return { pulled: pulledCount, pushed: pushedCount };
 };
 
 // Live sync health, surfaced via getStatus() for an in-app indicator/endpoint.

@@ -56,33 +56,54 @@ router.get('/pull', async (req, res) => {
     if (!req.businessId) return res.status(400).json({ message: 'No business context' });
     const since = req.query.since ? new Date(req.query.since) : null;
     const base = getBaseFilter(req); // { business: req.businessId }
+    // Chunked pull support: a client can request ONE collection at a time, paginated
+    // (?only=<key>&limit=N&skip=M), so each response/request stays small and the free
+    // cloud tier never times out on a giant all-at-once transfer. No `only` = legacy
+    // full pull (kept for backward compatibility with older clients).
+    const only = req.query.only;
+    const limit = Math.min(Number(req.query.limit) || 0, 1000);
+    const skip = Number(req.query.skip) || 0;
     const collections = {};
     let maxTs = since ? since.getTime() : 0;
 
-    for (const [key, modelName] of Object.entries(TENANT_MODELS)) {
+    const pullTenant = async (key, modelName) => {
       let Model;
-      try { Model = mongoose.model(modelName); } catch (_) { continue; }
+      try { Model = mongoose.model(modelName); } catch (_) { return; }
       const filter = { ...base };
       if (since) filter.updatedAt = { $gt: since };
-      const docs = await Model.find(filter).lean();
+      let q = Model.find(filter).sort({ updatedAt: 1, _id: 1 });
+      if (limit) q = q.skip(skip).limit(limit);
+      const docs = await q.lean();
       collections[key] = docs;
       for (const d of docs) {
         const t = d.updatedAt ? new Date(d.updatedAt).getTime() : 0;
         if (t > maxTs) maxTs = t;
       }
+    };
+    const pullIdentity = async () => {
+      const identity = await collectIdentity(req.businessId, since);
+      Object.assign(collections, identity);
+      const idTs = maxIdentityTs(identity);
+      if (idTs > maxTs) maxTs = idTs;
+    };
+    const pullTombstones = async () => {
+      collections.tombstones = await collectTombstones(req.businessId, since);
+      const tTs = maxTombstoneTs(collections.tombstones);
+      if (tTs > maxTs) maxTs = tTs;
+    };
+
+    if (only && TENANT_MODELS[only]) {
+      await pullTenant(only, TENANT_MODELS[only]);
+    } else if (only === 'identity') {
+      await pullIdentity();
+    } else if (only === 'tombstones') {
+      await pullTombstones();
+    } else {
+      // legacy full pull
+      for (const [key, modelName] of Object.entries(TENANT_MODELS)) await pullTenant(key, modelName);
+      await pullIdentity();
+      await pullTombstones();
     }
-
-    // Identity models (staff logins, roles, branches, settings, business profile)
-    // so a user's devices share the same accounts/config — see utils/identitySync.js.
-    const identity = await collectIdentity(req.businessId, since);
-    Object.assign(collections, identity);
-    const idTs = maxIdentityTs(identity);
-    if (idTs > maxTs) maxTs = idTs;
-
-    // Deletions (tombstones) so a delete on one device removes the doc everywhere.
-    collections.tombstones = await collectTombstones(req.businessId, since);
-    const tTs = maxTombstoneTs(collections.tombstones);
-    if (tTs > maxTs) maxTs = tTs;
 
     res.json({
       serverTime: new Date().toISOString(),
