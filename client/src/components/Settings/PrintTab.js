@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Save, ChevronRight, Download } from 'lucide-react';
 import { defaultPrefs, loadSettings, saveCategory } from '../../hooks/useSettings';
-import { saleAPI } from '../../services/api';
+import { BASE_URL } from '../../services/api';
 
 const previewItems = [
   { name: 'Brittania Choclate Cake(12345678)', qty: 100, rate: 100, gst: 0, unit: 'Box', desc: 'Brittania Choclate Cake description', batch: 'N1234', model: 'A12345', exp: '06/2027', mfg: '10/06/2026', size: 'Med/32', hsn: '12345678', mrp: 100 },
@@ -86,7 +86,6 @@ const PrintTab = () => {
   // Live preview rendered by the REAL server PDF engine (so it matches the printout).
   const [pdfUrl, setPdfUrl] = useState('');
   const [previewError, setPreviewError] = useState(false);
-  const pdfUrlRef = useRef('');
 
   useEffect(() => {
     loadSettings().then(data => {
@@ -99,28 +98,26 @@ const PrintTab = () => {
     });
   }, []);
 
-  // Regenerate the preview PDF whenever a print setting changes (debounced). This calls
-  // the same pdfController used for real invoices, with the live (unsaved) settings, so
-  // the preview is guaranteed to match what actually prints.
+  // Regenerate the preview whenever a print setting changes (debounced). We point the
+  // <iframe> straight at the GET preview endpoint (same origin → the httpOnly auth cookie
+  // is sent automatically) instead of fetching a blob. Chromium's built-in PDF viewer
+  // renders an http:// PDF inline, but leaves a blob: PDF blank inside an Electron iframe,
+  // so this is what makes the preview actually appear in the desktop app. The cache-buster
+  // (_t) forces the iframe to reload on every settings change.
   useEffect(() => {
     let cancelled = false;
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => {
+      if (cancelled) return;
       try {
-        const res = await saleAPI.previewPDF(settings);
-        if (cancelled) return;
-        const url = URL.createObjectURL(res.data);
-        if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
-        pdfUrlRef.current = url;
-        setPdfUrl(url);
+        const prefs = encodeURIComponent(JSON.stringify(settings));
+        setPdfUrl(`${BASE_URL}/api/sales/preview-pdf?prefs=${prefs}&_t=${Date.now()}`);
         setPreviewError(false);
       } catch {
-        if (!cancelled) setPreviewError(true);
+        setPreviewError(true);
       }
     }, 500);
     return () => { cancelled = true; clearTimeout(t); };
   }, [settings]);
-
-  useEffect(() => () => { if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current); }, []);
 
   const update = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
 
