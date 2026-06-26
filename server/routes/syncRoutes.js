@@ -120,7 +120,11 @@ router.post('/push', async (req, res) => {
         if (!id) return { insertOne: { document: setDoc } };
         // Match only docs that ALREADY belong to this business — a foreign _id won't match
         // (and can't be hijacked: a global _id collision would fail the insert, not leak).
-        return { updateOne: { filter: { _id: id, ...base }, update: { $set: setDoc }, upsert: true } };
+        // PER-OPERATION timestamps:false — preserves the incoming updatedAt instead of
+        // re-stamping it to "now". The bulkWrite-level option wasn't honored on the
+        // deployed Mongoose, which re-stamped every pushed doc => the {pulled:N,pushed:N}
+        // echo loop that never converges. Per-op is reliably respected.
+        return { updateOne: { filter: { _id: id, ...base }, update: { $set: setDoc }, upsert: true, timestamps: false } };
       });
 
       try {

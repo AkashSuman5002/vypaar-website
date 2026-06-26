@@ -8,9 +8,10 @@ require('../models/Tombstone'); // ensure the model is compiled
 async function collectTombstones(businessId, since) {
   if (!businessId) return [];
   const Tombstone = mongoose.model('Tombstone');
-  const filter = { business: businessId };
-  if (since) filter.updatedAt = { $gt: new Date(since) };
-  return Tombstone.find(filter).lean();
+  // Always send the full tombstone set (it's small) rather than an incremental `since`
+  // window — otherwise a deletion recorded before the cursor advanced would never
+  // propagate. `since` is intentionally ignored. (Deletes are applied idempotently.)
+  return Tombstone.find({ business: businessId }).lean();
 }
 
 // Apply incoming tombstones: persist each tombstone (so it re-propagates) and delete

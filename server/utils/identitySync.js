@@ -70,7 +70,12 @@ async function userIdsForBusiness(businessId) {
 async function collectIdentity(businessId, since) {
   const out = { users: [], roles: [], branches: [], settings: [], business: [] };
   if (!businessId) return out;
-  const sinceF = since ? { updatedAt: { $gt: new Date(since) } } : {};
+  // Identity is a SMALL set (a handful of users/roles/branches/settings + the business),
+  // so we ALWAYS send the full set and let last-write-wins sort it out — never an
+  // incremental `since` window. Incremental filtering broke this: pre-existing accounts
+  // created before the sync cursor advanced would fall outside the window and never sync.
+  // `since` is intentionally ignored here.
+  const sinceF = {};
 
   const User = model('User');
   if (User) out.users = await User.find({ business: businessId, ...sinceF }).lean();
