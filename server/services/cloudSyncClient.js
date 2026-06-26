@@ -213,16 +213,27 @@ const pushToCloud = async (collections) => {
 // free cloud tier chokes on a big transfer (502/timeout), fall back to small CHUNKed
 // requests so even a large catch-up always completes. So normal use is fast and big
 // catch-ups are reliable — like a real app.
+let syncPassCount = 0;
 const runCloudSync = async () => {
   if (!isConfigured()) return { skipped: 'CLOUD_API_URL not set' };
   if (!token) return { skipped: 'not authenticated to cloud' };
 
   const cursors = await loadCursors();
 
+  // SAFETY NET: every 8th pass (and the first after launch) ignore the bookmark and sync
+  // the FULL dataset. The incremental bookmark is fast but can skip records (clock skew,
+  // an interrupted earlier pass, a bookmark pushed ahead) — this periodic full pass catches
+  // anything skipped AUTOMATICALLY, so data can never get permanently stuck and no manual
+  // push is ever needed. Chunking keeps the full pass from overloading the free cloud tier.
+  syncPassCount += 1;
+  const fullReconcile = (syncPassCount % 8 === 1);
+  const pullSince = fullReconcile ? null : cursors.pull;
+  const pushSince = fullReconcile ? null : cursors.push;
+
   // ---- PULL ----
   let pulledCount = 0;
   try {
-    const pulled = await pullRequest(cursors.pull ? { since: cursors.pull } : {});
+    const pulled = await pullRequest(pullSince ? { since: pullSince } : {});
     pulledCount = await applyToLocal(pulled.collections || {});
     cursors.pull = pulled.cursor || cursors.pull;
   } catch (e) {
@@ -231,18 +242,18 @@ const runCloudSync = async () => {
     let newPull = cursors.pull;
     const advance = (cur) => { if (cur && (!newPull || new Date(cur) > new Date(newPull))) newPull = cur; };
     for (const key of Object.keys(TENANT_MODELS)) {
-      const r = await pullCollectionPaged(key, cursors.pull);
+      const r = await pullCollectionPaged(key, pullSince);
       pulledCount += r.applied; advance(r.cursor);
     }
-    const idd = await pullRequest(cursors.pull ? { only: 'identity', since: cursors.pull } : { only: 'identity' });
+    const idd = await pullRequest(pullSince ? { only: 'identity', since: pullSince } : { only: 'identity' });
     pulledCount += await applyToLocal(idd.collections || {}); advance(idd.cursor);
-    const tsd = await pullRequest(cursors.pull ? { only: 'tombstones', since: cursors.pull } : { only: 'tombstones' });
+    const tsd = await pullRequest(pullSince ? { only: 'tombstones', since: pullSince } : { only: 'tombstones' });
     pulledCount += await applyToLocal(tsd.collections || {}); advance(tsd.cursor);
     cursors.pull = newPull;
   }
 
   // ---- PUSH ----
-  const { collections, count, newCursor } = await collectLocalChanges(cursors.push);
+  const { collections, count, newCursor } = await collectLocalChanges(pushSince);
   let pushedCount = 0;
   if (count > 0) {
     try {
