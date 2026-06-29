@@ -389,7 +389,7 @@ const ExcelImportWizard = ({ onComplete }) => {
                             <tr className="border-b border-slate-200 dark:border-gray-600">
                               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Your Column</th>
                               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 dark:text-slate-500">Sample</th>
-                              <th className="px-3 py-2 text-center text-xs text-slate-400 w-8"></th>
+                              <th className="px-3 py-2 text-center text-xs text-slate-400 dark:text-slate-500 w-8"></th>
                               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Import As</th>
                             </tr>
                           </thead>
@@ -398,7 +398,7 @@ const ExcelImportWizard = ({ onComplete }) => {
                               <tr key={col} className="border-b border-slate-100 dark:border-gray-700/50">
                                 <td className="px-3 py-2 text-sm text-slate-700 dark:text-slate-300 whitespace-nowrap">{col}</td>
                                 <td className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500 max-w-[140px] truncate">{String(sample[col] ?? '').slice(0, 30)}</td>
-                                <td className="px-3 py-2 text-center text-slate-400"><ChevronRight className="w-4 h-4" /></td>
+                                <td className="px-3 py-2 text-center text-slate-400 dark:text-slate-500"><ChevronRight className="w-4 h-4" /></td>
                                 <td className="px-3 py-2">
                                   <select value={mapping[col] || ''} onChange={(e) => updateMapping(type, col, e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20">
                                     <option value="">— Don't import —</option>
@@ -439,7 +439,7 @@ const ExcelImportWizard = ({ onComplete }) => {
               <div className="space-y-4">
                 {Object.entries(previewData).filter(([, rows]) => rows.length > 0).map(([type, rows]) => (
                   <div key={type} className="bg-slate-50 dark:bg-gray-700/30 rounded-xl p-4">
-                    <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 flex items-center gap-2"><span className="text-lg">{typeIcons[type]}</span>{type} <span className="text-xs text-slate-400 font-normal">(showing first {rows.length} of {summary[type]})</span></h4>
+                    <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2 flex items-center gap-2"><span className="text-lg">{typeIcons[type]}</span>{type} <span className="text-xs text-slate-400 dark:text-slate-500 font-normal">(showing first {rows.length} of {summary[type]})</span></h4>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>

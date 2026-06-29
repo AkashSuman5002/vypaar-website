@@ -249,7 +249,7 @@ const Expenses = () => {
             URL.revokeObjectURL(url);
             toast.success('Expenses exported');
           }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-all"
           ><Download className="w-4 h-4" /> Export</button>
           <button onClick={() => navigate('/purchases/expenses/new')}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
@@ -261,29 +261,29 @@ const Expenses = () => {
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-blue-50 rounded-xl"><IndianRupee className="w-5 h-5 text-blue-600" /></div>
-            <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Expenses</p><p className="text-xl font-bold text-slate-900 mt-1">{formatCurrency(totalExpenses)}</p></div>
+            <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Expenses</p><p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{formatCurrency(totalExpenses)}</p></div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-orange-50 rounded-xl"><Tag className="w-5 h-5 text-orange-600" /></div>
-            <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Categories</p><p className="text-xl font-bold text-slate-900 mt-1">{new Set(expenses.map(e => e.category)).size}</p></div>
+            <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Categories</p><p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{new Set(expenses.map(e => e.category)).size}</p></div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-50 rounded-xl"><FileText className="w-5 h-5 text-emerald-600" /></div>
-            <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Entries</p><p className="text-xl font-bold text-slate-900 mt-1">{totalCount}</p></div>
+            <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Entries</p><p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{totalCount}</p></div>
           </div>
         </div>
       </motion.div>
 
       <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4">
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
           <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
             placeholder="Search expenses by category or item..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
       </motion.div>
@@ -294,9 +294,9 @@ const Expenses = () => {
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-100">
+              <tr className="border-b border-slate-100 dark:border-gray-700">
                 {['#', 'Date', 'Expense No', 'Category', 'Items', 'Payment', 'Total', 'Status', ''].map(h => (
-                  <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">{h}</th>
+                  <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -306,17 +306,17 @@ const Expenses = () => {
               )}
               {!loading && expenses.map((exp, idx) => (
                 <tr key={exp._id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                  <td className="px-4 py-3 text-sm text-slate-500">{(currentPage - 1) * pageSize + idx + 1}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{formatDate(exp.date)}</td>
-                  <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900 font-mono">{exp.expenseNumber}</span></td>
+                  <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{(currentPage - 1) * pageSize + idx + 1}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(exp.date)}</td>
+                  <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900 dark:text-slate-100 font-mono">{exp.expenseNumber}</span></td>
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center px-2.5 py-1 bg-orange-50 text-orange-700 text-xs font-semibold rounded-md">{exp.category}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-sm text-slate-600">{(exp.items?.length || (exp.description ? 1 : 0))} item{(exp.items?.length || (exp.description ? 1 : 0)) !== 1 ? 's' : ''}</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{(exp.items?.length || (exp.description ? 1 : 0))} item{(exp.items?.length || (exp.description ? 1 : 0)) !== 1 ? 's' : ''}</span>
                   </td>
-                  <td className="px-4 py-3"><span className="text-sm text-slate-600 capitalize">{exp.paymentMethod}</span></td>
-                  <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900">{formatCurrency(exp.totalAmount)}</span></td>
+                  <td className="px-4 py-3"><span className="text-sm text-slate-600 dark:text-slate-400 capitalize">{exp.paymentMethod}</span></td>
+                  <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(exp.totalAmount)}</span></td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       exp.approvalStatus === 'approved' ? 'bg-green-100 text-green-800' :
@@ -329,7 +329,7 @@ const Expenses = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setViewing(exp)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="View"><Eye className="w-3.5 h-3.5" /></button>
+                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 text-slate-400 dark:text-slate-500 hover:text-blue-600 transition-colors" title="View"><Eye className="w-3.5 h-3.5" /></button>
                       {exp.approvalStatus === 'pending' && (
                         <div className="flex items-center gap-1">
                           <button onClick={() => handleApprove(exp._id)} className="p-1.5 rounded-lg hover:bg-green-50 text-green-500 hover:text-green-700 transition-colors" title="Approve">
@@ -358,15 +358,15 @@ const Expenses = () => {
                           })) : exp.description ? [{ name: exp.description, qty: 1, price: exp.totalAmount || 0, amount: exp.totalAmount || 0 }] : [{ name: '', qty: 1, price: 0, amount: 0 }]);
                           setShowModal(true);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 text-slate-400 dark:text-slate-500 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                       <button onClick={() => handleDelete(exp._id)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </td>
                 </tr>
               ))}
               {!loading && expenses.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">No expenses found</td></tr>
+                <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">No expenses found</td></tr>
               )}
             </tbody>
           </table>
@@ -374,18 +374,18 @@ const Expenses = () => {
       </motion.div>
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">{totalCount} expenses</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{totalCount} expenses</p>
         <div className="flex items-center gap-1">
           <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
-            className="p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-30 text-slate-500 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 disabled:opacity-30 text-slate-500 dark:text-slate-400 transition-colors"
           ><ChevronLeft className="w-4 h-4" /></button>
           {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(p => (
             <button key={p} onClick={() => setCurrentPage(p)}
-              className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${currentPage === p ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+              className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${currentPage === p ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700/60'}`}
             >{p}</button>
           ))}
           <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
-            className="p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-30 text-slate-500 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 disabled:opacity-30 text-slate-500 dark:text-slate-400 transition-colors"
           ><ChevronRight className="w-4 h-4" /></button>
         </div>
       </div>
@@ -404,99 +404,99 @@ const Expenses = () => {
               transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
               className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-elevated w-full max-w-2xl max-h-[92vh] overflow-hidden border border-slate-200/80"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h3 className="text-base font-semibold text-slate-900">{editing ? 'Edit Expense' : 'Add Expense'}</h3>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-gray-700">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{editing ? 'Edit Expense' : 'Add Expense'}</h3>
                 <button onClick={() => setShowModal(false)}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                ><X className="w-4.5 h-4.5 text-slate-500" /></button>
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 transition-colors"
+                ><X className="w-4.5 h-4.5 text-slate-500 dark:text-slate-400" /></button>
               </div>
 
               <div className="p-6 overflow-y-auto max-h-[70vh] space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Category</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Category</label>
                     <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     >
                       <option value="">Select</option>
                       {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Expense No</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Expense No</label>
                     <input type="text" value={form.expenseNo} onChange={e => setForm({ ...form, expenseNo: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Date</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Date</label>
                     <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2"
                     />
                   </div>
                 </div>
 
                 {/* GST Toggle */}
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-gray-700 rounded-xl">
                   <div className="flex items-center gap-3">
-                    <Percent className="w-5 h-5 text-slate-500" />
+                    <Percent className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-900">Apply GST</h4>
-                      <p className="text-xs text-slate-500">Include GST in expense calculation</p>
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Apply GST</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Include GST in expense calculation</p>
                     </div>
                   </div>
                   <button onClick={() => setShowGst(!showGst)}
                     className={`relative w-11 h-6 rounded-full transition-colors ${showGst ? 'bg-blue-600' : 'bg-slate-300'}`}
                   >
-                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${showGst ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                    <div className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-gray-800 rounded-full shadow-sm transition-transform ${showGst ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
 
                 {/* Items Table */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-slate-900">Expense Items</h4>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Expense Items</h4>
                     <button onClick={addItem}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors"
                     ><Plus className="w-3.5 h-3.5" /> Add Row</button>
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-700">
                     <table className="w-full">
                       <thead>
-                        <tr className="bg-slate-50">
+                        <tr className="bg-slate-50 dark:bg-gray-700">
                           {['#', 'Item', 'Qty', 'Price/Unit', 'Amount'].map(h => (
-                            <th key={h} className="px-3 py-2.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">{h}</th>
+                            <th key={h} className="px-3 py-2.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">{h}</th>
                           ))}
                           <th className="px-3 py-2.5 w-10"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((item, idx) => (
-                          <tr key={idx} className="border-t border-slate-100">
-                            <td className="px-3 py-2 text-sm text-slate-500">{idx + 1}</td>
+                          <tr key={idx} className="border-t border-slate-100 dark:border-gray-700">
+                            <td className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{idx + 1}</td>
                             <td className="px-3 py-2">
                               <input type="text" value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)}
                                 placeholder="Item description"
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                               />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)}
                                 min="1"
-                                className="w-16 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2"
+                                className="w-16 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-center focus:outline-none focus:ring-2"
                               />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" value={item.price} onChange={e => updateItem(idx, 'price', e.target.value)}
                                 min="0" step="0.01"
-                                className="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2"
+                                className="w-24 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-right focus:outline-none focus:ring-2"
                               />
                             </td>
-                            <td className="px-3 py-2 text-sm font-semibold text-slate-900">{formatCurrency(item.amount)}</td>
+                            <td className="px-3 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(item.amount)}</td>
                             <td className="px-3 py-2">
                               {items.length > 1 && (
                                 <button onClick={() => removeItem(idx)}
-                                  className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                                  className="p-1 rounded-lg hover:bg-red-50 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors"
                                 ><X className="w-3.5 h-3.5" /></button>
                               )}
                             </td>
@@ -509,9 +509,9 @@ const Expenses = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Payment Type</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Payment Type</label>
                     <select value={form.paymentType} onChange={e => setForm({ ...form, paymentType: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2"
                     >
                       <option value="cash">Cash</option>
                       <option value="bank">Bank Transfer</option>
@@ -520,22 +520,22 @@ const Expenses = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Round Off</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Round Off</label>
                     <input type="number" value={form.roundOff} onChange={e => setForm({ ...form, roundOff: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2"
                     />
                   </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-900">Total</span>
+                <div className="bg-slate-50 dark:bg-gray-700 rounded-xl p-4 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Total</span>
                   <span className="text-lg font-bold text-blue-600">{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-gray-700 bg-slate-50/50">
                 <button onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700/60 transition-colors"
                 >Cancel</button>
                 <button onClick={() => {
                   const itemList = items.filter(i => i.name).map(i => `  ${i.name} x${i.qty} = ${formatCurrency(i.amount)}`).join('\n');
@@ -547,7 +547,7 @@ const Expenses = () => {
                     toast.success('Expense details copied to clipboard');
                   }
                 }}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-all"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-400 text-sm font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-all"
                 ><Share2 className="w-4 h-4" /> Share</button>
                 <button onClick={handleSave}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm"
@@ -572,82 +572,82 @@ const Expenses = () => {
               transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
               className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-elevated w-full max-w-lg max-h-[92vh] overflow-hidden border border-slate-200/80"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-gray-700">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-900">Expense Details</h3>
-                  <p className="text-xs text-slate-500 mt-0.5 font-mono">{viewing.expenseNumber}</p>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Expense Details</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">{viewing.expenseNumber}</p>
                 </div>
                 <button onClick={() => setViewing(null)}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                ><X className="w-4.5 h-4.5 text-slate-500" /></button>
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 transition-colors"
+                ><X className="w-4.5 h-4.5 text-slate-500 dark:text-slate-400" /></button>
               </div>
 
               <div className="p-6 overflow-y-auto max-h-[70vh] space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-start gap-2.5">
-                    <Tag className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <Tag className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5" />
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</p>
-                      <p className="text-sm text-slate-900 mt-0.5">{viewing.category || '-'}</p>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Category</p>
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-0.5">{viewing.category || '-'}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <Calendar className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5" />
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</p>
-                      <p className="text-sm text-slate-900 mt-0.5">{formatDate(viewing.date)}</p>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</p>
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-0.5">{formatDate(viewing.date)}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <Wallet className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <Wallet className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5" />
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment Mode</p>
-                      <p className="text-sm text-slate-900 mt-0.5 capitalize">{viewing.paymentMethod || '-'}</p>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment Mode</p>
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-0.5 capitalize">{viewing.paymentMethod || '-'}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <CheckCircle className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <CheckCircle className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5" />
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</p>
-                      <p className="text-sm text-slate-900 mt-0.5 capitalize">{viewing.approvalStatus || 'approved'}</p>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</p>
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-0.5 capitalize">{viewing.approvalStatus || 'approved'}</p>
                     </div>
                   </div>
                 </div>
 
                 {viewing.party && (
                   <div className="flex items-start gap-2.5">
-                    <Receipt className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <Receipt className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5" />
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Party</p>
-                      <p className="text-sm text-slate-900 mt-0.5">{viewing.party}</p>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Party</p>
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-0.5">{viewing.party}</p>
                     </div>
                   </div>
                 )}
 
                 {/* Items */}
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-900 mb-3">Items</h4>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Items</h4>
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-700">
                     <table className="w-full">
                       <thead>
-                        <tr className="bg-slate-50">
+                        <tr className="bg-slate-50 dark:bg-gray-700">
                           {['#', 'Item', 'Qty', 'Price/Unit', 'Amount'].map(h => (
-                            <th key={h} className="px-3 py-2.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">{h}</th>
+                            <th key={h} className="px-3 py-2.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {(viewing.items?.length ? viewing.items : viewing.description ? [{ name: viewing.description, quantity: 1, price: viewing.totalAmount, amount: viewing.totalAmount }] : []).map((it, i) => (
-                          <tr key={i} className="border-t border-slate-100">
-                            <td className="px-3 py-2 text-sm text-slate-500">{i + 1}</td>
-                            <td className="px-3 py-2 text-sm text-slate-900">{it.name || '-'}</td>
-                            <td className="px-3 py-2 text-sm text-slate-600">{it.quantity ?? 1}</td>
-                            <td className="px-3 py-2 text-sm text-slate-600 text-right">{formatCurrency(it.price || 0)}</td>
-                            <td className="px-3 py-2 text-sm font-semibold text-slate-900 text-right">{formatCurrency(it.amount || 0)}</td>
+                          <tr key={i} className="border-t border-slate-100 dark:border-gray-700">
+                            <td className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{i + 1}</td>
+                            <td className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100">{it.name || '-'}</td>
+                            <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-400">{it.quantity ?? 1}</td>
+                            <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-400 text-right">{formatCurrency(it.price || 0)}</td>
+                            <td className="px-3 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100 text-right">{formatCurrency(it.amount || 0)}</td>
                           </tr>
                         ))}
                         {!(viewing.items?.length) && !viewing.description && (
-                          <tr><td colSpan={5} className="px-3 py-4 text-center text-sm text-slate-400">No items</td></tr>
+                          <tr><td colSpan={5} className="px-3 py-4 text-center text-sm text-slate-400 dark:text-slate-500">No items</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -655,31 +655,31 @@ const Expenses = () => {
                 </div>
 
                 {viewing.taxAmount != null && (
-                  <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600">Tax</span>
-                    <span className="text-sm font-semibold text-slate-900">{formatCurrency(viewing.taxAmount)}</span>
+                  <div className="bg-slate-50 dark:bg-gray-700 rounded-xl p-4 flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Tax</span>
+                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(viewing.taxAmount)}</span>
                   </div>
                 )}
 
                 {viewing.description && (
                   <div className="flex items-start gap-2.5">
-                    <FileText className="w-4 h-4 text-slate-400 mt-0.5" />
+                    <FileText className="w-4 h-4 text-slate-400 dark:text-slate-500 mt-0.5" />
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Notes</p>
-                      <p className="text-sm text-slate-700 mt-0.5">{viewing.description}</p>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Notes</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">{viewing.description}</p>
                     </div>
                   </div>
                 )}
 
                 <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-900">Total Amount</span>
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Total Amount</span>
                   <span className="text-lg font-bold text-blue-600">{formatCurrency(viewing.totalAmount)}</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-gray-700 bg-slate-50/50">
                 <button onClick={() => setViewing(null)}
-                  className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700/60 transition-colors"
                 >Close</button>
               </div>
             </motion.div>

@@ -13,7 +13,7 @@ const ROLES = [
   { name: 'Admin', color: 'bg-red-100 text-red-700', permissions: ['*'] },
   { name: 'Manager', color: 'bg-blue-100 text-blue-700', permissions: ['sales:view', 'sales:create', 'purchases:view', 'purchases:create', 'products:view', 'products:manage', 'customers:view', 'customers:manage', 'reports:view'] },
   { name: 'Accountant', color: 'bg-green-100 text-green-700', permissions: ['sales:view', 'purchases:view', 'reports:view', 'accounting:view', 'accounting:manage'] },
-  { name: 'Staff', color: 'bg-gray-100 text-gray-700', permissions: ['sales:view', 'sales:create', 'products:view', 'customers:view'] },
+  { name: 'Staff', color: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300', permissions: ['sales:view', 'sales:create', 'products:view', 'customers:view'] },
 ];
 
 const PERMISSIONS = [
@@ -187,7 +187,7 @@ const UserManagement = () => {
     return r ? (
       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.color}`}>{role}</span>
     ) : (
-      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{role}</span>
+      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">{role}</span>
     );
   };
 
@@ -215,7 +215,7 @@ const UserManagement = () => {
             </button>
             <button
               onClick={openCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-blue-700 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium"
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium"
             >
               <Plus className="w-4 h-4" />
               Add User
@@ -251,7 +251,7 @@ const UserManagement = () => {
           <div className="text-center py-20">
             <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">No users found</h3>
-            <p className="text-gray-500 mt-1">{search ? 'Try a different search' : 'Add your first user to get started'}</p>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">{search ? 'Try a different search' : 'Add your first user to get started'}</p>
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -367,7 +367,7 @@ const UserManagement = () => {
                   {editingUser ? 'Edit User' : 'Add New User'}
                 </h2>
                 <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                  <X className="w-5 h-5 text-gray-500" />
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
 
@@ -470,7 +470,7 @@ const UserManagement = () => {
                       type="checkbox"
                       checked={form.isActive}
                       onChange={e => setForm({ ...form, isActive: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">Active user</span>
                   </label>
@@ -488,7 +488,7 @@ const UserManagement = () => {
                           checked={form.permissions.includes(perm.key) || form.permissions.includes('*')}
                           onChange={() => handlePermissionToggle(perm.key)}
                           disabled={form.permissions.includes('*')}
-                          className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-500"
                         />
                         <span className="text-xs text-gray-600 dark:text-gray-400">{perm.label}</span>
                       </label>
@@ -537,7 +537,7 @@ const UserManagement = () => {
               <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-700">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Role Permissions</h2>
                 <button onClick={() => setShowRoleModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                  <X className="w-5 h-5 text-gray-500" />
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
               <div className="p-6 space-y-4">
@@ -588,7 +588,7 @@ const UserManagement = () => {
               <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-700">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Reset Password</h2>
                 <button onClick={() => setShowPasswordModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                  <X className="w-5 h-5 text-gray-500" />
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
               <div className="p-6">

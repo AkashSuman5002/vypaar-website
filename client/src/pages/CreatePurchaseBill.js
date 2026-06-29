@@ -469,25 +469,25 @@ const CreatePurchaseBill = () => {
             }`}
           >
             <span className="truncate flex-1">{tab.label}</span>
-            <button onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }} className="ml-1 text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }} className="ml-1 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors flex-shrink-0">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
         ))}
         <button onClick={addNewTab}
-          className="mb-1 p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-800"
+          className="mb-1 p-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors bg-white dark:bg-slate-800"
           title="Open new tab"
         >
           <Plus className="w-4 h-4" />
         </button>
         <div className="ml-auto flex items-center gap-1 mb-1">
-          <button onClick={() => setShowCalculator(true)} className="p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors" title="Calculator">
+          <button onClick={() => setShowCalculator(true)} className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors" title="Calculator">
             <Calculator className="w-4 h-4" />
           </button>
-          <button onClick={() => navigate('/settings?tab=transaction')} className="p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 rounded-lg transition-colors" title="Transaction Settings">
+          <button onClick={() => navigate('/settings?tab=transaction')} className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700/60 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg transition-colors" title="Transaction Settings">
             <SettingsIcon className="w-4 h-4" />
           </button>
-          <button onClick={() => navigate('/purchases/bills')} className="p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors" title="Close">
+          <button onClick={() => navigate('/purchases/bills')} className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors" title="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -506,7 +506,7 @@ const CreatePurchaseBill = () => {
               Party <span className="text-red-500">*</span>
             </label>
             <select value={form.party} onChange={e => handlePartySelect(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border-2 border-blue-400 dark:border-blue-500 rounded-lg bg-white dark:bg-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2.5 text-sm border-2 border-blue-400 dark:border-blue-500 rounded-lg bg-white dark:bg-slate-700 hover:border-slate-300 dark:hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             >
               <option value="">Select Party</option>
               {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
@@ -583,7 +583,7 @@ const CreatePurchaseBill = () => {
                 <th className="px-2 py-3 text-center w-32" colSpan={2}>
                   <div className="flex flex-col items-center">
                     <span>DISCOUNT</span>
-                    <div className="flex w-full mt-1 text-[10px] font-normal text-slate-500">
+                    <div className="flex w-full mt-1 text-[10px] font-normal text-slate-500 dark:text-slate-400">
                       <span className="flex-1 text-center">%</span>
                       <span className="flex-1 text-center">AMOUNT</span>
                     </div>
@@ -592,7 +592,7 @@ const CreatePurchaseBill = () => {
                 <th className="px-2 py-3 text-center w-32" colSpan={2}>
                   <div className="flex flex-col items-center">
                     <span>TAX</span>
-                    <div className="flex w-full mt-1 text-[10px] font-normal text-slate-500">
+                    <div className="flex w-full mt-1 text-[10px] font-normal text-slate-500 dark:text-slate-400">
                       <span className="flex-1 text-center">%</span>
                       <span className="flex-1 text-center">AMOUNT</span>
                     </div>
@@ -609,7 +609,7 @@ const CreatePurchaseBill = () => {
             <tbody>
               {form.items.map((item, idx) => (
                 <tr key={item._id} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-                  <td className="px-2 py-2 text-center text-slate-400 text-xs font-medium align-top pt-3">
+                  <td className="px-2 py-2 text-center text-slate-400 dark:text-slate-500 text-xs font-medium align-top pt-3">
                     <div className="flex items-center gap-1">
                       <GripVertical className="w-3 h-3 text-slate-300" />
                       <span>{idx + 1}</span>
@@ -643,7 +643,7 @@ const CreatePurchaseBill = () => {
                   <td className="px-2 py-2 align-top">
                     <div className="flex items-center">
                       <input type="number" min="0" step="0.01" value={item.rate} onChange={e => updateItem(idx, 'rate', e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500"
+                        className="w-full px-2 py-1.5 text-sm text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500 no-spinner"
                       />
                       {lastPurchasePriceEnabled && item.lastPurchasePrice > 0 && (
                         <span className="text-xs text-blue-600 ml-1 whitespace-nowrap" title="Last Purchase Price">
@@ -655,9 +655,9 @@ const CreatePurchaseBill = () => {
                   <td className="px-2 py-2 align-top w-16">
                     <div className="flex items-center">
                       <input type="number" min="0" value={item.discountValue} onChange={e => updateItem(idx, 'discountValue', e.target.value)}
-                        className="w-full px-1 py-1.5 text-xs text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500"
+                        className="w-full px-1 py-1.5 text-xs text-right border-b border-slate-200 dark:border-slate-600 bg-transparent hover:border-slate-400 focus:outline-none focus:border-blue-500 no-spinner"
                       />
-                      <span className="text-[10px] text-slate-400 ml-0.5">%</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-0.5">%</span>
                     </div>
                   </td>
                   <td className="px-2 py-2 align-top w-24">
@@ -697,7 +697,7 @@ const CreatePurchaseBill = () => {
                     <Plus className="w-4 h-4" /> ADD ROW
                   </button>
                 </td>
-                <td className="px-2 py-3 text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider">TOTAL</td>
+                <td className="px-2 py-3 text-right text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">TOTAL</td>
                 <td colSpan={2} className="px-2 py-3 text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {fmt(totals.discountTotal)}
                 </td>
@@ -736,7 +736,7 @@ const CreatePurchaseBill = () => {
                 <AnimatePresence>
                   {showPayment && (
                     <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                      className="absolute z-20 mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg p-1"
+                      className="absolute z-20 mt-1 w-40 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg shadow-lg p-1"
                     >
                       {[...PAYMENT_MODES, ...PAYMENT_TYPES_EXTRA].filter(m => !payments.find(p => p.mode === m)).map(mode => (
                         <button key={mode} onClick={() => { handleAddPayment(mode); setShowPayment(false); }}
@@ -770,22 +770,22 @@ const CreatePurchaseBill = () => {
 
             {payments.length > 0 && (
               <div className="mt-3 space-y-2 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Payments</p>
+                <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payments</p>
                 {payments.map((p, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <span className="text-xs font-medium text-slate-700 dark:text-slate-200 w-20">{p.mode}</span>
                     <input type="number" value={p.amount} onChange={e => updatePayment(idx, 'amount', e.target.value)}
-                      placeholder="Amount" className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded"
+                      placeholder="Amount" className="flex-1 px-2 py-1 text-xs border border-slate-200 dark:border-gray-700 rounded"
                     />
                     <input type="date" value={p.date} onChange={e => updatePayment(idx, 'date', e.target.value)}
-                      className="px-2 py-1 text-xs border border-slate-200 rounded"
+                      className="px-2 py-1 text-xs border border-slate-200 dark:border-gray-700 rounded"
                     />
-                    <button onClick={() => removePayment(idx)} className="p-1 text-slate-400 hover:text-red-500">
+                    <button onClick={() => removePayment(idx)} className="p-1 text-slate-400 dark:text-slate-500 hover:text-red-500">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
-                <p className="text-xs text-slate-500">Total Paid: <span className="font-semibold text-emerald-600">{fmt(totalPaid)}</span></p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Total Paid: <span className="font-semibold text-emerald-600">{fmt(totalPaid)}</span></p>
               </div>
             )}
           </div>
@@ -793,28 +793,28 @@ const CreatePurchaseBill = () => {
           {/* Right: Totals */}
           <div className="space-y-2">
             <div className="flex items-center justify-end gap-2 text-sm py-1">
-              <span className="text-slate-500">Taxable Amount</span>
+              <span className="text-slate-500 dark:text-slate-400">Taxable Amount</span>
               <span className="font-medium text-slate-900 dark:text-slate-100 w-32 text-right tabular-nums">{fmt(totals.taxableAmount)}</span>
             </div>
             {totals.discountTotal > 0 && (
               <div className="flex items-center justify-end gap-2 text-sm py-1">
-                <span className="text-slate-500">Discount</span>
+                <span className="text-slate-500 dark:text-slate-400">Discount</span>
                 <span className="font-medium text-rose-500 w-32 text-right tabular-nums">−{fmt(totals.discountTotal)}</span>
               </div>
             )}
             <div className="flex items-center justify-end gap-2 text-sm py-1">
-              <span className="text-slate-500">Tax</span>
+              <span className="text-slate-500 dark:text-slate-400">Tax</span>
               <span className="font-medium text-slate-900 dark:text-slate-100 w-32 text-right tabular-nums">{fmt(totals.taxTotal)}</span>
             </div>
             <div className="flex items-center justify-end gap-2 text-sm py-2 border-t border-slate-200 dark:border-slate-700">
-              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 dark:text-slate-400">
                 <input type="checkbox" checked={form.roundOffEnabled} onChange={e => setForm({ ...form, roundOffEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  className="w-3.5 h-3.5 rounded border-slate-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
                 />
                 <span>Round Off</span>
               </label>
               <input type="number" step="0.01" value={totals.roundOff} readOnly
-                className="w-24 px-2 py-1 text-sm text-right border-b border-slate-300 bg-transparent"
+                className="w-24 px-2 py-1 text-sm text-right border-b border-slate-300 dark:border-gray-600 bg-transparent"
               />
             </div>
             <div className="flex items-center justify-end gap-2 text-base font-bold py-2 border-t-2 border-slate-300 dark:border-slate-600">
@@ -824,19 +824,19 @@ const CreatePurchaseBill = () => {
             {payments.length === 0 && (
               <div className="pt-2 mt-1 border-t border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="flex items-center justify-end gap-2 text-sm">
-                  <span className="text-slate-500">Payment Mode</span>
+                  <span className="text-slate-500 dark:text-slate-400">Payment Mode</span>
                   <select value={form.paymentType} onChange={e => setForm({ ...form, paymentType: e.target.value })}
                     className="px-2 py-1 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
                     {PAYMENT_MODES.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div className="flex items-center justify-end gap-2 text-sm">
-                  <span className="text-slate-500">Amount Paid</span>
+                  <span className="text-slate-500 dark:text-slate-400">Amount Paid</span>
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-slate-400">₹</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">₹</span>
                     <input type="number" step="0.01" min="0" value={form.paidAmount || 0}
                       onChange={e => setForm({ ...form, paidAmount: parseFloat(e.target.value) || 0 })}
-                      className="w-28 px-2 py-1 text-sm text-right border-b border-slate-300 bg-transparent focus:outline-none focus:border-blue-500" />
+                      className="w-28 px-2 py-1 text-sm text-right border-b border-slate-300 dark:border-gray-600 bg-transparent focus:outline-none focus:border-blue-500" />
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -844,7 +844,7 @@ const CreatePurchaseBill = () => {
                     className="text-xs text-blue-600 hover:text-blue-700 hover:underline">Paid full amount</button>
                 </div>
                 <div className="flex items-center justify-end gap-2 text-sm font-semibold">
-                  <span className="text-slate-600">Balance Due</span>
+                  <span className="text-slate-600 dark:text-slate-400">Balance Due</span>
                   <span className={`w-32 text-right tabular-nums ${(totals.total - (form.paidAmount || 0)) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(Math.max(0, totals.total - (form.paidAmount || 0)))}</span>
                 </div>
               </div>
@@ -886,7 +886,7 @@ const CreatePurchaseBill = () => {
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShareOpen(false)} />
                   <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-20 p-1"
+                    className="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg shadow-lg z-20 p-1"
                   >
                     {[
                       { label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-600', action: () => {
@@ -899,7 +899,7 @@ const CreatePurchaseBill = () => {
                         shareViaEmail(subject, message);
                         setShareOpen(false);
                       }},
-                      { label: 'Copy Link', icon: Link2, color: 'text-slate-600', action: async () => {
+                      { label: 'Copy Link', icon: Link2, color: 'text-slate-600 dark:text-slate-400', action: async () => {
                         const { message } = generateShareContent('purchase', form);
                         const copied = await copyToClipboard(message);
                         toast.success(copied ? 'Copied to clipboard' : 'Failed to copy');
@@ -949,14 +949,14 @@ const CreatePurchaseBill = () => {
         {showTerms && (
           <Modal title="Terms and Conditions" onClose={() => setShowTerms(false)} onClear={() => setForm(f => ({ ...f, terms: '' }))}>
             <textarea value={form.terms} onChange={e => setForm({ ...form, terms: e.target.value })} rows={6}
-              placeholder="Enter terms and conditions..." className="w-full px-3 py-2 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-500 resize-none"
+              placeholder="Enter terms and conditions..." className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-700 rounded focus:outline-none focus:border-blue-500 resize-none"
             />
           </Modal>
         )}
         {showDesc && (
           <Modal title="Description" onClose={() => setShowDesc(false)} onClear={() => setForm(f => ({ ...f, description: '' }))}>
             <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={6}
-              placeholder="Add description or notes..." className="w-full px-3 py-2 text-sm border border-slate-200 rounded focus:outline-none focus:border-blue-500 resize-none"
+              placeholder="Add description or notes..." className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-700 rounded focus:outline-none focus:border-blue-500 resize-none"
             />
           </Modal>
         )}
@@ -985,14 +985,14 @@ const CreatePurchaseBill = () => {
 const Modal = ({ title, children, onClose, onClear }) => (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-      className="bg-white rounded-lg shadow-xl w-full max-w-lg p-5" onClick={e => e.stopPropagation()}>
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-5" onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+        <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600"><X className="w-5 h-5" /></button>
       </div>
       {children}
       <div className="flex justify-end gap-2 mt-3">
-        <button onClick={onClear} className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded">Clear</button>
+        <button onClick={onClear} className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700/60 rounded">Clear</button>
         <button onClick={onClose} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded">Done</button>
       </div>
     </motion.div>
@@ -1073,10 +1073,10 @@ const CalculatorPopup = ({ open, onClose, onUse }) => {
   const currentValue = parseFloat(display) || 0;
   const Btn = ({ children, onClick, variant = 'num', className = '' }) => {
     const variants = {
-      num: 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-200',
+      num: 'bg-white dark:bg-gray-800 hover:bg-slate-50 dark:hover:bg-gray-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-gray-700',
       op: 'bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100',
       eq: 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-600',
-      util: 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200',
+      util: 'bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-700',
     };
     return (
       <button type="button" onClick={onClick}
@@ -1092,26 +1092,26 @@ const CalculatorPopup = ({ open, onClose, onUse }) => {
           className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
           <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
             transition={{ type: 'spring', duration: 0.25, bounce: 0.2 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden border border-slate-200"
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden border border-slate-200 dark:border-gray-700"
             onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-blue-600 rounded-lg">
                   <Calculator className="w-3.5 h-3.5 text-white" />
                 </div>
-                <h3 className="text-sm font-semibold text-slate-800">Calculator</h3>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Calculator</h3>
               </div>
-              <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-white/60 rounded transition-colors">
+              <button onClick={onClose} className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/60 rounded transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="px-4 py-4 bg-slate-900">
               <div className="text-right">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Amount</p>
+                <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Amount</p>
                 <p className="text-2xl font-bold text-white tabular-nums truncate">
                   {display.length > 14 ? Number(display).toExponential(6) : display}
                 </p>
-                {operator && previous != null && <p className="text-xs text-slate-400 mt-0.5">{previous} {operator}</p>}
+                {operator && previous != null && <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{previous} {operator}</p>}
               </div>
             </div>
             <div className="p-3 grid grid-cols-4 gap-2">
@@ -1140,7 +1140,7 @@ const CalculatorPopup = ({ open, onClose, onUse }) => {
                 className="w-full py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm">
                 Use {formatCurrency(currentValue)} as Item
               </button>
-              <p className="text-[10px] text-slate-400 text-center mt-2">Keyboard: 0-9 + − × ÷ % Enter = Esc C ⌫</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center mt-2">Keyboard: 0-9 + − × ÷ % Enter = Esc C ⌫</p>
             </div>
           </motion.div>
         </motion.div>

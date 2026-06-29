@@ -32,7 +32,7 @@ const SettingsSidebar = ({ activeTab, onTabChange, onSearch }) => (
             onClick={() => onTabChange(item.key)}
             className={`w-full flex items-center gap-3 px-5 text-base transition-colors ${
               isActive
-                ? 'bg-white text-[#121933] font-medium'
+                ? 'bg-white dark:bg-gray-800 text-[#121933] dark:text-gray-100 font-medium'
                 : 'text-white hover:bg-[#1E2750]'
             }`}
             style={{ height: '52px' }}

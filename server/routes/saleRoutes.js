@@ -10,6 +10,10 @@ const { authorize } = require('../middleware/authorize');
 const router = express.Router();
 
 // Live print-settings preview: renders a sample invoice through the real PDF engine.
+// GET variant exists so the Settings preview can point an <iframe> straight at this URL
+// (the httpOnly auth cookie rides along automatically). Loading the PDF over http:// lets
+// Chromium's PDF viewer render it inline — unlike a blob: URL, which stays blank in Electron.
+router.get('/preview-pdf', authorize('sales:view'), generateInvoicePreviewPDF);
 router.post('/preview-pdf', authorize('sales:view'), generateInvoicePreviewPDF);
 
 router.route('/')

@@ -130,15 +130,15 @@ const JournalEntry = () => {
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 pb-8">
       <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Journal Entry</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Journal Entry</h1>
         </div>
       </motion.div>
 
       {entries.length === 0 && !showModal ? (
-        <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
+        <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
           <div className="flex flex-col items-center text-center px-6 py-12 lg:py-16">
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Journal Entry</h2>
-            <p className="text-sm text-slate-500 mb-8 max-w-md">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Journal Entry</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-8 max-w-md">
               Now create journal vouchers in Vyapar to manage end to end accounting on Vyapar app
             </p>
 
@@ -173,10 +173,10 @@ const JournalEntry = () => {
               </svg>
             </div>
 
-            <p className="text-sm text-slate-700 mb-1">
+            <p className="text-sm text-slate-700 dark:text-slate-300 mb-1">
               <strong>Journal vouchers are used to handle accounting transactions that generally do not occur on a day-to-day basis.</strong>
             </p>
-            <p className="text-sm text-slate-500 mb-8 max-w-lg">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-8 max-w-lg">
               They are manual entries in account books and are used for adjustments, equity management, or any other entry that cannot be handled by standard entries like sales, purchases, payments,etc.
             </p>
 
@@ -193,13 +193,13 @@ const JournalEntry = () => {
         </motion.div>
       ) : (
         <>
-          <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-4">
+          <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                 <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Search transactions"
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
               <button onClick={() => { resetForm(); setShowModal(true); }}
@@ -208,29 +208,29 @@ const JournalEntry = () => {
             </div>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
+          <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
             <div className="overflow-x-auto scrollbar-thin">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-100">
+                  <tr className="border-b border-slate-100 dark:border-gray-700">
                     {['#', 'Date', 'Entry No', 'Narration', 'Lines', 'Debit', 'Credit', ''].map(h => (
-                      <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">{h}</th>
+                      <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {paginated.map((e, idx) => (
                     <tr key={e._id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-sm text-slate-500">{(currentPage - 1) * pageSize + idx + 1}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatDate(e.entryDate)}</td>
-                      <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900 font-mono">{e.entryNumber}</span></td>
-                      <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate">{e.narration}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{e.lines?.length}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{formatCurrency(e.totalDebit)}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{formatCurrency(e.totalCredit)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{(currentPage - 1) * pageSize + idx + 1}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(e.entryDate)}</td>
+                      <td className="px-4 py-3"><span className="text-sm font-semibold text-slate-900 dark:text-slate-100 font-mono">{e.entryNumber}</span></td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 max-w-[200px] truncate">{e.narration}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{e.lines?.length}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(e.totalDebit)}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(e.totalCredit)}</td>
                       <td className="px-4 py-3">
                         <button onClick={() => { const rows = (e.lines || []).map((l, i) => `<tr><td>${i+1}</td><td>${l.accountName || ''}</td><td>${l.particular || ''}</td><td>${l.debit || 0}</td><td>${l.credit || 0}</td></tr>`).join(''); const html = `<div style="padding:20px;font-family:sans-serif"><h2>Journal Entry: ${e.entryNumber}</h2><p>Date: ${e.entryDate ? new Date(e.entryDate).toLocaleDateString('en-IN') : ''}</p><p>Narration: ${e.narration || ''}</p><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr><th>#</th><th>Account</th><th>Particular</th><th>Debit</th><th>Credit</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:12px"><strong>Total Debit:</strong> ${e.totalDebit || 0} &nbsp; <strong>Total Credit:</strong> ${e.totalCredit || 0}</p></div>`; const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.print(); }}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600" title="View">
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 text-slate-400 dark:text-slate-500 hover:text-blue-600" title="View">
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                       </td>
@@ -241,18 +241,18 @@ const JournalEntry = () => {
             </div>
           </motion.div>
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">{displayEntries.length} entries</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{displayEntries.length} entries</p>
             <div className="flex items-center gap-1">
               <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
-                className="p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 disabled:opacity-30 text-slate-500 dark:text-slate-400"
               ><ChevronLeft className="w-4 h-4" /></button>
               {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(p => (
                 <button key={p} onClick={() => setCurrentPage(p)}
-                  className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${currentPage === p ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                  className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${currentPage === p ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700/60'}`}
                 >{p}</button>
               ))}
               <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 disabled:opacity-30 text-slate-500 dark:text-slate-400"
               ><ChevronRight className="w-4 h-4" /></button>
             </div>
           </div>
@@ -274,56 +274,56 @@ const JournalEntry = () => {
             <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
-              className="relative bg-white rounded-2xl shadow-elevated w-full max-w-3xl max-h-[92vh] overflow-hidden border"
+              className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-elevated w-full max-w-3xl max-h-[92vh] overflow-hidden border"
             >
               <div className="flex items-center justify-between px-6 py-4 border-b">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-slate-900">Journal Entry</h3>
-                  <Info className="w-4 h-4 text-slate-400" />
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Journal Entry</h3>
+                  <Info className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                 </div>
-                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100"><X className="w-4.5 h-4.5 text-slate-500" /></button>
+                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60"><X className="w-4.5 h-4.5 text-slate-500 dark:text-slate-400" /></button>
               </div>
               <div className="p-6 overflow-y-auto max-h-[75vh] space-y-5">
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Reference number</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Reference number</label>
                     <input type="text" value={form.entryNumber} onChange={e => setForm({ ...form, entryNumber: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Journal Date</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Journal Date</label>
                     <input type="date" value={form.entryDate} onChange={e => setForm({ ...form, entryDate: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Narration</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Narration</label>
                     <input type="text" value={form.narration} onChange={e => setForm({ ...form, narration: e.target.value })}
-                      placeholder="Description" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      placeholder="Description" className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-700">
                     <table className="w-full">
                       <thead>
-                        <tr className="bg-slate-50">
-                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left w-10">#</th>
-                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">ACCOUNT</th>
-                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-right">CREDIT</th>
-                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-right">DEBIT</th>
+                        <tr className="bg-slate-50 dark:bg-gray-700">
+                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left w-10">#</th>
+                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">ACCOUNT</th>
+                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-right">CREDIT</th>
+                          <th className="px-3 py-2.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-right">DEBIT</th>
                           <th className="px-3 py-2.5 w-10"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {form.lines.map((line, idx) => (
-                          <tr key={idx} className="border-t border-slate-100">
-                            <td className="px-3 py-2 text-sm text-slate-500">{idx + 1}</td>
+                          <tr key={idx} className="border-t border-slate-100 dark:border-gray-700">
+                            <td className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{idx + 1}</td>
                             <td className="px-3 py-2">
                               <select value={line.account} onChange={e => updateLine(idx, 'account', e.target.value)}
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                               >
                                 <option value="">Select A/C</option>
                                 {accounts.map(a => (
@@ -334,28 +334,28 @@ const JournalEntry = () => {
                             <td className="px-3 py-2">
                               <input type="number" value={line.credit || ''} onChange={e => updateLine(idx, 'credit', e.target.value)}
                                 min="0" step="0.01" placeholder="0.00"
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                               />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" value={line.debit || ''} onChange={e => updateLine(idx, 'debit', e.target.value)}
                                 min="0" step="0.01" placeholder="0.00"
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                               />
                             </td>
                             <td className="px-3 py-2">
                               {form.lines.length > 1 && (
-                                <button onClick={() => removeLine(idx)} className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
+                                <button onClick={() => removeLine(idx)} className="p-1 rounded-lg hover:bg-red-50 text-slate-400 dark:text-slate-500 hover:text-red-500">
                                   <MinusCircle className="w-3.5 h-3.5" />
                                 </button>
                               )}
                             </td>
                           </tr>
                         ))}
-                        <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
-                          <td colSpan="2" className="px-3 py-2.5 text-sm text-slate-700 text-right">Total</td>
-                          <td className="px-3 py-2.5 text-sm text-right text-slate-900">{totalCredit.toFixed(2)}</td>
-                          <td className="px-3 py-2.5 text-sm text-right text-slate-900">{totalDebit.toFixed(2)}</td>
+                        <tr className="border-t border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-700 font-semibold">
+                          <td colSpan="2" className="px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 text-right">Total</td>
+                          <td className="px-3 py-2.5 text-sm text-right text-slate-900 dark:text-slate-100">{totalCredit.toFixed(2)}</td>
+                          <td className="px-3 py-2.5 text-sm text-right text-slate-900 dark:text-slate-100">{totalDebit.toFixed(2)}</td>
                           <td></td>
                         </tr>
                       </tbody>
@@ -367,28 +367,28 @@ const JournalEntry = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Narration / Description</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Narration / Description</label>
                   <textarea value={form.narration} onChange={e => setForm({ ...form, narration: e.target.value })}
                     placeholder="Enter narration..." rows={2}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
                   />
                 </div>
 
                 <div className={`rounded-xl p-4 flex items-center justify-between ${isBalanced ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
                   <div>
-                    <span className="text-sm font-semibold text-slate-700">Balance Check</span>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Balance Check</span>
                     <p className={`text-xs mt-0.5 ${isBalanced ? 'text-emerald-600' : 'text-red-600'}`}>
                       {isBalanced ? 'Debit = Credit ✓' : 'Debit ≠ Credit — total must match'}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-slate-600">Debit: <span className="font-semibold">{formatCurrency(totalDebit, 'INR', 2)}</span></p>
-                    <p className="text-sm text-slate-600">Credit: <span className="font-semibold">{formatCurrency(totalCredit, 'INR', 2)}</span></p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Debit: <span className="font-semibold">{formatCurrency(totalDebit, 'INR', 2)}</span></p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Credit: <span className="font-semibold">{formatCurrency(totalCredit, 'INR', 2)}</span></p>
                   </div>
                 </div>
               </div>
               <div className="flex items-center justify-end gap-2 px-6 py-4 border-t bg-slate-50/50">
-                <button onClick={() => setShowModal(false)} className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100">Cancel</button>
+                <button onClick={() => setShowModal(false)} className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700/60">Cancel</button>
                 <button onClick={handleSave} disabled={!isBalanced}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#E11D48] text-white text-sm font-semibold rounded-full hover:bg-[#BE123C] shadow-sm disabled:opacity-50"
                 ><Save className="w-4 h-4" /> Save [Ctrl+S]</button>

@@ -108,7 +108,7 @@ const CalcPopup = ({ open, onClose, onUse }) => {
         <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
       </div>
       <div className="bg-gray-800 rounded-xl p-3 mb-3">
-        <div className="text-xs text-gray-500 h-4">{prev !== null ? `${prev} ${op}` : ''}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 h-4">{prev !== null ? `${prev} ${op}` : ''}</div>
         <div className="text-2xl font-bold text-white text-right truncate">{display}</div>
       </div>
       <div className="grid grid-cols-4 gap-1.5">
@@ -367,7 +367,7 @@ const CreateDebitNote = () => {
             </button>
             <div>
               <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Debit Note</h1>
-              <p className="text-xs text-slate-500">{form.returnNumber}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{form.returnNumber}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -397,7 +397,7 @@ const CreateDebitNote = () => {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex gap-3">
               <div className="flex-1 relative" ref={partyRef}>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Party <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -422,14 +422,14 @@ const CreateDebitNote = () => {
                       <option key={s._id} value={s._id}>{s.name}</option>
                     ))}
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                 </div>
                 <button onClick={() => navigate('/suppliers')} className="mt-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
                   <Plus className="w-3 h-3" /> Add Party
                 </button>
               </div>
               <div className="w-40">
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Phone No.</label>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Phone No.</label>
                 <input type="tel" ref={phoneRef} value={form.phone}
                   onChange={(e) => setForm(f => ({ ...f, phone: formatMobile(e.target.value) }))}
                   placeholder="Phone No."
@@ -443,14 +443,14 @@ const CreateDebitNote = () => {
           {/* Right: Info fields */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Return No.</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Return No.</label>
               <input type="text" value={form.returnNumber}
                 onChange={(e) => setForm(f => ({ ...f, returnNumber: e.target.value }))}
                 className="w-40 px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Invoice Number</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Invoice Number</label>
               <input type="text" value={form.invoiceNumber}
                 onChange={(e) => setForm(f => ({ ...f, invoiceNumber: e.target.value }))}
                 placeholder="Invoice Number"
@@ -458,21 +458,21 @@ const CreateDebitNote = () => {
               />
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Invoice Date</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Invoice Date</label>
               <input type="date" value={form.invoiceDate}
                 onChange={(e) => setForm(f => ({ ...f, invoiceDate: e.target.value }))}
                 className="w-40 px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</label>
               <input type="date" value={form.date}
                 onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))}
                 className="w-40 px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">State of supply</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">State of supply</label>
               <StateDropdown value={form.stateOfSupply}
                 onChange={(val) => setForm(f => ({ ...f, stateOfSupply: val }))}
                 className="w-40 px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -487,34 +487,34 @@ const CreateDebitNote = () => {
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50 dark:bg-gray-700/50 border-b border-slate-200 dark:border-gray-600">
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-10">#</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Item</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-20">QTY</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">UNIT</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-10">#</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Item</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-20">QTY</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-24">UNIT</th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     <div>PRICE/UNIT</div>
-                    <select value="withoutTax" className="mt-1 text-[10px] bg-transparent border-0 p-0 focus:ring-0 text-slate-400 cursor-default">
+                    <select value="withoutTax" className="mt-1 text-[10px] bg-transparent border-0 p-0 focus:ring-0 text-slate-400 dark:text-slate-500 cursor-default">
                       <option>Without Tax</option>
                     </select>
                   </th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider" colSpan={2}>DISCOUNT</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider" colSpan={2}>TAX</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">AMOUNT</th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" colSpan={2}>DISCOUNT</th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" colSpan={2}>TAX</th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">AMOUNT</th>
                   <th className="px-3 py-3 w-10"></th>
                 </tr>
                 <tr className="bg-slate-50/50 dark:bg-gray-700/30">
                   <th></th><th></th><th></th><th></th><th></th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 text-right">%</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 text-right">AMOUNT</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 text-right">%</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 text-right">AMOUNT</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 dark:text-slate-500 text-right">%</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 dark:text-slate-500 text-right">AMOUNT</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 dark:text-slate-500 text-right">%</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-slate-400 dark:text-slate-500 text-right">AMOUNT</th>
                   <th></th><th></th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, idx) => (
                   <tr key={item.id} className="border-t border-slate-100 dark:border-gray-700 hover:bg-slate-50/50 dark:hover:bg-gray-700/30">
-                    <td className="px-3 py-2 text-sm text-slate-500">{idx + 1}</td>
+                    <td className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2">
                       <input type="text" value={item.productName}
                         onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
@@ -542,20 +542,20 @@ const CreateDebitNote = () => {
                       <input type="number" value={item.rate || ''}
                         onChange={(e) => updateItem(item.id, 'rate', e.target.value)}
                         min="0" step="0.01"
-                        className="w-full px-2 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        className="w-full px-2 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20 no-spinner"
                       />
                     </td>
                     <td className="px-2 py-2">
                       <input type="number" value={item.discountPct || ''}
                         onChange={(e) => updateItem(item.id, 'discountPct', e.target.value)}
                         min="0" max="100" step="0.1"
-                        className="w-full px-2 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        className="w-full px-2 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20 no-spinner"
                       />
                     </td>
                     <td className="px-2 py-2">
                       <input type="number" value={item.discountAmount ? item.discountAmount.toFixed(2) : ''}
                         readOnly
-                        className="w-full px-2 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right text-slate-500"
+                        className="w-full px-2 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right text-slate-500 dark:text-slate-400"
                       />
                     </td>
                     <td className="px-2 py-2">
@@ -569,7 +569,7 @@ const CreateDebitNote = () => {
                     <td className="px-2 py-2">
                       <input type="number" value={item.taxAmount ? item.taxAmount.toFixed(2) : ''}
                         readOnly
-                        className="w-full px-2 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right text-slate-500"
+                        className="w-full px-2 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm text-right text-slate-500 dark:text-slate-400"
                       />
                     </td>
                     <td className="px-3 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100 text-right">
@@ -578,7 +578,7 @@ const CreateDebitNote = () => {
                     <td className="px-3 py-2">
                       {items.length > 1 && (
                         <button onClick={() => removeItem(item.id)}
-                          className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
+                          className="p-1 rounded-lg hover:bg-red-50 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors">
                           <X className="w-4 h-4" />
                         </button>
                       )}
@@ -607,7 +607,7 @@ const CreateDebitNote = () => {
           <div className="space-y-4">
             {/* Payment Type */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Payment Type</label>
+              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Payment Type</label>
               <div className="flex items-center gap-2">
                 <select value={form.paymentType}
                   onChange={(e) => setForm(f => ({ ...f, paymentType: e.target.value }))}
@@ -641,7 +641,7 @@ const CreateDebitNote = () => {
 
             {/* Return Reason */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Return Reason</label>
+              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Return Reason</label>
               <select value={form.returnReason || ''}
                 onChange={(e) => setForm(f => ({ ...f, returnReason: e.target.value }))}
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -668,15 +668,15 @@ const CreateDebitNote = () => {
           <div className="space-y-3">
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 p-4 space-y-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Sub Total</span>
+                <span className="text-slate-500 dark:text-slate-400">Sub Total</span>
                 <span className="font-medium text-slate-900 dark:text-slate-100">₹{totals.taxableAmount.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Discount</span>
+                <span className="text-slate-500 dark:text-slate-400">Discount</span>
                 <span className="font-medium text-red-500">-₹{totals.discountAmount.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Tax</span>
+                <span className="text-slate-500 dark:text-slate-400">Tax</span>
                 <span className="font-medium text-slate-900 dark:text-slate-100">₹{totals.taxAmount.toFixed(2)}</span>
               </div>
               <div className="border-t border-slate-200 dark:border-gray-700 pt-3 flex items-center justify-between">
@@ -688,7 +688,7 @@ const CreateDebitNote = () => {
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Round Off</span>
                 </div>
                 {form.roundOff ? (
-                  <span className="text-sm text-slate-500">₹{roundOffVal.toFixed(2)}</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">₹{roundOffVal.toFixed(2)}</span>
                 ) : (
                   <input type="number" value={form.roundOffValue}
                     onChange={(e) => setForm(f => ({ ...f, roundOffValue: e.target.value }))}

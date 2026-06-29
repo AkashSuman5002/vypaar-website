@@ -203,7 +203,7 @@ const SyncShare = () => {
         {/* Accountant invite */}
         <div className="mt-6 pt-5 border-t border-slate-100 dark:border-gray-700">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
-            <Mail className="w-4 h-4 text-slate-400" /> Invite an accountant
+            <Mail className="w-4 h-4 text-slate-400 dark:text-slate-500" /> Invite an accountant
           </h3>
           <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[180px]">

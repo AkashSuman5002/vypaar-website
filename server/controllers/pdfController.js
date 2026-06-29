@@ -384,6 +384,35 @@ const generateInvoicePDF = async (req, res) => {
     let tableTop = infoY + (isThermal ? 8 : 10);
     const hasTax = printPrefs.taxDetails !== false;
 
+    // Shared column geometry for the regular (non-thermal) item table. Headers AND data
+    // cells both read from this so they always line up, and every column is sized as a
+    // fraction of contentWidth so the rightmost column ends exactly at the right margin
+    // (never clipped off the page) on any paper size.
+    let cols = null;
+    if (!isThermal) {
+      const moneyW = Math.max(52, Math.round(contentWidth * 0.12));
+      const qtyColW = Math.max(40, Math.round(contentWidth * 0.085));
+      let x = marginLeft;
+      const add = (w, align) => { const c = { x, w, align }; x += w; return c; };
+      cols = hasTax
+        ? {
+            product: add(contentWidth - qtyColW - moneyW * 5, 'left'),
+            qty: add(qtyColW, 'right'),
+            rate: add(moneyW, 'right'),
+            taxable: add(moneyW, 'right'),
+            cgst: add(moneyW, 'right'),
+            sgst: add(moneyW, 'right'),
+            total: add(moneyW, 'right'),
+          }
+        : {
+            product: add(contentWidth - qtyColW - moneyW * 3, 'left'),
+            qty: add(qtyColW, 'right'),
+            rate: add(moneyW, 'right'),
+            amount: add(moneyW, 'right'),
+            total: add(moneyW, 'right'),
+          };
+    }
+
     if (isThermal) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor(accentColor);
       const colW = contentWidth;
@@ -396,21 +425,13 @@ const generateInvoicePDF = async (req, res) => {
       doc.text('Amount', marginLeft, tableTop + 10, { width: colW, align: 'right' });
       tableTop += 18;
     } else {
-      let colPositions, headers;
-      if (hasTax) {
-        colPositions = [marginLeft, marginLeft + 130, marginLeft + 210, marginLeft + 275, marginLeft + 340, marginLeft + 395, marginLeft + 450];
-        headers = ['Product', 'Qty', 'Rate', 'Taxable', 'CGST', 'SGST', 'Total'];
-      } else {
-        colPositions = [marginLeft, marginLeft + 180, marginLeft + 280, marginLeft + 360, marginLeft + 440];
-        headers = ['Product', 'Qty', 'Rate', 'Amount', 'Total'];
-      }
+      const headerCells = hasTax
+        ? [['Product', cols.product], ['Qty', cols.qty], ['Rate', cols.rate], ['Taxable', cols.taxable], ['CGST', cols.cgst], ['SGST', cols.sgst], ['Total', cols.total]]
+        : [['Product', cols.product], ['Qty', cols.qty], ['Rate', cols.rate], ['Amount', cols.amount], ['Total', cols.total]];
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000');
       doc.rect(marginLeft - 5, tableTop - 6, contentWidth + 10, 18).fill('#f3f4f6');
       doc.fill('#000000');
-      headers.forEach((h, i) => {
-        const w = colPositions[i + 1] ? colPositions[i + 1] - colPositions[i] - 5 : 80;
-        doc.text(h, colPositions[i], tableTop, { width: w, align: i === 0 ? 'left' : 'right' });
-      });
+      headerCells.forEach(([h, c]) => doc.text(h, c.x, tableTop, { width: c.w, align: c.align }));
       tableTop += 18;
     }
 
@@ -463,21 +484,23 @@ const generateInvoicePDF = async (req, res) => {
         const fullName = name + serialInfo;
         // Product name may wrap to several lines — measure its height so the row grows
         // to fit and the next row never overprints it.
-        const nameH = doc.heightOfString(fullName, { width: 118 });
-        doc.fillColor('#000000').text(fullName, marginLeft, y, { width: 118 });
+        const nameH = doc.heightOfString(fullName, { width: cols.product.w });
+        doc.fillColor('#000000').text(fullName, cols.product.x, y, { width: cols.product.w });
         const qtyText = String(item.quantity) + (showItemUOM && item.unit ? ` ${item.unit}` : '');
-        doc.text(qtyText, (hasTax ? marginLeft + 210 : marginLeft + 180), y, { width: 70, align: 'right' });
+        doc.text(qtyText, cols.qty.x, y, { width: cols.qty.w, align: 'right' });
         if (showAmount) {
-          doc.text(formatAmount(item.rate, printPrefs, currency), (hasTax ? marginLeft + 275 : marginLeft + 280), y, { width: 60, align: 'right' });
+          doc.text(formatAmount(item.rate, printPrefs, currency), cols.rate.x, y, { width: cols.rate.w, align: 'right' });
           if (item.discountType && item.discountType !== 'none' && item.discountAmount) {
-            doc.text(`-${formatAmount(item.discountAmount, printPrefs, currency)}`, (hasTax ? marginLeft + 275 : marginLeft + 280), y + 10, { width: 60, align: 'right' });
+            doc.text(`-${formatAmount(item.discountAmount, printPrefs, currency)}`, cols.rate.x, y + 10, { width: cols.rate.w, align: 'right' });
           }
           if (hasTax) {
-            doc.text(formatAmount(item.taxableAmount || item.amount, printPrefs, currency), marginLeft + 340, y, { width: 50, align: 'right' });
-            doc.text(formatAmount(item.cgst || 0, printPrefs, currency), marginLeft + 395, y, { width: 50, align: 'right' });
-            doc.text(formatAmount(item.sgst || 0, printPrefs, currency), marginLeft + 450, y, { width: 50, align: 'right' });
+            doc.text(formatAmount(item.taxableAmount || item.amount, printPrefs, currency), cols.taxable.x, y, { width: cols.taxable.w, align: 'right' });
+            doc.text(formatAmount(item.cgst || 0, printPrefs, currency), cols.cgst.x, y, { width: cols.cgst.w, align: 'right' });
+            doc.text(formatAmount(item.sgst || 0, printPrefs, currency), cols.sgst.x, y, { width: cols.sgst.w, align: 'right' });
+          } else {
+            doc.text(formatAmount(item.taxableAmount || item.amount, printPrefs, currency), cols.amount.x, y, { width: cols.amount.w, align: 'right' });
           }
-          doc.text(formatAmount(item.amount, printPrefs, currency), marginLeft + (hasTax ? 500 : 360), y, { width: 60, align: 'right' });
+          doc.text(formatAmount(item.amount, printPrefs, currency), cols.total.x, y, { width: cols.total.w, align: 'right' });
         }
         // The row's height is the tallest cell — usually the wrapped product-name column.
         let rowBottom = y + Math.max(nameH, 12);
@@ -848,6 +871,33 @@ const generatePurchasePDF = async (req, res) => {
     let tableTop = headerY + (isThermal ? 32 : 60);
     const hasTax = printPrefs.taxDetails !== false;
 
+    // Shared column geometry (see generateInvoicePDF) so headers and data line up and the
+    // last column never overflows the page on any paper size.
+    let cols = null;
+    if (!isThermal) {
+      const moneyW = Math.max(52, Math.round(contentWidth * 0.12));
+      const qtyColW = Math.max(40, Math.round(contentWidth * 0.085));
+      let x = marginLeft;
+      const add = (w, align) => { const c = { x, w, align }; x += w; return c; };
+      cols = hasTax
+        ? {
+            product: add(contentWidth - qtyColW - moneyW * 5, 'left'),
+            qty: add(qtyColW, 'right'),
+            rate: add(moneyW, 'right'),
+            taxable: add(moneyW, 'right'),
+            cgst: add(moneyW, 'right'),
+            sgst: add(moneyW, 'right'),
+            total: add(moneyW, 'right'),
+          }
+        : {
+            product: add(contentWidth - qtyColW - moneyW * 3, 'left'),
+            qty: add(qtyColW, 'right'),
+            rate: add(moneyW, 'right'),
+            amount: add(moneyW, 'right'),
+            total: add(moneyW, 'right'),
+          };
+    }
+
     if (isThermal) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor(accentColor);
       if (showItemSNo) doc.text('#', marginLeft, tableTop, { width: 15 });
@@ -856,21 +906,13 @@ const generatePurchasePDF = async (req, res) => {
       doc.text('Amount', marginLeft + contentWidth - 25, tableTop, { width: 25, align: 'right' });
       tableTop += 14;
     } else {
-      let colPositions, headers;
-      if (hasTax) {
-        colPositions = [marginLeft, marginLeft + 130, marginLeft + 210, marginLeft + 275, marginLeft + 340, marginLeft + 395, marginLeft + 450];
-        headers = ['Product', 'Qty', 'Rate', 'Taxable', 'CGST', 'SGST', 'Total'];
-      } else {
-        colPositions = [marginLeft, marginLeft + 180, marginLeft + 280, marginLeft + 360, marginLeft + 440];
-        headers = ['Product', 'Qty', 'Rate', 'Amount', 'Total'];
-      }
+      const headerCells = hasTax
+        ? [['Product', cols.product], ['Qty', cols.qty], ['Rate', cols.rate], ['Taxable', cols.taxable], ['CGST', cols.cgst], ['SGST', cols.sgst], ['Total', cols.total]]
+        : [['Product', cols.product], ['Qty', cols.qty], ['Rate', cols.rate], ['Amount', cols.amount], ['Total', cols.total]];
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000');
       doc.rect(marginLeft - 5, tableTop - 6, contentWidth + 10, 18).fill('#f3f4f6');
       doc.fill('#000000');
-      headers.forEach((h, i) => {
-        const w = colPositions[i + 1] ? colPositions[i + 1] - colPositions[i] - 5 : 80;
-        doc.text(h, colPositions[i], tableTop, { width: w, align: i === 0 ? 'left' : 'right' });
-      });
+      headerCells.forEach(([h, c]) => doc.text(h, c.x, tableTop, { width: c.w, align: c.align }));
       tableTop += 18;
     }
 
@@ -892,16 +934,20 @@ const generatePurchasePDF = async (req, res) => {
       } else {
         const name = item.productName + (item.gstRate ? ` (${item.gstRate}%)` : '');
         const serialInfo = (showSerialNo && item.serialNo) ? ` [${item.serialNo}]` : '';
-        doc.fillColor('#000000').text(name + serialInfo, marginLeft, y, { width: 120 });
-        doc.text(String(item.quantity), (hasTax ? marginLeft + 210 : marginLeft + 180), y, { width: 70, align: 'right' });
-        doc.text(formatAmount(item.rate, printPrefs, currency), (hasTax ? marginLeft + 275 : marginLeft + 280), y, { width: 60, align: 'right' });
+        const fullName = name + serialInfo;
+        const nameH = doc.heightOfString(fullName, { width: cols.product.w });
+        doc.fillColor('#000000').text(fullName, cols.product.x, y, { width: cols.product.w });
+        doc.text(String(item.quantity), cols.qty.x, y, { width: cols.qty.w, align: 'right' });
+        doc.text(formatAmount(item.rate, printPrefs, currency), cols.rate.x, y, { width: cols.rate.w, align: 'right' });
         if (hasTax) {
-          doc.text(formatAmount(item.taxableAmount || item.rate * item.quantity, printPrefs, currency), marginLeft + 340, y, { width: 60, align: 'right' });
-          doc.text(formatAmount(item.cgst || 0, printPrefs, currency), marginLeft + 395, y, { width: 50, align: 'right' });
-          doc.text(formatAmount(item.sgst || 0, printPrefs, currency), marginLeft + 450, y, { width: 50, align: 'right' });
+          doc.text(formatAmount(item.taxableAmount || item.rate * item.quantity, printPrefs, currency), cols.taxable.x, y, { width: cols.taxable.w, align: 'right' });
+          doc.text(formatAmount(item.cgst || 0, printPrefs, currency), cols.cgst.x, y, { width: cols.cgst.w, align: 'right' });
+          doc.text(formatAmount(item.sgst || 0, printPrefs, currency), cols.sgst.x, y, { width: cols.sgst.w, align: 'right' });
+        } else {
+          doc.text(formatAmount(item.taxableAmount || item.rate * item.quantity, printPrefs, currency), cols.amount.x, y, { width: cols.amount.w, align: 'right' });
         }
-        doc.text(formatAmount(item.amount, printPrefs, currency), marginLeft + (hasTax ? 500 : 360), y, { width: 60, align: 'right' });
-        y += 16;
+        doc.text(formatAmount(item.amount, printPrefs, currency), cols.total.x, y, { width: cols.total.w, align: 'right' });
+        y += Math.max(nameH, 12) + 4;
       }
     });
 
@@ -1077,9 +1123,16 @@ const generateInvoicePreviewPDF = async (req, res) => {
     const settings = settingsDoc ? settingsDoc.toObject() : { preferences: {} };
     settings.preferences = settings.preferences || {};
     // Merge the live (possibly unsaved) print preferences sent from the Settings tab so
-    // the preview reflects toggles before they are saved.
+    // the preview reflects toggles before they are saved. Accept them from the POST body
+    // (print object) or, for the GET <iframe> variant, from a JSON-encoded `prefs` query param.
+    let livePrint = null;
     if (req.body && req.body.print && typeof req.body.print === 'object') {
-      settings.preferences.print = { ...(settings.preferences.print || {}), ...req.body.print };
+      livePrint = req.body.print;
+    } else if (req.query && typeof req.query.prefs === 'string') {
+      try { livePrint = JSON.parse(req.query.prefs); } catch (_) { livePrint = null; }
+    }
+    if (livePrint && typeof livePrint === 'object') {
+      settings.preferences.print = { ...(settings.preferences.print || {}), ...livePrint };
     }
     req.previewMode = true;
     req.previewSale = buildSamplePreviewSale();

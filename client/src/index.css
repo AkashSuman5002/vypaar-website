@@ -17,6 +17,22 @@ body {
   @apply bg-gray-950 text-gray-100;
 }
 
+@layer base {
+  /* Remove the up/down spinner arrows from ALL number inputs app-wide. Amount/rate/
+     quantity fields in a billing app are typed, not stepped, and the arrows also let a
+     stray mouse-wheel scroll silently change a value. The .no-spinner utility below is
+     kept for backwards compatibility but is no longer required. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
+
 @layer utilities {
   /* Hide the up/down spinner arrows on number inputs (applied to quantity fields). */
   .no-spinner::-webkit-outer-spin-button,

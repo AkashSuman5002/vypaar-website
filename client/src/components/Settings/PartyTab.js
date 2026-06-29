@@ -83,11 +83,11 @@ const PartyTab = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Gift className="w-5 h-5 text-amber-500" />
-                  <span className="text-sm text-[#1F2937]">Loyalty Points</span>
+                  <span className="text-sm text-[#1F2937] dark:text-gray-100">Loyalty Points</span>
                 </div>
                 <button onClick={() => update('enableLoyalty', !settings.enableLoyalty)}
                   className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.enableLoyalty ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${settings.enableLoyalty ? 'translate-x-4' : 'translate-x-0'}`} />
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-gray-800 shadow-sm ring-0 transition duration-200 ease-in-out ${settings.enableLoyalty ? 'translate-x-4' : 'translate-x-0'}`} />
                 </button>
               </div>
               <p className="text-xs text-gray-400 mt-1">Reward customers with loyalty points on purchases</p>
@@ -98,14 +98,14 @@ const PartyTab = () => {
           <SettingsSection title="Additional Fields">
             <div className="py-2 space-y-3">
               {customFields.length === 0 && (
-                <p className="text-xs text-slate-400 italic">No custom fields defined. Add one below.</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 italic">No custom fields defined. Add one below.</p>
               )}
               {customFields.map(field => (
                 <div key={field.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-700/40 rounded-lg">
                   <span className="text-sm text-[#1F2937] dark:text-slate-200">{field.name}</span>
                   <div className="flex items-center gap-3">
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={field.showInPrint} onChange={() => toggleFieldPrint(field.id)} className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                      <input type="checkbox" checked={field.showInPrint} onChange={() => toggleFieldPrint(field.id)} className="w-3.5 h-3.5 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500" />
                       <span className="text-xs text-gray-500 dark:text-gray-400">Print</span>
                     </label>
                     <button type="button" onClick={() => removeCustomField(field.id)}

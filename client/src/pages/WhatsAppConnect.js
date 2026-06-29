@@ -210,13 +210,13 @@ const WhatsAppConnect = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Connect your WhatsApp to send invoices automatically</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setTab('connection')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'connection' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          <button onClick={() => setTab('connection')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'connection' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}>
             Connection
           </button>
-          <button onClick={() => setTab('send')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'send' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          <button onClick={() => setTab('send')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'send' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}>
             Send Message
           </button>
-          <button onClick={() => setTab('history')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          <button onClick={() => setTab('history')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}>
             History
           </button>
         </div>
@@ -260,7 +260,7 @@ const WhatsAppConnect = () => {
                     <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{status.name || 'WhatsApp Connected'}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Phone: {status.phoneNumber}</p>
                     {status.lastConnected && (
-                      <p className="text-xs text-slate-400 mt-1">Last connected: {new Date(status.lastConnected).toLocaleString()}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Last connected: {new Date(status.lastConnected).toLocaleString()}</p>
                     )}
                   </div>
                   <button onClick={handleDisconnect}
@@ -323,14 +323,14 @@ const WhatsAppConnect = () => {
           {!status.connected ? (
             <div className="text-center py-8">
               <WifiOff className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm text-slate-500">Connect to WhatsApp first from the Connection tab</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Connect to WhatsApp first from the Connection tab</p>
             </div>
           ) : (
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Recipient Phone</label>
                 <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-slate-400" />
+                  <Phone className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   <input type="tel" value={sendPhone}
                     onChange={e => {
                       const val = formatMobile(e.target.value);
@@ -348,7 +348,7 @@ const WhatsAppConnect = () => {
                 {phoneError ? (
                   <p className="text-xs text-red-500 mt-1">{phoneError}</p>
                 ) : (
-                  <p className="text-xs text-slate-400 mt-1">Enter 10-digit mobile number with country code (e.g., 919876543210)</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Enter 10-digit mobile number with country code (e.g., 919876543210)</p>
                 )}
               </div>
               <div>
@@ -385,13 +385,13 @@ const WhatsAppConnect = () => {
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 dark:border-gray-700/80 shadow-soft overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 dark:border-gray-700 flex items-center gap-2">
-              <History className="w-4 h-4 text-slate-400" />
+              <History className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Message History</span>
             </div>
             {messages.length === 0 ? (
               <div className="p-8 text-center">
                 <MessageCircle className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                <p className="text-sm text-slate-400">No messages sent yet</p>
+                <p className="text-sm text-slate-400 dark:text-slate-500">No messages sent yet</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-50 dark:divide-gray-700">
@@ -399,7 +399,7 @@ const WhatsAppConnect = () => {
                   <div key={msg._id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-gray-700/50">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <Phone className="w-3 h-3 text-slate-400" />
+                        <Phone className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                         <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{msg.to}</span>
                         <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
                           msg.status === 'sent' ? 'bg-emerald-100 text-emerald-700' :
@@ -412,7 +412,7 @@ const WhatsAppConnect = () => {
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">{msg.message}</p>
                     </div>
-                    <span className="text-xs text-slate-400 ml-4 flex-shrink-0">{new Date(msg.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 ml-4 flex-shrink-0">{new Date(msg.createdAt).toLocaleString()}</span>
                   </div>
                 ))}
               </div>

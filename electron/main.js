@@ -199,6 +199,10 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Enable Chromium's built-in PDF viewer (PDFium) so blob:/file: PDFs render inside
+      // <iframe>/<embed> — e.g. the Settings → Print "Live Invoice Preview". Without this
+      // Electron disables the PDF plugin and the preview iframe shows up blank.
+      plugins: true,
     },
   });
 

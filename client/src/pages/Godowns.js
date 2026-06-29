@@ -192,19 +192,19 @@ const Godowns = () => {
         <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg"><Warehouse size={20} className="text-blue-600" /></div>
-            <div><p className="text-sm text-gray-500">Total Godowns</p><p className="text-xl font-bold">{godowns.length}</p></div>
+            <div><p className="text-sm text-gray-500 dark:text-gray-400">Total Godowns</p><p className="text-xl font-bold">{godowns.length}</p></div>
           </div>
         </motion.div>
         <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg"><Building2 size={20} className="text-green-600" /></div>
-            <div><p className="text-sm text-gray-500">Active</p><p className="text-xl font-bold">{godowns.filter(g => g.isActive !== false).length}</p></div>
+            <div><p className="text-sm text-gray-500 dark:text-gray-400">Active</p><p className="text-xl font-bold">{godowns.filter(g => g.isActive !== false).length}</p></div>
           </div>
         </motion.div>
         <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-lg"><Package size={20} className="text-amber-600" /></div>
-            <div><p className="text-sm text-gray-500">Products in Selected</p><p className="text-xl font-bold">{expandedGodown ? godownProducts.length : '-'}</p></div>
+            <div><p className="text-sm text-gray-500 dark:text-gray-400">Products in Selected</p><p className="text-xl font-bold">{expandedGodown ? godownProducts.length : '-'}</p></div>
           </div>
         </motion.div>
       </div>
@@ -221,19 +221,19 @@ const Godowns = () => {
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th className="w-8 px-2 py-3"></th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Code</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">City</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Manager</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Phone</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Products</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Actions</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Code</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">City</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Manager</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Phone</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Products</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Status</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y dark:divide-gray-700">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-8 text-gray-500">No godowns found</td></tr>
+                <tr><td colSpan={9} className="text-center py-8 text-gray-500 dark:text-gray-400">No godowns found</td></tr>
               ) : filtered.map(g => (
                 <React.Fragment key={g._id}>
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer border-l-2 border-transparent hover:border-blue-400 transition-colors" onClick={() => toggleExpand(g._id)}>
@@ -290,18 +290,18 @@ const Godowns = () => {
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="bg-gray-100 dark:bg-gray-800">
-                                  <th className="text-left px-3 py-2 font-medium text-gray-500">Item Name</th>
-                                  <th className="text-left px-3 py-2 font-medium text-gray-500">SKU</th>
-                                  <th className="text-left px-3 py-2 font-medium text-gray-500">Stock</th>
-                                  <th className="text-left px-3 py-2 font-medium text-gray-500">Price</th>
-                                  <th className="text-left px-3 py-2 font-medium text-gray-500">Actions</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-gray-400">Item Name</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-gray-400">SKU</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-gray-400">Stock</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-gray-400">Price</th>
+                                  <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-gray-400">Actions</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y dark:divide-gray-700">
                                 {godownProducts.map(p => (
                                   <tr key={p._id} className="hover:bg-white dark:hover:bg-gray-800">
                                     <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-200">{p.name}</td>
-                                    <td className="px-3 py-2 text-gray-500">{p.sku || '-'}</td>
+                                    <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{p.sku || '-'}</td>
                                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{godownQty(p, g._id)} {p.unit || 'pcs'}</td>
                                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatCurrency(p.price || 0)}</td>
                                     <td className="px-3 py-2">

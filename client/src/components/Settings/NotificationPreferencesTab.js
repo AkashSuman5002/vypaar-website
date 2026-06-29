@@ -23,19 +23,19 @@ const NOTIFICATION_TYPES = [
 const ChannelSection = ({ title, icon: Icon, iconColor, enabled, onToggle, children }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition-colors">
         <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${enabled ? 'bg-blue-50' : 'bg-gray-100'}`}>
+          <div className={`p-2 rounded-lg ${enabled ? 'bg-blue-50' : 'bg-gray-100 dark:bg-gray-700'}`}>
             <Icon className={`w-4 h-4 ${enabled ? 'text-blue-600' : 'text-gray-400'}`} />
           </div>
-          <span className="text-sm font-medium text-gray-900">{title}</span>
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{title}</span>
           {enabled && <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full">Active</span>}
         </div>
         <div className="flex items-center gap-3">
           <div onClick={(e) => { e.stopPropagation(); onToggle(); }}
             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${enabled ? 'bg-blue-600' : 'bg-gray-300'}`}>
-            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform`}
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white dark:bg-gray-800 transition-transform`}
               style={{ transform: `translateX(${enabled ? '18px' : '2px'})` }} />
           </div>
           {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
@@ -102,15 +102,15 @@ const NotificationPreferencesTab = () => {
     <div className="p-6 space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-[#1F2937]">Notification Preferences</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Choose which notifications you want to receive and how</p>
+          <h1 className="text-lg font-bold text-[#1F2937] dark:text-gray-100">Notification Preferences</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Choose which notifications you want to receive and how</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setEnabled(!enabled)}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? 'bg-blue-600' : 'bg-gray-300'}`}>
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-gray-800 transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
-          <span className="text-sm font-medium text-gray-700">{enabled ? 'Enabled' : 'Disabled'}</span>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{enabled ? 'Enabled' : 'Disabled'}</span>
         </div>
       </div>
 
@@ -118,30 +118,30 @@ const NotificationPreferencesTab = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <div className="flex items-center gap-2">
             <button onClick={() => toggleAll(true)} className="px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors">Enable All</button>
-            <button onClick={() => toggleAll(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Disable All</button>
+            <button onClick={() => toggleAll(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Disable All</button>
             <span className="text-xs text-gray-400 ml-2">{Object.values(preferences).filter(Boolean).length} of {NOTIFICATION_TYPES.length} enabled</span>
           </div>
 
           {categories.map(category => (
-            <div key={category} className="border border-gray-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700">{category}</h3>
+            <div key={category} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{category}</h3>
               </div>
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
                 {NOTIFICATION_TYPES.filter(t => t.category === category).map(type => {
                   const Icon = type.icon;
                   const isEnabled = preferences[type.key] !== false;
                   return (
-                    <div key={type.key} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition-colors">
+                    <div key={type.key} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 dark:hover:bg-gray-700/40 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${isEnabled ? 'bg-blue-50' : 'bg-gray-100'}`}>
-                          <Icon className={`w-4 h-4 ${isEnabled ? 'text-blue-600' : 'text-gray-400'}`} />
+                        <div className={`p-2 rounded-lg ${isEnabled ? 'bg-blue-50 dark:bg-blue-500/20' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                          <Icon className={`w-4 h-4 ${isEnabled ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`} />
                         </div>
-                        <span className={`text-sm font-medium ${isEnabled ? 'text-gray-900' : 'text-gray-500'}`}>{type.label}</span>
+                        <span className={`text-sm font-medium ${isEnabled ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{type.label}</span>
                       </div>
                       <button onClick={() => togglePref(type.key)}
                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${isEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}>
-                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform`}
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white dark:bg-gray-800 transition-transform`}
                           style={{ transform: `translateX(${isEnabled ? '18px' : '2px'})` }} />
                       </button>
                     </div>
@@ -153,52 +153,52 @@ const NotificationPreferencesTab = () => {
 
           {/* Notification Channels */}
           <div className="pt-4">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">Notification Channels</h2>
+            <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider mb-3">Notification Channels</h2>
             <div className="space-y-3">
               <ChannelSection title="Email Notifications" icon={Mail} enabled={emailConfig.enabled} onToggle={() => setEmailConfig(p => ({ ...p, enabled: !p.enabled }))}>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">SMTP Host</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">SMTP Host</label>
                     <input type="text" value={emailConfig.smtpHost} onChange={e => setEmailConfig(p => ({ ...p, smtpHost: e.target.value }))}
-                      placeholder="smtp.gmail.com" className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      placeholder="smtp.gmail.com" className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">SMTP Port</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">SMTP Port</label>
                     <input type="text" value={emailConfig.smtpPort} onChange={e => setEmailConfig(p => ({ ...p, smtpPort: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">SMTP User</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">SMTP User</label>
                     <input type="text" value={emailConfig.smtpUser} onChange={e => setEmailConfig(p => ({ ...p, smtpUser: e.target.value }))}
-                      placeholder="your@email.com" className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      placeholder="your@email.com" className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">SMTP Password</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">SMTP Password</label>
                     <input type="password" value={emailConfig.smtpPass} onChange={e => setEmailConfig(p => ({ ...p, smtpPass: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">From Email</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">From Email</label>
                     <input type="email" value={emailConfig.fromEmail} onChange={e => setEmailConfig(p => ({ ...p, fromEmail: e.target.value }))}
-                      placeholder="noreply@business.com" className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      placeholder="noreply@business.com" className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                   <div className="flex items-center gap-4 pt-5">
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                       <input type="checkbox" checked={emailConfig.smtpSecure} onChange={e => setEmailConfig(p => ({ ...p, smtpSecure: e.target.checked }))}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                       SSL/TLS
                     </label>
                   </div>
                 </div>
                 <div className="pt-2 space-y-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={emailConfig.paymentReceived} onChange={e => setEmailConfig(p => ({ ...p, paymentReceived: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     Payment received emails
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={emailConfig.lowStock} onChange={e => setEmailConfig(p => ({ ...p, lowStock: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     Low stock alert emails
                   </label>
                 </div>
@@ -207,9 +207,9 @@ const NotificationPreferencesTab = () => {
               <ChannelSection title="SMS Notifications" icon={MessageSquare} enabled={smsConfig.enabled} onToggle={() => setSmsConfig(p => ({ ...p, enabled: !p.enabled }))}>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Provider</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Provider</label>
                     <select value={smsConfig.provider} onChange={e => setSmsConfig(p => ({ ...p, provider: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
                       <option value="generic">Generic HTTP API</option>
                       <option value="twilio">Twilio</option>
                       <option value="textlocal">TextLocal</option>
@@ -217,51 +217,51 @@ const NotificationPreferencesTab = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Sender ID</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Sender ID</label>
                     <input type="text" value={smsConfig.senderId} onChange={e => setSmsConfig(p => ({ ...p, senderId: e.target.value }))}
-                      placeholder="VYAPAR" className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      placeholder="VYAPAR" className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">API Key</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">API Key</label>
                     <input type="password" value={smsConfig.apiKey} onChange={e => setSmsConfig(p => ({ ...p, apiKey: e.target.value }))}
-                      placeholder="Enter your SMS API key" className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      placeholder="Enter your SMS API key" className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                   </div>
                 </div>
                 <div className="pt-2 space-y-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={smsConfig.paymentReceived} onChange={e => setSmsConfig(p => ({ ...p, paymentReceived: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     Payment received SMS
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={smsConfig.lowStock} onChange={e => setSmsConfig(p => ({ ...p, lowStock: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     Low stock alert SMS
                   </label>
                 </div>
               </ChannelSection>
 
               <ChannelSection title="Push Notifications" icon={Smartphone} enabled={pushConfig.enabled} onToggle={() => setPushConfig(p => ({ ...p, enabled: !p.enabled }))}>
-                <p className="text-xs text-gray-500 mb-2">Push notifications require VAPID keys configured in the server environment.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Push notifications require VAPID keys configured in the server environment.</p>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={pushConfig.paymentReceived} onChange={e => setPushConfig(p => ({ ...p, paymentReceived: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     Payment received push
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={pushConfig.lowStock} onChange={e => setPushConfig(p => ({ ...p, lowStock: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     Low stock alert push
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={pushConfig.newSale} onChange={e => setPushConfig(p => ({ ...p, newSale: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     New sale push
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input type="checkbox" checked={pushConfig.newPurchase} onChange={e => setPushConfig(p => ({ ...p, newPurchase: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                     New purchase push
                   </label>
                 </div>
@@ -286,9 +286,9 @@ const NotificationPreferencesTab = () => {
 
       {!enabled && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+          className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center">
           <BellOff className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Notifications are disabled. Enable them to receive alerts for business events.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Notifications are disabled. Enable them to receive alerts for business events.</p>
         </motion.div>
       )}
 

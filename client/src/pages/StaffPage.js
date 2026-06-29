@@ -148,7 +148,7 @@ const StaffPage = () => {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleExport}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-gray-700 transition-all"
           ><Download className="w-4 h-4" /> Export</button>
           <button onClick={() => { resetForm(); setShowModal(true); }}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
@@ -160,33 +160,33 @@ const StaffPage = () => {
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-blue-50 rounded-xl"><Users className="w-5 h-5 text-blue-600" /></div>
-            <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Staff</p><p className="text-xl font-bold text-slate-900 mt-1">{staffList.length}</p></div>
+            <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Staff</p><p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{staffList.length}</p></div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-50 rounded-xl"><TrendingUp className="w-5 h-5 text-emerald-600" /></div>
-            <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active</p><p className="text-xl font-bold text-slate-900 mt-1">{staffList.filter(s => s.isActive).length}</p></div>
+            <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Active</p><p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{staffList.filter(s => s.isActive).length}</p></div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-purple-50 rounded-xl"><DollarSign className="w-5 h-5 text-purple-600" /></div>
-            <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Roles</p><p className="text-xl font-bold text-slate-900 mt-1">{new Set(staffList.map(s => s.role)).size}</p></div>
+            <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Roles</p><p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{new Set(staffList.map(s => s.role)).size}</p></div>
           </div>
         </div>
       </motion.div>
 
       <motion.div variants={itemVariants} className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
           <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search by name, phone, or email..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
         <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
-          className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
         >
           <option value="">All Roles</option>
           {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
@@ -220,12 +220,12 @@ const StaffPage = () => {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-gray-700">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Phone</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Commission</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Phone</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Email</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Commission</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -244,20 +244,20 @@ const StaffPage = () => {
                         s.role === 'salesman' ? 'bg-blue-50 text-blue-700' :
                         s.role === 'manager' ? 'bg-purple-50 text-purple-700' :
                         s.role === 'accountant' ? 'bg-emerald-50 text-emerald-700' :
-                        'bg-slate-100 text-slate-700'
+                        'bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300'
                       }`}>{s.role}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{s.phone || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{s.email || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{s.commissionRate ? `${s.commissionRate}%` : '-'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{s.phone || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{s.email || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{s.commissionRate ? `${s.commissionRate}%` : '-'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => handleViewDetail(s)} title="View Details"
                           className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"
                         ><Eye className="w-4 h-4 text-blue-600" /></button>
                         <button onClick={() => handleEdit(s)} title="Edit"
-                          className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                        ><Pencil className="w-4 h-4 text-slate-500" /></button>
+                          className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-700/60 rounded-lg transition-colors"
+                        ><Pencil className="w-4 h-4 text-slate-500 dark:text-slate-400" /></button>
                         <button onClick={() => handleDelete(s._id)} title="Delete"
                           className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
                         ><Trash2 className="w-4 h-4 text-red-500" /></button>
@@ -284,31 +284,31 @@ const StaffPage = () => {
               <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-gray-700">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{editing ? 'Edit Staff' : 'Add Staff'}</h3>
                 <button onClick={() => setShowModal(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg">
-                  <X className="w-5 h-5 text-slate-500" />
+                  <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                 </button>
               </div>
               <div className="p-4 space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Name *</label>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Name *</label>
                   <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                    className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.name ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 focus:ring-blue-500/20'}`}
+                    className={`w-full px-3 py-2.5 bg-slate-50 dark:bg-gray-700 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.name ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-700 focus:ring-blue-500/20'}`}
                     placeholder="Enter name"
                   />
                   {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Phone</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Phone</label>
                     <input type="text" value={form.phone} onChange={e => setForm({ ...form, phone: formatMobile(e.target.value) })}
-                      className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 focus:ring-blue-500/20'}`}
+                      className={`w-full px-3 py-2.5 bg-slate-50 dark:bg-gray-700 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-700 focus:ring-blue-500/20'}`}
                       placeholder="Phone number"
                     />
                     {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Email</label>
                     <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.email ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 focus:ring-blue-500/20'}`}
+                      className={`w-full px-3 py-2.5 bg-slate-50 dark:bg-gray-700 border rounded-xl text-sm focus:outline-none focus:ring-2 ${errors.email ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-gray-700 focus:ring-blue-500/20'}`}
                       placeholder="Email"
                     />
                     {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
@@ -316,32 +316,32 @@ const StaffPage = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Role</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Role</label>
                     <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-3 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     >
                       {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Commission %</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Commission %</label>
                     <input type="number" value={form.commissionRate} onChange={e => setForm({ ...form, commissionRate: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-3 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       min="0" max="100"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Notes</label>
                   <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     rows={2} placeholder="Any notes..."
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-gray-700">
                 <button onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                  className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700/60 rounded-xl transition-all"
                 >Cancel</button>
                 <button onClick={handleSave}
                   className="px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all"
@@ -369,25 +369,25 @@ const StaffPage = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{selectedStaff.name}</h3>
-                    <p className="text-xs text-slate-500">{selectedStaff.role} {selectedStaff.phone && <span className="ml-2"><Phone className="w-3 h-3 inline" /> {selectedStaff.phone}</span>}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{selectedStaff.role} {selectedStaff.phone && <span className="ml-2"><Phone className="w-3 h-3 inline" /> {selectedStaff.phone}</span>}</p>
                   </div>
                 </div>
                 <button onClick={() => { setShowDetail(false); setStaffSales([]); }}
                   className="p-1 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg"
-                ><X className="w-5 h-5 text-slate-500" /></button>
+                ><X className="w-5 h-5 text-slate-500 dark:text-slate-400" /></button>
               </div>
               <div className="p-4">
                 <div className="flex gap-3 mb-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">From</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">From</label>
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="px-3 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">To</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">To</label>
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="px-3 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                   <button onClick={() => handleViewDetail(selectedStaff)}
@@ -414,24 +414,24 @@ const StaffPage = () => {
                   {detailLoading ? (
                     <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
                   ) : staffSales.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-8">No sales found for this staff member.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">No sales found for this staff member.</p>
                   ) : (
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500">Invoice</th>
-                          <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500">Customer</th>
-                          <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500">Date</th>
-                          <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500">Amount</th>
+                        <tr className="border-b border-slate-200 dark:border-gray-700">
+                          <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Invoice</th>
+                          <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Customer</th>
+                          <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Date</th>
+                          <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Amount</th>
                         </tr>
                       </thead>
                       <tbody>
                         {staffSales.map(sale => (
-                          <tr key={sale._id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="px-3 py-2 text-sm font-medium text-slate-900">{sale.invoiceNumber || '-'}</td>
-                            <td className="px-3 py-2 text-sm text-slate-600">{sale.customerName || 'Walk-in'}</td>
-                            <td className="px-3 py-2 text-sm text-slate-600">{formatDate(sale.date)}</td>
-                            <td className="px-3 py-2 text-sm font-medium text-slate-900 text-right">{formatCurrency(sale.total)}</td>
+                          <tr key={sale._id} className="border-b border-slate-100 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-700">
+                            <td className="px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100">{sale.invoiceNumber || '-'}</td>
+                            <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-400">{sale.customerName || 'Walk-in'}</td>
+                            <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-400">{formatDate(sale.date)}</td>
+                            <td className="px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 text-right">{formatCurrency(sale.total)}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -98,18 +98,18 @@ const Currencies = () => {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Code</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Symbol</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Exchange Rate</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Base</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Actions</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Code</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Symbol</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Exchange Rate</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Base</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Status</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y dark:divide-gray-700">
               {currencies.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-500">No currencies found. Click "Add Currency" to create one.</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-gray-500 dark:text-gray-400">No currencies found. Click "Add Currency" to create one.</td></tr>
               ) : currencies.map(c => (
                 <tr key={c._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{c.code}</td>

@@ -84,12 +84,12 @@ const CashInHand = () => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 p-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
       {adjustments.length === 0 ? (
         <>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-gray-900">Cash In Hand</h1>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Cash In Hand</h1>
               <span className="text-lg font-semibold" style={{ color: '#22C55E' }}>₹0</span>
             </div>
           </div>
@@ -120,7 +120,7 @@ const CashInHand = () => {
         <>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-gray-900">Cash In Hand</h1>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Cash In Hand</h1>
               <span className="text-lg font-semibold" style={{ color: '#22C55E' }}>₹{currentBalance.toLocaleString()}</span>
             </div>
             <button
@@ -133,10 +133,10 @@ const CashInHand = () => {
           </div>
           <div className="space-y-2">
             {adjustments.map((a) => (
-              <div key={a.id} className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between">
+              <div key={a.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{a.description || 'Cash adjustment'}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{a.date}</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{a.description || 'Cash adjustment'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{a.date}</p>
                 </div>
                 <span className={`text-sm font-semibold ${a.type === 'add' ? 'text-green-600' : 'text-red-500'}`}>
                   {a.type === 'add' ? '+' : '-'}₹{parseFloat(a.amount || 0).toLocaleString()}
@@ -152,21 +152,21 @@ const CashInHand = () => {
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <div
-                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${form.type === 'add' ? 'border-red-500' : 'border-gray-300'}`}
+                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${form.type === 'add' ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 onClick={() => setForm({ ...form, type: 'add', amount: '', updatedCash: '' })}
               >
                 {form.type === 'add' && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FF2D55' }} />}
               </div>
-              <span className="text-sm text-gray-700">Add Cash</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Add Cash</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <div
-                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${form.type === 'reduce' ? 'border-red-500' : 'border-gray-300'}`}
+                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${form.type === 'reduce' ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 onClick={() => setForm({ ...form, type: 'reduce', amount: '', updatedCash: '' })}
               >
                 {form.type === 'reduce' && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FF2D55' }} />}
               </div>
-              <span className="text-sm text-gray-700">Reduce Cash</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Reduce Cash</span>
             </label>
           </div>
 
@@ -176,12 +176,12 @@ const CashInHand = () => {
               value={form.amount}
               onChange={handleChange('amount')}
               placeholder="0"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </FormField>
 
           <FormField label="Updated Cash">
-            <div className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm text-gray-500 bg-gray-50">
+            <div className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700">
               {form.type === 'add' ? '+' : '-'}₹{parseFloat(form.updatedCash || 0).toLocaleString()}
             </div>
           </FormField>
@@ -191,7 +191,7 @@ const CashInHand = () => {
               type="date"
               value={form.date}
               onChange={handleChange('date')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </FormField>
 
@@ -201,14 +201,14 @@ const CashInHand = () => {
               value={form.description}
               onChange={handleChange('description')}
               placeholder="Enter description"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </FormField>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
               onClick={() => setModalOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Cancel
             </button>

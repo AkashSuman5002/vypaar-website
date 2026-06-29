@@ -223,7 +223,7 @@ const GeneralTab = () => {
                     Scan this QR code with Google Authenticator, Authy, or any TOTP app, then enter the 6-digit code to confirm.
                   </p>
                   <div className="flex justify-center">
-                    <img src={twoFAQr} alt="2FA QR code" className="w-40 h-40 border rounded bg-white p-1" />
+                    <img src={twoFAQr} alt="2FA QR code" className="w-40 h-40 border rounded bg-white dark:bg-gray-800 p-1" />
                   </div>
                   {twoFASecret && (
                     <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 break-all">
@@ -305,7 +305,7 @@ const GeneralTab = () => {
                     <img src={signaturePreview} alt="Signature" className="h-12 w-32 object-contain border rounded" />
                   )}
                   <label className="cursor-pointer">
-                    <span className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">
+                    <span className="inline-flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700">
                       {signaturePreview ? 'Change' : 'Upload'} Signature
                     </span>
                     <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
@@ -347,7 +347,7 @@ const GeneralTab = () => {
               <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
                 <Warehouse className="w-5 h-5 text-amber-600 mt-0.5" />
                 <div>
-                  <p className="text-sm text-[#1F2937]">Manage stock movement between multiple godowns or warehouses with transfer notes.</p>
+                  <p className="text-sm text-[#1F2937] dark:text-gray-100">Manage stock movement between multiple godowns or warehouses with transfer notes.</p>
                   <ToggleSwitch label="Enable Godown Management" checked={settings.enableGodown} onChange={v => update('enableGodown', v)} />
                 </div>
               </div>
@@ -366,7 +366,7 @@ const GeneralTab = () => {
                 className="w-24 px-3 py-1.5 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
             </div>
             <div className="flex items-center justify-between py-2.5">
-              <span className="text-sm text-[#1F2937]">Last Backup</span>
+              <span className="text-sm text-[#1F2937] dark:text-gray-100">Last Backup</span>
               <span className="text-sm text-gray-400">
                 {lastBackupDate
                   ? new Date(lastBackupDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -405,7 +405,7 @@ const GeneralTab = () => {
           </SettingsSection>
         </div>
       </div>
-      <div className="flex justify-end sticky bottom-0 bg-[#F5F6FA] py-3">
+      <div className="flex justify-end sticky bottom-0 bg-[#F5F6FA] dark:bg-gray-900 py-3">
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm">
           <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save General Settings'}

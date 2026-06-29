@@ -88,15 +88,15 @@ const GstFiling = () => {
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
       <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">GST Filing</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Prepare and track GST returns (GSTR-1, GSTR-2, GSTR-3B)</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">GST Filing</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Prepare and track GST returns (GSTR-1, GSTR-2, GSTR-3B)</p>
         </div>
       </motion.div>
 
-      <motion.div variants={itemVariants} className="flex items-center gap-1 bg-white rounded-xl border border-slate-200/80 p-1 w-fit">
+      <motion.div variants={itemVariants} className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-xl border border-slate-200/80 p-1 w-fit">
         {tabs.map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === tab.key ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === tab.key ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
             {tab.label}
           </button>
         ))}
@@ -105,11 +105,11 @@ const GstFiling = () => {
       {activeTab !== 'filings' && (
         <motion.div variants={itemVariants} className="flex items-center gap-3 flex-wrap">
           <select value={month} onChange={e => setMonth(parseInt(e.target.value))}
-            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+            className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
             {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
           <select value={year} onChange={e => setYear(parseInt(e.target.value))}
-            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+            className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
               <option key={y} value={y}>{y}</option>
             ))}
@@ -130,29 +130,29 @@ const GstFiling = () => {
       )}
 
       {activeTab === 'filings' ? (
-        <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
+        <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
           {filingsLoading ? (
             <div className="flex items-center justify-center h-40"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div>
           ) : filings.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <FileText className="w-12 h-12 text-slate-300 mb-3" />
-              <p className="text-sm text-slate-500">No filings yet. Fetch GSTR-1 data to create a filing record.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">No filings yet. Fetch GSTR-1 data to create a filing record.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-100">
+                  <tr className="border-b border-slate-100 dark:border-gray-700">
                     {['Period', 'Return Type', 'Status', 'Invoices', 'Taxable', 'Tax', 'Filed On', ''].map(h => (
-                      <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">{h}</th>
+                      <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filings.map(f => (
                     <tr key={f._id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-sm font-medium text-slate-900">{f.period}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{f.returnType}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-100">{f.period}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{f.returnType}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
                           f.status === 'filed' ? 'bg-emerald-50 text-emerald-700' :
@@ -161,10 +161,10 @@ const GstFiling = () => {
                           'bg-amber-50 text-amber-700'
                         }`}>{f.status}</span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{f.totalInvoices}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatCurrency(f.totalTaxable)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatCurrency(f.totalTax)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{f.filingDate ? formatDate(f.filingDate) : '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{f.totalInvoices}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatCurrency(f.totalTaxable)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatCurrency(f.totalTax)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{f.filingDate ? formatDate(f.filingDate) : '—'}</td>
                       <td className="px-4 py-3">
                         {f.status !== 'filed' && (
                           <button onClick={() => handleMarkFiled(f._id)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Mark Filed</button>
@@ -180,52 +180,52 @@ const GstFiling = () => {
       ) : currentData ? (
         <motion.div variants={itemVariants} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-blue-50 rounded-xl"><FileText className="w-5 h-5 text-blue-600" /></div>
-                <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Period</p><p className="text-lg font-bold text-slate-900 mt-1">{currentData.period}</p></div>
+                <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Period</p><p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-1">{currentData.period}</p></div>
               </div>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-indigo-50 rounded-xl"><FileSpreadsheet className="w-5 h-5 text-indigo-600" /></div>
-                <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Invoices</p><p className="text-lg font-bold text-slate-900 mt-1">{currentData.summary?.totalInvoices || 0}</p></div>
+                <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Invoices</p><p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-1">{currentData.summary?.totalInvoices || 0}</p></div>
               </div>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-emerald-50 rounded-xl"><CheckCircle className="w-5 h-5 text-emerald-600" /></div>
-                <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxable Value</p><p className="text-lg font-bold text-slate-900 mt-1">{formatCurrency(currentData.summary?.totalTaxable || 0)}</p></div>
+                <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Taxable Value</p><p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-1">{formatCurrency(currentData.summary?.totalTaxable || 0)}</p></div>
               </div>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-4 lg:p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-amber-50 rounded-xl"><FileText className="w-5 h-5 text-amber-600" /></div>
-                <div><p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Tax</p><p className="text-lg font-bold text-slate-900 mt-1">{formatCurrency((currentData.summary?.totalCGST || 0) + (currentData.summary?.totalSGST || 0) + (currentData.summary?.totalIGST || 0))}</p></div>
+                <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Tax</p><p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-1">{formatCurrency((currentData.summary?.totalCGST || 0) + (currentData.summary?.totalSGST || 0) + (currentData.summary?.totalIGST || 0))}</p></div>
               </div>
             </div>
           </div>
 
           {activeTab === 'gstr1' && gstr1Data?.b2b?.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h3 className="text-sm font-semibold text-slate-900">B2B Invoices ({gstr1Data.b2b.length})</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-gray-700">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">B2B Invoices ({gstr1Data.b2b.length})</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead><tr className="border-b border-slate-100">
+                  <thead><tr className="border-b border-slate-100 dark:border-gray-700">
                     {['GSTIN', 'Invoice No', 'Date', 'Value', 'Place of Supply'].map(h => (
-                      <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">{h}</th>
+                      <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
                     {gstr1Data.b2b.map((inv, i) => (
                       <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50">
-                        <td className="px-4 py-3 text-sm font-mono text-slate-900">{inv.gstin}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{inv.invoiceNumber}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{formatDate(inv.invoiceDate)}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{formatCurrency(inv.invoiceValue)}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{inv.placeOfSupply}</td>
+                        <td className="px-4 py-3 text-sm font-mono text-slate-900 dark:text-slate-100">{inv.gstin}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{inv.invoiceNumber}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(inv.invoiceDate)}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(inv.invoiceValue)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{inv.placeOfSupply}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -235,26 +235,26 @@ const GstFiling = () => {
           )}
 
           {activeTab === 'gstr1' && gstr1Data?.hsnSummary?.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h3 className="text-sm font-semibold text-slate-900">HSN Summary</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-gray-700">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">HSN Summary</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead><tr className="border-b border-slate-100">
+                  <thead><tr className="border-b border-slate-100 dark:border-gray-700">
                     {['HSN', 'Qty', 'Taxable', 'CGST', 'SGST', 'IGST'].map(h => (
-                      <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">{h}</th>
+                      <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
                     {gstr1Data.hsnSummary.map((hsn, i) => (
                       <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50">
-                        <td className="px-4 py-3 text-sm font-mono text-slate-900">{hsn.hsn}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{hsn.qty}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{formatCurrency(hsn.taxable)}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{formatCurrency(hsn.cgst)}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{formatCurrency(hsn.sgst)}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{formatCurrency(hsn.igst)}</td>
+                        <td className="px-4 py-3 text-sm font-mono text-slate-900 dark:text-slate-100">{hsn.hsn}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{hsn.qty}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(hsn.taxable)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatCurrency(hsn.cgst)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatCurrency(hsn.sgst)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatCurrency(hsn.igst)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -265,39 +265,39 @@ const GstFiling = () => {
 
           {activeTab === 'gstr3b' && gstr3bData && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-6">
                 <h3 className="text-sm font-semibold text-emerald-700 mb-4">Outward Supplies</h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">Taxable</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.taxable || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">CGST</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.cgst || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">SGST</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.sgst || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">IGST</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.igst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">Taxable</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.taxable || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">CGST</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.cgst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">SGST</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.sgst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">IGST</span><span className="font-semibold">{formatCurrency(gstr3bData.outward?.igst || 0)}</span></div>
                 </div>
               </div>
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-6">
                 <h3 className="text-sm font-semibold text-blue-700 mb-4">Inward Supplies (ITC)</h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">Taxable</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.taxable || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">CGST</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.cgst || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">SGST</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.sgst || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">IGST</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.igst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">Taxable</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.taxable || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">CGST</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.cgst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">SGST</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.sgst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">IGST</span><span className="font-semibold">{formatCurrency(gstr3bData.inward?.igst || 0)}</span></div>
                 </div>
               </div>
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-6">
                 <h3 className="text-sm font-semibold text-amber-700 mb-4">Net Tax Payable</h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">CGST</span><span className="font-semibold">{formatCurrency(gstr3bData.net?.cgst || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">SGST</span><span className="font-semibold">{formatCurrency(gstr3bData.net?.sgst || 0)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">IGST</span><span className="font-semibold">{formatCurrency(gstr3bData.net?.igst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">CGST</span><span className="font-semibold">{formatCurrency(gstr3bData.net?.cgst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">SGST</span><span className="font-semibold">{formatCurrency(gstr3bData.net?.sgst || 0)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">IGST</span><span className="font-semibold">{formatCurrency(gstr3bData.net?.igst || 0)}</span></div>
                 </div>
               </div>
             </div>
           )}
         </motion.div>
       ) : (
-        <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-12 text-center">
+        <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-12 text-center">
           <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Select a period and click "Fetch Data" to view GST return data.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Select a period and click "Fetch Data" to view GST return data.</p>
         </motion.div>
       )}
     </motion.div>

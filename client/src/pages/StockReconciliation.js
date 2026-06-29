@@ -183,8 +183,8 @@ const StockReconciliation = () => {
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
       <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Stock Reconciliation</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Compare system stock vs physical count and adjust</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Stock Reconciliation</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Compare system stock vs physical count and adjust</p>
         </div>
         <button onClick={() => { resetForm(); setShowModal(true); }}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
@@ -195,7 +195,7 @@ const StockReconciliation = () => {
         {['', 'draft', 'applied', 'cancelled'].map(s => (
           <button key={s} onClick={() => { setStatusFilter(s); setCurrentPage(1); }}
             className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
-              statusFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              statusFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-700'
             }`}>
             {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
@@ -203,13 +203,13 @@ const StockReconciliation = () => {
       </motion.div>
 
       {reconciliations.length === 0 ? (
-        <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-12 lg:p-16">
+        <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft p-12 lg:p-16">
           <div className="flex flex-col items-center text-center max-w-sm mx-auto">
             <div className="w-28 h-28 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full flex items-center justify-center mb-6">
               <ClipboardCheck className="w-12 h-12 text-blue-400" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 mb-2">No Reconciliations Yet</h2>
-            <p className="text-sm text-slate-500 mb-6">Start a physical stock count and reconcile with system stock.</p>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">No Reconciliations Yet</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Start a physical stock count and reconcile with system stock.</p>
             <button onClick={() => { resetForm(); setShowModal(true); }}
               className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
             ><Plus className="w-4 h-4" /> New Reconciliation</button>
@@ -217,24 +217,24 @@ const StockReconciliation = () => {
         </motion.div>
       ) : (
         <>
-          <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
+          <motion.div variants={itemVariants} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200/80 shadow-soft overflow-hidden">
             <div className="overflow-x-auto scrollbar-thin">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-100">
+                  <tr className="border-b border-slate-100 dark:border-gray-700">
                     {['#', 'Date', 'Reconciliation No', 'Godown', 'Items', 'Discrepancies', 'Status', ''].map(h => (
-                      <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 uppercase tracking-widest text-left">{h}</th>
+                      <th key={h} className="px-4 py-3.5 text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-left">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {reconciliations.map((r, idx) => (
                     <tr key={r._id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-sm text-slate-500">{(currentPage - 1) * pageSize + idx + 1}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatDate(r.date)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{(currentPage - 1) * pageSize + idx + 1}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(r.date)}</td>
                       <td className="px-4 py-3"><span className="text-sm font-semibold text-blue-600">{r.reconciliationNumber}</span></td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{r.godownName}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{r.totalItems}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{r.godownName}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{r.totalItems}</td>
                       <td className="px-4 py-3">
                         {r.totalDiscrepancies > 0 ? (
                           <span className="inline-flex items-center gap-1 text-sm text-amber-600 font-medium">
@@ -257,13 +257,13 @@ const StockReconciliation = () => {
                         <div className="flex items-center gap-1">
                           {r.status === 'draft' && (
                             <button onClick={() => handleApply(r._id)}
-                              className="p-1.5 rounded-lg hover:bg-emerald-50 text-slate-400 hover:text-emerald-500 transition-colors" title="Apply">
+                              className="p-1.5 rounded-lg hover:bg-emerald-50 text-slate-400 dark:text-slate-500 hover:text-emerald-500 transition-colors" title="Apply">
                               <CheckCircle className="w-3.5 h-3.5" />
                             </button>
                           )}
                           {r.status !== 'applied' && (
                             <button onClick={() => handleDelete(r._id)}
-                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Delete">
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors" title="Delete">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
@@ -276,18 +276,18 @@ const StockReconciliation = () => {
             </div>
           </motion.div>
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">{reconciliations.length} reconciliations</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{reconciliations.length} reconciliations</p>
             <div className="flex items-center gap-1">
               <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
-                className="p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 disabled:opacity-30 text-slate-500 dark:text-slate-400"
               ><ChevronLeft className="w-4 h-4" /></button>
               {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(p => (
                 <button key={p} onClick={() => setCurrentPage(p)}
-                  className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${currentPage === p ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                  className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${currentPage === p ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700/60'}`}
                 >{p}</button>
               ))}
               <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 disabled:opacity-30 text-slate-500 dark:text-slate-400"
               ><ChevronRight className="w-4 h-4" /></button>
             </div>
           </div>
@@ -305,25 +305,25 @@ const StockReconciliation = () => {
             <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
-              className="relative bg-white rounded-2xl shadow-elevated w-full max-w-4xl max-h-[90vh] overflow-hidden border border-slate-200/80"
+              className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-elevated w-full max-w-4xl max-h-[90vh] overflow-hidden border border-slate-200/80"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-gray-700">
                 <div className="flex items-center gap-3">
-                  <h3 className="text-base font-semibold text-slate-900">Stock Reconciliation</h3>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Stock Reconciliation</h3>
                   {discrepancyCount > 0 && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded-full">
                       <AlertTriangle className="w-3 h-3" /> {discrepancyCount} discrepancies
                     </span>
                   )}
                 </div>
-                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100"><X className="w-4.5 h-4.5 text-slate-500" /></button>
+                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60"><X className="w-4.5 h-4.5 text-slate-500 dark:text-slate-400" /></button>
               </div>
               <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Godown (Optional)</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Godown (Optional)</label>
                     <select value={form.godown} onChange={e => setForm({ ...form, godown: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
                       <option value="">All Godowns</option>
                       {godowns.map(g => (
                         <option key={g._id} value={g._id}>{g.name}</option>
@@ -331,31 +331,31 @@ const StockReconciliation = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Date</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Date</label>
                     <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">Notes</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Notes</label>
                   <input type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-                    placeholder="Optional notes" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    placeholder="Optional notes" className="w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                 </div>
 
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                     <input type="text" value={itemSearch} onChange={e => setItemSearch(e.target.value)}
                       placeholder="Search products to add..."
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                     {filteredItems.length > 0 && itemSearch && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
                         {filteredItems.slice(0, 10).map(item => (
                           <button key={item._id} onClick={() => { addItem(item); setItemSearch(''); }}
-                            className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors">
-                            <span className="text-slate-900">{item.name}</span>
-                            <span className="text-xs text-slate-400">Stock: {item.stock} {item.unit}</span>
+                            className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-left hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                            <span className="text-slate-900 dark:text-slate-100">{item.name}</span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">Stock: {item.stock} {item.unit}</span>
                           </button>
                         ))}
                       </div>
@@ -368,15 +368,15 @@ const StockReconciliation = () => {
                 </div>
 
                 {form.items.length > 0 && (
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="border border-slate-200 dark:border-gray-700 rounded-xl overflow-hidden">
                     <table className="w-full">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-4 py-2.5 text-left text-2xs font-semibold text-slate-500 uppercase">Item</th>
-                          <th className="px-4 py-2.5 text-center text-2xs font-semibold text-slate-500 uppercase">System</th>
-                          <th className="px-4 py-2.5 text-center text-2xs font-semibold text-slate-500 uppercase w-28">Counted</th>
-                          <th className="px-4 py-2.5 text-center text-2xs font-semibold text-slate-500 uppercase">Diff</th>
-                          <th className="px-4 py-2.5 text-left text-2xs font-semibold text-slate-500 uppercase">Reason</th>
+                        <tr className="bg-slate-50 dark:bg-gray-700 border-b border-slate-200 dark:border-gray-700">
+                          <th className="px-4 py-2.5 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Item</th>
+                          <th className="px-4 py-2.5 text-center text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase">System</th>
+                          <th className="px-4 py-2.5 text-center text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase w-28">Counted</th>
+                          <th className="px-4 py-2.5 text-center text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Diff</th>
+                          <th className="px-4 py-2.5 text-left text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Reason</th>
                           <th className="px-4 py-2.5 w-10"></th>
                         </tr>
                       </thead>
@@ -384,13 +384,13 @@ const StockReconciliation = () => {
                         {form.items.map((item, idx) => {
                           const diff = item.countedStock - item.systemStock;
                           return (
-                            <tr key={idx} className="border-b border-slate-100 last:border-0">
-                              <td className="px-4 py-2.5 text-sm font-medium text-slate-900">{item.productName}</td>
-                              <td className="px-4 py-2.5 text-sm text-center text-slate-500">{item.systemStock}</td>
+                            <tr key={idx} className="border-b border-slate-100 dark:border-gray-700 last:border-0">
+                              <td className="px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">{item.productName}</td>
+                              <td className="px-4 py-2.5 text-sm text-center text-slate-500 dark:text-slate-400">{item.systemStock}</td>
                               <td className="px-4 py-2.5">
                                 <input type="number" value={item.countedStock} onChange={e => updateCounted(idx, e.target.value)}
                                   onKeyDown={(e) => ['.', 'e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
-                                  min="0" step="1" className="no-spinner w-full px-3 py-1.5 text-sm text-center border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                                  min="0" step="1" className="no-spinner w-full px-3 py-1.5 text-sm text-center border border-slate-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                               </td>
                               <td className="px-4 py-2.5 text-center">
                                 {diff === 0 ? (
@@ -403,10 +403,10 @@ const StockReconciliation = () => {
                               </td>
                               <td className="px-4 py-2.5">
                                 <input type="text" value={item.reason} onChange={e => updateReason(idx, e.target.value)}
-                                  placeholder="Reason" className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                                  placeholder="Reason" className="w-full px-3 py-1.5 text-xs border border-slate-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                               </td>
                               <td className="px-4 py-2.5">
-                                <button onClick={() => removeItem(idx)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+                                <button onClick={() => removeItem(idx)} className="p-1 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </td>
@@ -418,8 +418,8 @@ const StockReconciliation = () => {
                   </div>
                 )}
               </div>
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
-                <button onClick={() => setShowModal(false)} className="px-4 py-2.5 text-sm font-medium text-slate-600 rounded-xl hover:bg-slate-100">Cancel</button>
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-gray-700 bg-slate-50/50">
+                <button onClick={() => setShowModal(false)} className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-gray-700/60">Cancel</button>
                 <button onClick={() => handleSave(false)} disabled={form.items.length === 0}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-600 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 shadow-sm disabled:opacity-50"
                 ><Save className="w-4 h-4" /> Save Draft</button>

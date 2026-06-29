@@ -32,7 +32,7 @@ const SearchOverlay = ({ query, setQuery, results, onSelect }) => (
     initial={{ opacity: 0, y: -10 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -10 }}
-    className="absolute top-2 left-4 right-4 z-50 bg-white rounded-lg border border-gray-200 shadow-lg overflow-hidden"
+    className="absolute top-2 left-4 right-4 z-50 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden"
   >
     <div className="p-3 border-b border-gray-100">
       <input
@@ -41,7 +41,7 @@ const SearchOverlay = ({ query, setQuery, results, onSelect }) => (
         onChange={e => setQuery(e.target.value)}
         placeholder="Search settings..."
         autoFocus
-        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
       />
     </div>
     <div className="p-2 max-h-60 overflow-y-auto">
@@ -51,7 +51,7 @@ const SearchOverlay = ({ query, setQuery, results, onSelect }) => (
         <button
           key={item.key}
           onClick={() => { onSelect(item.key); }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-[#1F2937] hover:bg-gray-50 rounded-md transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-[#1F2937] dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
         >
           <Search className="w-4 h-4 text-gray-400" />
           {item.label}
@@ -106,11 +106,11 @@ const Settings = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#F5F6FA] flex flex-col">
-      <div className="flex items-center justify-end px-6 py-3 bg-white border-b border-slate-200">
+    <div className="fixed inset-0 z-50 bg-[#F5F6FA] dark:bg-gray-900 flex flex-col">
+      <div className="flex items-center justify-end px-6 py-3 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700">
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-gray-700/60 rounded-lg transition-colors"
         >
           <X className="w-4 h-4" />
           Close

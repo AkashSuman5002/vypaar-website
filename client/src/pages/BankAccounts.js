@@ -204,10 +204,10 @@ const BankAccounts = () => {
 
   if (showForm) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 p-6">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-xl font-semibold text-gray-900 mb-6">{editing ? 'Edit Bank Account' : 'Add Bank Account'}</h1>
-          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">{editing ? 'Edit Bank Account' : 'Add Bank Account'}</h1>
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <FormField label="Account Display Name" required>
                 <input
@@ -215,7 +215,7 @@ const BankAccounts = () => {
                   value={form.displayName}
                   onChange={(e) => { setForm({ ...form, displayName: e.target.value }); setErrors(prev => ({ ...prev, displayName: '' })); }}
                   placeholder="Enter account display name"
-                  className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.displayName ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'}`}
+                  className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.displayName ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'}`}
                 />
                 {errors.displayName && <p className="mt-1 text-xs text-red-500">{errors.displayName}</p>}
               </FormField>
@@ -225,7 +225,7 @@ const BankAccounts = () => {
                   value={form.openingBalance}
                   onChange={handleChange('openingBalance')}
                   placeholder="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 />
               </FormField>
               <FormField label="As of Date">
@@ -233,7 +233,7 @@ const BankAccounts = () => {
                   type="date"
                   value={form.asOfDate}
                   onChange={handleChange('asOfDate')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 />
               </FormField>
             </div>
@@ -259,7 +259,7 @@ const BankAccounts = () => {
                       value={form.accountNumber}
                       onChange={(e) => { setForm({ ...form, accountNumber: formatBankAccount(e.target.value) }); setErrors(prev => ({ ...prev, accountNumber: '' })); }}
                       placeholder="Enter account number"
-                      className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.accountNumber ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'}`}
+                      className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.accountNumber ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'}`}
                     />
                     {errors.accountNumber && <p className="mt-1 text-xs text-red-500">{errors.accountNumber}</p>}
                   </FormField>
@@ -269,7 +269,7 @@ const BankAccounts = () => {
                       value={form.ifscCode}
                       onChange={(e) => { setForm({ ...form, ifscCode: formatIFSC(e.target.value) }); setErrors(prev => ({ ...prev, ifscCode: '' })); }}
                       placeholder="Enter IFSC code"
-                      className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.ifscCode ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'}`}
+                      className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${errors.ifscCode ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'}`}
                     />
                     {errors.ifscCode && <p className="mt-1 text-xs text-red-500">{errors.ifscCode}</p>}
                   </FormField>
@@ -279,7 +279,7 @@ const BankAccounts = () => {
                       value={form.upiId}
                       onChange={handleChange('upiId')}
                       placeholder="Enter UPI ID"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </FormField>
                   <FormField label="Bank Name">
@@ -288,7 +288,7 @@ const BankAccounts = () => {
                       value={form.bankName}
                       onChange={handleChange('bankName')}
                       placeholder="Enter bank name"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </FormField>
                   <FormField label="Account Holder Name">
@@ -297,7 +297,7 @@ const BankAccounts = () => {
                       value={form.accountHolderName}
                       onChange={handleChange('accountHolderName')}
                       placeholder="Enter account holder name"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </FormField>
                 </div>
@@ -305,35 +305,35 @@ const BankAccounts = () => {
                 <div className="space-y-3 pt-2">
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <div
-                      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${form.printQr ? 'bg-red-500 border-red-500' : 'border-gray-300'}`}
+                      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${form.printQr ? 'bg-red-500 border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                       onClick={() => setForm({ ...form, printQr: !form.printQr })}
                     >
                       {form.printQr && <Check className="w-3 h-3 text-white" />}
                     </div>
-                    <span className="text-sm text-gray-700">Print offline UPI QR on Invoices</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Print offline UPI QR on Invoices</span>
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <div
-                      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${form.printDetails ? 'bg-red-500 border-red-500' : 'border-gray-300'}`}
+                      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${form.printDetails ? 'bg-red-500 border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                       onClick={() => setForm({ ...form, printDetails: !form.printDetails })}
                     >
                       {form.printDetails && <Check className="w-3 h-3 text-white" />}
                     </div>
-                    <span className="text-sm text-gray-700">Print Bank Details on Invoices</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Print Bank Details on Invoices</span>
                   </label>
                 </div>
 
-                <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800">
                   <label className="flex items-start gap-2.5 cursor-pointer">
                     <div
-                      className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors ${form.acceptPayments ? 'bg-red-500 border-red-500' : 'border-gray-300'}`}
+                      className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors ${form.acceptPayments ? 'bg-red-500 border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                       onClick={() => setForm({ ...form, acceptPayments: !form.acceptPayments })}
                     >
                       {form.acceptPayments && <Check className="w-3 h-3 text-white" />}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-700 font-medium">Accept Payments Online</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Accept Payments Online</span>
                         <span className="text-[10px] font-semibold text-white bg-green-600 px-1.5 py-0.5 rounded">NEW</span>
                       </div>
                       <p className="text-xs text-gray-400 mt-1">Sell across India and accept payments from your customers directly to your bank account via payment gateway.</p>
@@ -347,7 +347,7 @@ const BankAccounts = () => {
           <div className="flex items-center justify-end gap-3 mt-6">
             <button
               onClick={() => { setShowForm(false); setExpanded(false); }}
-              className="px-5 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              className="px-5 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Cancel
             </button>
@@ -364,10 +364,10 @@ const BankAccounts = () => {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 p-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-semibold text-gray-900">Bank Accounts</h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Bank Accounts</h1>
           <button
             onClick={() => { setEditing(null); setShowForm(true); }}
             className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold rounded-md transition-colors shadow-sm"
@@ -376,15 +376,15 @@ const BankAccounts = () => {
           </button>
         </div>
         {totalBankBalance !== 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
                   <Landmark className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-medium">Total Bank Balance</p>
-                  <p className="text-lg font-bold text-gray-900">{formatCurrency(totalBankBalance)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total Bank Balance</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(totalBankBalance)}</p>
                 </div>
               </div>
             </div>
@@ -392,16 +392,16 @@ const BankAccounts = () => {
         )}
         <div className="space-y-3">
           {accounts.map((acc) => (
-            <div key={acc.id} className="bg-white rounded-lg border border-gray-200 p-4">
+            <div key={acc.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">{acc.displayName}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{acc.bankName || 'Bank Account'}</p>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{acc.displayName}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{acc.bankName || 'Bank Account'}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900">{formatCurrency(acc.openingBalance || 0)}</span>
-                  <button onClick={() => handleEdit(acc)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => handleDelete(acc.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(acc.openingBalance || 0)}</span>
+                  <button onClick={() => handleEdit(acc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700/60 text-slate-400 dark:text-slate-500 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => handleDelete(acc.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
             </div>

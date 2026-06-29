@@ -277,8 +277,8 @@ const ExportData = () => {
                     { value: 'zip', label: 'ZIP (.zip)', icon: Archive },
                   ].map(f => (
                     <button key={f.value} onClick={() => setExportFormat(f.value)} className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${exportFormat === f.value ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' : 'border-slate-200 dark:border-gray-700 hover:border-emerald-200'}`}>
-                      <f.icon className={`w-6 h-6 ${exportFormat === f.value ? 'text-emerald-600' : 'text-slate-400'}`} />
-                      <span className={`text-xs font-medium ${exportFormat === f.value ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500'}`}>{f.label}</span>
+                      <f.icon className={`w-6 h-6 ${exportFormat === f.value ? 'text-emerald-600' : 'text-slate-400 dark:text-slate-500'}`} />
+                      <span className={`text-xs font-medium ${exportFormat === f.value ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}`}>{f.label}</span>
                     </button>
                   ))}
                 </div>
@@ -288,7 +288,7 @@ const ExportData = () => {
                 <div className="flex flex-wrap gap-2">
                   {selectedModules.map(m => <span key={m} className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs rounded-lg">{m}</span>)}
                 </div>
-                <p className="text-xs text-slate-400 mt-2">Total: {selectedModules.length} modules | Format: {exportFormat.toUpperCase()}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">Total: {selectedModules.length} modules | Format: {exportFormat.toUpperCase()}</p>
               </div>
               <div className="flex justify-between">
                 <button onClick={() => setStep(0)} className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-400 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700"><ArrowLeft className="w-4 h-4" /> Back</button>
@@ -411,12 +411,12 @@ const ExportData = () => {
                   ].map(item => (
                     <div key={item.key} className="bg-white dark:bg-gray-700 rounded-lg p-3 flex items-center gap-3">
                       <span className="text-lg">{item.icon}</span>
-                      <div><p className="text-sm font-medium text-slate-700 dark:text-slate-300">{item.label}</p><p className="text-xs text-slate-400">{(item.count || 0).toLocaleString()} records</p></div>
+                      <div><p className="text-sm font-medium text-slate-700 dark:text-slate-300">{item.label}</p><p className="text-xs text-slate-400 dark:text-slate-500">{(item.count || 0).toLocaleString()} records</p></div>
                     </div>
                   ))}
                 </div>
                 <div className="border-t border-slate-200 dark:border-gray-600 pt-3 mt-3 text-center">
-                  <p className="text-xs text-slate-400">Backup format: ZIP containing JSON files + metadata</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">Backup format: ZIP containing JSON files + metadata</p>
                 </div>
               </div>
               <div className="flex justify-between">
@@ -513,8 +513,8 @@ const ExportData = () => {
                     { value: 'csv', label: 'CSV', icon: Table2 },
                   ].map(f => (
                     <button key={f.value} onClick={() => setReportFormat(f.value)} className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${reportFormat === f.value ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/10' : 'border-slate-200 dark:border-gray-700 hover:border-amber-200'}`}>
-                      <f.icon className={`w-6 h-6 ${reportFormat === f.value ? 'text-amber-600' : 'text-slate-400'}`} />
-                      <span className={`text-xs font-medium ${reportFormat === f.value ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500'}`}>{f.label}</span>
+                      <f.icon className={`w-6 h-6 ${reportFormat === f.value ? 'text-amber-600' : 'text-slate-400 dark:text-slate-500'}`} />
+                      <span className={`text-xs font-medium ${reportFormat === f.value ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}`}>{f.label}</span>
                     </button>
                   ))}
                 </div>

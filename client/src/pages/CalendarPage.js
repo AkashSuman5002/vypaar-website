@@ -132,8 +132,8 @@ const CalendarPage = () => {
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-blue-50 rounded-xl"><ShoppingCart className="w-5 h-5 text-blue-600" /></div>
             <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Sales</p>
-              <p className="text-xl font-bold text-slate-900 mt-1">{formatCurrency(totalSales)}</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sales</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{formatCurrency(totalSales)}</p>
             </div>
           </div>
         </div>
@@ -141,8 +141,8 @@ const CalendarPage = () => {
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-orange-50 rounded-xl"><ClipboardList className="w-5 h-5 text-orange-600" /></div>
             <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Purchases</p>
-              <p className="text-xl font-bold text-slate-900 mt-1">{formatCurrency(totalPurchases)}</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Purchases</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{formatCurrency(totalPurchases)}</p>
             </div>
           </div>
         </div>
@@ -150,8 +150,8 @@ const CalendarPage = () => {
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-red-50 rounded-xl"><DollarSign className="w-5 h-5 text-red-600" /></div>
             <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Expenses</p>
-              <p className="text-xl font-bold text-slate-900 mt-1">{formatCurrency(totalExpenses)}</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Expenses</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{formatCurrency(totalExpenses)}</p>
             </div>
           </div>
         </div>
@@ -163,19 +163,19 @@ const CalendarPage = () => {
         <div className="flex items-center justify-between mb-6">
           <button onClick={prevMonth}
             className="p-2 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
-          ><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
+          ><ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" /></button>
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
             {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
           </h2>
           <button onClick={nextMonth}
             className="p-2 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
-          ><ChevronRight className="w-5 h-5 text-slate-600" /></button>
+          ><ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-400" /></button>
         </div>
 
         <div className="grid grid-cols-7 gap-px bg-slate-200 dark:bg-gray-700 rounded-xl overflow-hidden">
           {WEEKDAYS.map(day => (
             <div key={day} className="bg-slate-50 dark:bg-gray-800 p-2 text-center">
-              <span className="text-xs font-semibold text-slate-500 uppercase">{day}</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">{day}</span>
             </div>
           ))}
           {days.map((day, idx) => {
@@ -223,9 +223,9 @@ const CalendarPage = () => {
         </div>
 
         <div className="flex items-center gap-6 mt-4 pt-4 border-t border-slate-200 dark:border-gray-700">
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500" /><span className="text-xs text-slate-600">Sales</span></div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-500" /><span className="text-xs text-slate-600">Purchases</span></div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-500" /><span className="text-xs text-slate-600">Expenses</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500" /><span className="text-xs text-slate-600 dark:text-slate-400">Sales</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-500" /><span className="text-xs text-slate-600 dark:text-slate-400">Purchases</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-500" /><span className="text-xs text-slate-600 dark:text-slate-400">Expenses</span></div>
         </div>
       </motion.div>
 
@@ -244,7 +244,7 @@ const CalendarPage = () => {
                   {new Date(year, month, selectedDay.day).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                 </h3>
                 <button onClick={() => setShowModal(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg">
-                  <X className="w-5 h-5 text-slate-500" />
+                  <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                 </button>
               </div>
               <div className="p-4 overflow-y-auto max-h-[60vh] space-y-4">
@@ -257,8 +257,8 @@ const CalendarPage = () => {
                       {selectedDay.sales.map(s => (
                         <div key={s._id} className="flex items-center justify-between p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{s.invoiceNumber || s._id?.slice(-6)}</p>
-                            <p className="text-xs text-slate-500">{s.customerName || 'Walk-in'}</p>
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{s.invoiceNumber || s._id?.slice(-6)}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{s.customerName || 'Walk-in'}</p>
                           </div>
                           <span className="text-sm font-bold text-blue-700">{formatCurrency(s.totalAmount)}</span>
                         </div>
@@ -275,8 +275,8 @@ const CalendarPage = () => {
                       {selectedDay.purchases.map(p => (
                         <div key={p._id} className="flex items-center justify-between p-2.5 bg-orange-50 dark:bg-orange-900/20 rounded-xl">
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{p.billNumber || p._id?.slice(-6)}</p>
-                            <p className="text-xs text-slate-500">{p.supplierName || 'Supplier'}</p>
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{p.billNumber || p._id?.slice(-6)}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{p.supplierName || 'Supplier'}</p>
                           </div>
                           <span className="text-sm font-bold text-orange-700">{formatCurrency(p.totalAmount)}</span>
                         </div>
@@ -293,8 +293,8 @@ const CalendarPage = () => {
                       {selectedDay.expenses.map(e => (
                         <div key={e._id} className="flex items-center justify-between p-2.5 bg-red-50 dark:bg-red-900/20 rounded-xl">
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{e.category || 'Expense'}</p>
-                            <p className="text-xs text-slate-500">{e.description || e.expenseNumber}</p>
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{e.category || 'Expense'}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{e.description || e.expenseNumber}</p>
                           </div>
                           <span className="text-sm font-bold text-red-700">{formatCurrency(e.totalAmount)}</span>
                         </div>
@@ -303,7 +303,7 @@ const CalendarPage = () => {
                   </div>
                 )}
                 {selectedDay.sales.length === 0 && selectedDay.purchases.length === 0 && selectedDay.expenses.length === 0 && (
-                  <p className="text-sm text-slate-500 text-center py-4">No transactions on this day.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No transactions on this day.</p>
                 )}
               </div>
             </motion.div>
