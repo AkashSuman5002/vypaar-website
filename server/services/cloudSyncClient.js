@@ -143,8 +143,18 @@ const applyToLocal = async (collections) => {
       // an endless echo loop ({pulled:N,pushed:N} every cycle). With timestamps
       // off here, an unchanged doc has remote === local on the next pass and is
       // skipped, so sync converges to {pulled:0,pushed:0}.
-      await Model.replaceOne({ _id: id }, clean, { upsert: true, timestamps: false });
-      applied++;
+      try {
+        await Model.replaceOne({ _id: id }, clean, { upsert: true, timestamps: false });
+        applied++;
+      } catch (e) {
+        // A unique-key clash (e.g. a chart-of-accounts `code` that already exists locally
+        // under a DIFFERENT _id because local and cloud were seeded independently) must NOT
+        // abort the entire sync pass — skip just this one record so everything else
+        // (sales, customers, items, payments…) keeps syncing. The conflicting seed doc is
+        // already present locally anyway, so skipping it loses nothing.
+        if (e && (e.code === 11000 || e.code === 11001)) continue;
+        throw e;
+      }
     }
   }
   // Apply deletions AFTER all upserts (so a freshly-pulled doc isn't deleted then
