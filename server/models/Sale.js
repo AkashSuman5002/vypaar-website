@@ -30,7 +30,7 @@ const saleItemSchema = new mongoose.Schema({
 }, { _id: true });
 
 const salePaymentSchema = new mongoose.Schema({
-  mode: { type: String, enum: ['cash', 'upi', 'bank', 'card', 'cheque', 'credit'], required: true },
+  mode: { type: String, enum: ['cash', 'upi', 'bank', 'card', 'cheque', 'credit', 'razorpay'], required: true },
   amount: { type: Number, required: true, min: 0 },
   date: { type: Date, default: Date.now },
   transactionNo: { type: String, trim: true },

@@ -211,6 +211,37 @@ const disconnectSession = async (userId) => {
   return { status: 'disconnected' };
 };
 
+// Re-establish previously-linked sessions after a backend restart. Baileys persists the
+// login to disk (multi-file auth state), so on boot we silently reconnect every account
+// that was 'connected' before — using the saved credentials, NO new QR scan — so the
+// WhatsApp link survives app restarts exactly like a real desktop client. Without this,
+// the in-memory socket map starts empty on each launch and auto-messages fail with
+// "WhatsApp not connected" even though the DB still says connected.
+const restoreSessions = async () => {
+  try {
+    const linked = await WhatsAppSession.find({ status: 'connected' });
+    if (!linked.length) return;
+    console.log(`[WhatsApp] Restoring ${linked.length} saved session(s) after restart...`);
+    for (const s of linked) {
+      const uid = String(s.user);
+      const dir = path.join(WHATSAPP_SESSIONS_DIR, uid);
+      // Only reconnect if the saved credentials actually exist on disk; otherwise mark
+      // disconnected so the UI prompts the user to re-link instead of looking "connected".
+      if (!fs.existsSync(path.join(dir, 'creds.json'))) {
+        await WhatsAppSession.updateOne({ user: uid }, { status: 'disconnected' }).catch(() => {});
+        continue;
+      }
+      try {
+        await startSession(uid, () => {}, () => {});
+      } catch (err) {
+        console.error(`[WhatsApp] Restore failed for user ${uid}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[WhatsApp] restoreSessions error:', err.message);
+  }
+};
+
 const getConnectionStatus = async (userId) => {
   const uid = String(userId);
   const session = await WhatsAppSession.findOne({ user: uid });
@@ -226,5 +257,5 @@ const getConnectionStatus = async (userId) => {
 
 module.exports = {
   startSession, getSession, sendMessage, sendDocument,
-  disconnectSession, getConnectionStatus, sessions,
+  disconnectSession, getConnectionStatus, restoreSessions, sessions,
 };

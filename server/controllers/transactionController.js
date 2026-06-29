@@ -11,7 +11,7 @@ const getTransactions = async (req, res) => {
     if (dateFrom || dateTo) {
       filter.date = {};
       if (dateFrom) filter.date.$gte = new Date(dateFrom);
-      if (dateTo) filter.date.$lte = new Date(dateTo + 'T23:59:59.999Z');
+      if (dateTo) filter.date.$lte = (dateTo.includes('T') ? new Date(dateTo) : new Date(dateTo + 'T23:59:59.999Z'));
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);

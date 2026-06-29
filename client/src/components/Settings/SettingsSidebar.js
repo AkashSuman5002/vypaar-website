@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Settings, FileText, Printer, Percent, MessageSquare, Users, Package, Bell, BookOpen, BellRing } from 'lucide-react';
+import { Search, Settings, FileText, Printer, Percent, MessageSquare, Users, Package, Bell, BookOpen, BellRing, CreditCard } from 'lucide-react';
 
 const MENU_ITEMS = [
   { key: 'general', label: 'General', icon: Settings },
@@ -7,6 +7,7 @@ const MENU_ITEMS = [
   { key: 'print', label: 'Print', icon: Printer },
   { key: 'taxes', label: 'Taxes & GST', icon: Percent },
   { key: 'transactionMessage', label: 'Transaction Message', icon: MessageSquare },
+  { key: 'payments', label: 'Payments', icon: CreditCard },
   { key: 'party', label: 'Party', icon: Users },
   { key: 'item', label: 'Item', icon: Package },
   { key: 'notifications', label: 'Notifications', icon: BellRing },

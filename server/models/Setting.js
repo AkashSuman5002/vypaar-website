@@ -185,6 +185,14 @@ const preferencesSchema = new mongoose.Schema({
     messageTemplate: { type: String, default: '' },
     templates: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
+  payments: {
+    razorpay: {
+      enabled: { type: Boolean, default: false },
+      keyId: { type: String, default: '' },
+      keySecret: { type: String, default: '' },
+      webhookSecret: { type: String, default: '' },
+    },
+  },
   party: {
     partyGrouping: { type: Boolean, default: true },
     shippingAddress: { type: Boolean, default: true },
@@ -333,6 +341,8 @@ const SECRET_PATHS = [
   'preferences.notifications.sms.apiKey',
   'preferences.notifications.sms.authToken',
   'preferences.notifications.sms.accountSid',
+  'preferences.payments.razorpay.keySecret',
+  'preferences.payments.razorpay.webhookSecret',
 ];
 
 settingSchema.pre('save', function encryptNotificationSecrets(next) {

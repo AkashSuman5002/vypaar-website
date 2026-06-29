@@ -8,6 +8,7 @@ import TransactionTab from '../components/Settings/TransactionTab';
 import PrintTab from '../components/Settings/PrintTab';
 import TaxesTab from '../components/Settings/TaxesTab';
 import TransactionMessageTab from '../components/Settings/TransactionMessageTab';
+import PaymentSettingsTab from '../components/Settings/PaymentSettingsTab';
 import PartyTab from '../components/Settings/PartyTab';
 import ItemTab from '../components/Settings/ItemTab';
 import NotificationPreferencesTab from '../components/Settings/NotificationPreferencesTab';
@@ -20,6 +21,7 @@ const TABS = [
   { key: 'print', label: 'Print', component: PrintTab },
   { key: 'taxes', label: 'Taxes & GST', component: TaxesTab },
   { key: 'transactionMessage', label: 'Transaction Message', component: TransactionMessageTab },
+  { key: 'payments', label: 'Payments', component: PaymentSettingsTab },
   { key: 'party', label: 'Party', component: PartyTab },
   { key: 'item', label: 'Item', component: ItemTab },
   { key: 'notifications', label: 'Notifications', component: NotificationPreferencesTab },

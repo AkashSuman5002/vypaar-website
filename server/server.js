@@ -103,6 +103,11 @@ app.use(helmet({
     },
   },
 }));
+// Razorpay webhook — must read the RAW body (for signature verification) and bypass auth/
+// CSRF (it's called server-to-server by Razorpay, not the user). Registered BEFORE the JSON
+// body parser and the /api auth middleware so the raw body survives and no token is required.
+app.post('/api/payments/webhook', express.raw({ type: '*/*' }), require('./controllers/paymentLinkController').webhook);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
@@ -213,6 +218,7 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/utilities', require('./routes/utilityRoutes'));
 app.use('/api/support', require('./routes/supportRoutes'));
 app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes'));
 app.use('/api/service-reminders', require('./routes/serviceReminderRoutes'));
 app.use('/api/manufacturing', require('./routes/manufacturingRoutes'));
@@ -368,6 +374,11 @@ startRecurringService();
 startAutoBackup();
 startPaymentReminder();
 startServiceReminderCheck();
+// Reconnect any previously-linked WhatsApp accounts from their saved login so the
+// connection (and transaction auto-messages) survive backend/app restarts.
+require('./services/whatsappService').restoreSessions().catch(() => {});
+// Auto-reconcile Razorpay payment links (mark invoices paid when customers pay).
+require('./controllers/paymentLinkController').startReconciliationPoller();
 startSync(); // legacy direct-to-Atlas sync (no-op unless CLOUD_MONGODB_URI is set)
 cloudSyncClient.startSyncLoop(); // secure HTTP cloud sync (no-op unless CLOUD_API_URL is set)
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { saleAPI, settingAPI, whatsappAPI, BASE_URL, mediaUrl } from '../services/api';
+import { saleAPI, settingAPI, whatsappAPI, paymentAPI, BASE_URL, mediaUrl } from '../services/api';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 import Modal from '../components/UI/Modal';
 import Badge from '../components/UI/Badge';
@@ -26,6 +26,11 @@ const ViewSale = () => {
   const [showActions, setShowActions] = useState(false);
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState('cash');
+  const [payLink, setPayLink] = useState(null);
+  const [payQr, setPayQr] = useState(null);
+  const [genLink, setGenLink] = useState(false);
+  const [onlinePayStatus, setOnlinePayStatus] = useState(null);
+  const [refunding, setRefunding] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -41,6 +46,26 @@ const ViewSale = () => {
     };
     load();
   }, [id]);
+
+  // Online (Razorpay) payment status for this invoice — drives the status badge + Refund button.
+  useEffect(() => {
+    if (!id) return;
+    paymentAPI.getStatus(id).then(({ data }) => setOnlinePayStatus(data)).catch(() => {});
+  }, [id, sale?.paymentStatus]);
+
+  const handleRefund = async () => {
+    if (!window.confirm('Refund this online payment back to the customer? This reverses the invoice and accounting.')) return;
+    setRefunding(true);
+    try {
+      const { data } = await paymentAPI.refund(sale._id);
+      toast.success(`Refunded ₹${data.amount}`);
+      const { data: fresh } = await saleAPI.getById(sale._id);
+      setSale(fresh);
+      paymentAPI.getStatus(sale._id).then(({ data: st }) => setOnlinePayStatus(st)).catch(() => {});
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Refund failed');
+    } finally { setRefunding(false); }
+  };
 
   // Print the SAME settings-driven PDF that the Print Settings preview shows (via
   // pdfController), so the printout matches the configured print settings exactly —
@@ -128,6 +153,34 @@ const ViewSale = () => {
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
               <Banknote className="w-4 h-4" /> Receive
             </button>
+          )}
+          {sale.paymentStatus !== 'paid' && sale.type === 'invoice' && (
+            <button disabled={genLink} onClick={async () => {
+              setGenLink(true);
+              try {
+                const { data } = await paymentAPI.createLink(sale._id);
+                setPayLink(data.shortUrl);
+                setPayQr(data.qr || null);
+                try { await navigator.clipboard.writeText(data.shortUrl); } catch {}
+                toast.success('Payment link ready — copied to clipboard');
+              } catch (e) {
+                toast.error(e.response?.data?.message || 'Could not create payment link');
+              } finally { setGenLink(false); }
+            }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm">
+              <QrCode className="w-4 h-4" /> {genLink ? 'Creating…' : 'Payment Link'}
+            </button>
+          )}
+          {onlinePayStatus?.status === 'paid' && (
+            <button disabled={refunding} onClick={handleRefund}
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-red-200 dark:border-red-500/40 text-red-600 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors">
+              <RotateCcw className="w-4 h-4" /> {refunding ? 'Refunding…' : 'Refund'}
+            </button>
+          )}
+          {onlinePayStatus?.status === 'refunded' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-600 dark:text-amber-400">
+              <RotateCcw className="w-4 h-4" /> Refunded{onlinePayStatus.refundedAmount ? ` ₹${onlinePayStatus.refundedAmount}` : ''}
+            </span>
           )}
           {sale.type === 'estimate' && sale.status !== 'cancelled' && (
             <button onClick={async () => {
@@ -464,6 +517,37 @@ const ViewSale = () => {
         </div>
       </div>
 
+      {/* Razorpay Payment Link result */}
+      <Modal open={!!payLink} onClose={() => { setPayLink(null); setPayQr(null); }} title="Payment Link">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Share this with your customer — they can pay via UPI, card, or netbanking. The invoice is marked <span className="font-semibold">paid automatically</span> once payment succeeds.
+          </p>
+          {payQr && (
+            <div className="flex justify-center">
+              <img alt="Payment QR" width={200} height={200}
+                className="rounded-lg border border-slate-200 dark:border-gray-700 bg-white p-2"
+                src={payQr} />
+            </div>
+          )}
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-700 px-3 py-2">
+            <span className="text-xs text-slate-700 dark:text-slate-300 truncate flex-1">{payLink}</span>
+            <button onClick={async () => { try { await navigator.clipboard.writeText(payLink); toast.success('Copied'); } catch {} }}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline shrink-0">Copy</button>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => {
+              const phone = (sale.customerPhone || sale.customer?.phone || '').replace(/[^0-9]/g, '');
+              const msg = `Pay for invoice ${sale.invoiceNumber}: ${payLink}`;
+              window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+            }} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors">
+              <MessageSquare className="w-4 h-4" /> Send on WhatsApp
+            </button>
+            <button onClick={() => { setPayLink(null); setPayQr(null); }} className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg transition-colors">Close</button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Receive Payment Modal - unchanged */}
       <Modal open={showPayment} onClose={() => setShowPayment(false)} title="Receive Payment">
         <div className="bg-slate-50 dark:bg-gray-700 rounded-xl p-4 mb-5 space-y-1.5 text-sm">
@@ -477,8 +561,9 @@ const ViewSale = () => {
           e.preventDefault();
           if (payAmount <= 0) return toast.error('Enter a valid amount');
           try {
-            const newPaid = sale.paidAmount + Number(payAmount);
-            await saleAPI.update(sale._id, { paidAmount: newPaid, paymentMethod: payMethod });
+            // Use the dedicated receive-payment endpoint so a Receipt + customer-balance +
+            // bank/cash book + journal entry are all created (saleAPI.update did none of that).
+            await saleAPI.receivePayment(sale._id, { amount: Number(payAmount), mode: payMethod });
             toast.success('Payment received');
             const { data } = await saleAPI.getById(sale._id);
             setSale(data);

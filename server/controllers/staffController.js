@@ -76,7 +76,7 @@ const getStaffStats = async (req, res) => {
     if (dateFrom || dateTo) {
       saleFilter.date = {};
       if (dateFrom) saleFilter.date.$gte = new Date(dateFrom);
-      if (dateTo) saleFilter.date.$lte = new Date(dateTo + 'T23:59:59.999Z');
+      if (dateTo) saleFilter.date.$lte = (dateTo.includes('T') ? new Date(dateTo) : new Date(dateTo + 'T23:59:59.999Z'));
     }
 
     const sales = await Sale.find(saleFilter);

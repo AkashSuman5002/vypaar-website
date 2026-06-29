@@ -8,7 +8,7 @@ import SettingsSection from './SettingsSection';
 import {
   Bell, Search, ChevronRight, Plus, Trash2,
   Clock, MessageSquare, Package, Wrench,
-  Info, ArrowLeft, Eye, Check, Save,
+  Info, ArrowLeft, Eye, Check, Save, X, CheckCircle2,
 } from 'lucide-react';
 
 const STEP_ENABLE = 0;
@@ -22,6 +22,7 @@ const ServiceRemindersTab = () => {
   const [loadingReminders, setLoadingReminders] = useState(true);
   const [selectedItems, setSelectedItems] = useState([]);
   const [prefs, setPrefs] = useState(defaultPrefs.serviceReminders);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     loadSettings().then(data => {
@@ -31,6 +32,10 @@ const ServiceRemindersTab = () => {
       const val = data?.preferences?.serviceReminders?.enableReminders;
       if (val) {
         setEnabled(true);
+        // Reminders already on → jump straight to the items/settings step so the
+        // page shows content instead of a blank body (step would otherwise stay at
+        // STEP_ENABLE, which renders nothing once enabled).
+        setStep(STEP_SELECT_ITEMS);
       }
     });
   }, []);
@@ -88,6 +93,7 @@ const ServiceRemindersTab = () => {
   }
 
   return (
+    <>
     <div className="h-full flex flex-col">
       <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
         {step !== STEP_ENABLE && (
@@ -98,9 +104,10 @@ const ServiceRemindersTab = () => {
         )}
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-bold text-[#1F2937] dark:text-white">Service Reminders</h1>
-          <span className="text-xs text-gray-400 flex items-center gap-1">
+          <button onClick={() => setShowHelp(true)}
+            className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 transition-colors">
             <Info className="w-3.5 h-3.5" /> See how it works
-          </span>
+          </button>
         </div>
         <div className="ml-auto">
           <button onClick={handleDisable} className="text-xs text-red-500 hover:text-red-600 transition-colors">
@@ -114,7 +121,7 @@ const ServiceRemindersTab = () => {
           {step === STEP_SELECT_ITEMS && (
             <motion.div key="select" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="h-full">
               <ReminderSettings prefs={prefs} setPrefs={setPrefs} />
-              <SelectItemsScreen onNext={handleItemsSelected} />
+              <SelectItemsScreen onNext={handleItemsSelected} onHowItWorks={() => setShowHelp(true)} />
             </motion.div>
           )}
           {step === STEP_REMINDER_DETAILS && (
@@ -135,6 +142,8 @@ const ServiceRemindersTab = () => {
         </div>
       )}
     </div>
+    <HowItWorksModal open={showHelp} onClose={() => setShowHelp(false)} />
+    </>
   );
 };
 
@@ -207,7 +216,7 @@ const ReminderSettings = ({ prefs, setPrefs }) => {
           </div>
           <input type="number" min="1" value={prefs.reminderInterval}
             onChange={e => update('reminderInterval', e.target.value)}
-            className="w-24 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+            className="w-24 px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
         </div>
         <ToggleSwitch label="Automatic follow-up reminders"
           description="Send follow-up reminders via WhatsApp for overdue payments."
@@ -223,7 +232,7 @@ const ReminderSettings = ({ prefs, setPrefs }) => {
   );
 };
 
-const SelectItemsScreen = ({ onNext }) => {
+const SelectItemsScreen = ({ onNext, onHowItWorks }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -274,9 +283,10 @@ const SelectItemsScreen = ({ onNext }) => {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-[#1F2937] dark:text-gray-100">Select Items for Reminder</h2>
-        <span className="text-xs text-blue-600 flex items-center gap-1 cursor-pointer">
+        <button onClick={onHowItWorks}
+          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 transition-colors">
           <Info className="w-3.5 h-3.5" /> See how it works
-        </span>
+        </button>
       </div>
 
       <div className="flex items-center gap-2">
@@ -296,7 +306,7 @@ const SelectItemsScreen = ({ onNext }) => {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input type="text" placeholder="Search items" value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+          className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
       </div>
 
       <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -312,7 +322,7 @@ const SelectItemsScreen = ({ onNext }) => {
             <div className="py-12 text-center text-gray-400 text-sm">No items found</div>
           ) : (
             items.map(item => (
-              <div key={item._id} className="flex items-center px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              <div key={item._id} className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                 <input type="checkbox" checked={!!selected[item._id]} onChange={() => toggleSelect(item._id)}
                   className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
                 <span className="ml-3 text-sm text-[#1F2937] dark:text-gray-100">{item.name}</span>
@@ -391,7 +401,7 @@ const ReminderDetailsScreen = ({ selectedItems, onBack, onSaved }) => {
           <div className="relative">
             <input type="number" min="1" placeholder="Enter Service Period" value={servicePeriod}
               onChange={e => setServicePeriod(e.target.value)}
-              className="w-full px-4 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-16" />
+              className="w-full px-4 py-2.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-16" />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">Days</span>
           </div>
         </div>
@@ -418,12 +428,12 @@ const ReminderDetailsScreen = ({ selectedItems, onBack, onSaved }) => {
       <AnimatePresence>
         {showPreview && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-            className="bg-blue-50 border border-blue-200 rounded-lg p-4 overflow-hidden">
+            className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-lg p-4 overflow-hidden">
             <div className="flex items-start gap-3">
-              <MessageSquare className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+              <MessageSquare className="w-5 h-5 text-blue-500 dark:text-blue-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-blue-800">Service Reminder Message</p>
-                <p className="text-sm text-blue-600 mt-1">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Service Reminder Message</p>
+                <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
                   Hi, this is a reminder that the service period for your purchased item
                   {selectedItems.length > 1 ? 's' : ''} ({selectedItems.map(i => i.name).join(', ')}) is due in {servicePeriod || '__'} days.
                   Please schedule your next service/renewal.
@@ -480,7 +490,7 @@ const ReminderList = ({ reminders, onRefresh }) => {
       </div>
       <div className="space-y-2 max-h-48 overflow-y-auto">
         {reminders.map(r => (
-          <div key={r._id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:border-blue-200 transition-colors">
+          <div key={r._id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:border-blue-300 dark:hover:border-blue-500/40 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-orange-50 rounded-lg flex items-center justify-center">
@@ -508,5 +518,100 @@ const ReminderList = ({ reminders, onRefresh }) => {
     </div>
   );
 };
+
+const HOW_IT_WORKS_STEPS = [
+  {
+    icon: Bell,
+    title: 'Enable & set your reminder window',
+    text: 'Turn on Service Reminders and set the "Reminder interval" — how many days before the due date Vyapar should start notifying.',
+  },
+  {
+    icon: Package,
+    title: 'Pick the items to track',
+    text: 'Choose the products or services that need periodic service, renewal, or repurchase (e.g. AMC, filter change, subscription).',
+  },
+  {
+    icon: Clock,
+    title: 'Set the service period',
+    text: 'Enter the service cycle in days (e.g. 90 days). Then choose who gets reminded — Only Me, the Party (customer/supplier), or Both.',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Reminders are sent automatically',
+    text: 'Vyapar checks every day in the background and sends the reminder via WhatsApp at the right time — no manual work needed.',
+  },
+];
+
+const HowItWorksModal = ({ open, onClose }) => (
+  <AnimatePresence>
+    {open && (
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 12 }}
+          transition={{ duration: 0.18 }}
+          className="w-full max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center">
+                <Bell className="w-5 h-5 text-orange-500" />
+              </div>
+              <h2 className="text-base font-bold text-[#1F2937] dark:text-gray-100">How Service Reminders Work</h2>
+            </div>
+            <button onClick={onClose}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="px-6 py-5">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
+              Automatically remind your customers when it&apos;s time to service, renew, or repurchase — so you never lose repeat business.
+            </p>
+
+            <div className="space-y-4">
+              {HOW_IT_WORKS_STEPS.map((s, i) => {
+                const Icon = s.icon;
+                return (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="relative shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-500/15 flex items-center justify-center">
+                        <Icon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+                    </div>
+                    <div className="pt-0.5">
+                      <h3 className="text-sm font-semibold text-[#1F2937] dark:text-gray-100">{s.title}</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{s.text}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 flex items-start gap-2 rounded-lg bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 px-3 py-2.5">
+              <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-green-700 dark:text-green-300">
+                Tip: turn on <span className="font-semibold">Automatic follow-up reminders</span> in Reminder Settings to also nudge parties about overdue payments.
+              </p>
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+            <button onClick={onClose}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">
+              Got it
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
 
 export default ServiceRemindersTab;

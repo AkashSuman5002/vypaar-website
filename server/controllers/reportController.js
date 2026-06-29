@@ -687,7 +687,7 @@ const getCashFlow = async (req, res) => {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
       else filter.date.$gte = new Date(defaultStart);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     } else {
       filter.date = { $gte: new Date(defaultStart) };
     }
@@ -1230,7 +1230,7 @@ const getSaleOrders = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
     const orders = await Sale.find(filter).sort({ date: -1 });
     const totalOrders = orders.length;
@@ -1388,7 +1388,7 @@ const getPartyStatement = async (req, res) => {
     if (startDate || endDate) {
       dateFilter.date = {};
       if (startDate) dateFilter.date.$gte = new Date(startDate);
-      if (endDate) dateFilter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) dateFilter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
 
     let party, transactions, totalDue = 0, totalPaid = 0;
@@ -1462,7 +1462,7 @@ const getPartyWiseProfitLoss = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
 
     const customers = await Customer.find({ ...baseFilter }).lean();
@@ -1519,7 +1519,7 @@ const getPartyReportByItem = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
 
     const entries = [];
@@ -1578,7 +1578,7 @@ const getSalePurchaseByParty = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
 
     const sales = await Sale.find({ ...filter, type: 'invoice' }).lean();
@@ -1613,7 +1613,7 @@ const getSalePurchaseByPartyGroup = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
 
     const Setting = require('../models/Setting');
@@ -1669,7 +1669,7 @@ const getItemWiseProfitLoss = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
     const [sales, purchases] = await Promise.all([
       Sale.find({ ...filter, type: 'invoice' }).lean(),
@@ -1711,7 +1711,7 @@ const getItemCategoryProfitLoss = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
     const products = await Product.find({ ...baseFilter }).lean();
     const productCategoryMap = {};
@@ -1757,7 +1757,7 @@ const getItemReportByParty = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
     const entries = [];
     const sales = await Sale.find({ ...filter, type: 'invoice' }).lean();
@@ -1896,7 +1896,7 @@ const getSaleOrderItem = async (req, res) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+      if (endDate) filter.date.$lte = (endDate.includes('T') ? new Date(endDate) : new Date(endDate + 'T23:59:59.999Z'));
     }
     const orders = await Sale.find(filter).lean();
     const itemMap = {};

@@ -3,7 +3,7 @@ const WhatsAppMessage = require('../models/WhatsAppMessage');
 const { sendMessage, sendDocument, getSession } = require('./whatsappService');
 
 const defaultTemplates = {
-  invoice: 'Dear {customer_name},\n\nThank you for your purchase!\n\nInvoice: {invoice_number}\nDate: {date}\nAmount: {currency}{amount}\n{balance_line}\n\nView Invoice: {invoice_link}\n\nRegards,\n{company_name}',
+  invoice: 'Dear {customer_name},\n\nThank you for your purchase!\n\nInvoice: {invoice_number}\nDate: {date}\nAmount: {currency}{amount}\n{balance_line}\n\nRegards,\n{company_name}',
   estimate: 'Dear {customer_name},\n\nHere is your estimate/quotation.\n\nEstimate: {invoice_number}\nDate: {date}\nAmount: {currency}{amount}\n\nRegards,\n{company_name}',
   order: 'Dear {customer_name},\n\nYour order has been confirmed.\n\nOrder: {invoice_number}\nDate: {date}\nAmount: {currency}{amount}\n\nRegards,\n{company_name}',
   proforma: 'Dear {customer_name},\n\nProforma Invoice for your reference.\n\nInvoice: {invoice_number}\nDate: {date}\nAmount: {currency}{amount}\n\nRegards,\n{company_name}',
@@ -12,6 +12,46 @@ const defaultTemplates = {
   payment_in: 'Dear {customer_name},\n\nPayment received successfully.\n\nAmount: {currency}{amount}\nMode: {payment_mode}\n{balance_line}\n\nThank you!\n{company_name}',
   payment_out: 'Dear {supplier_name},\n\nPayment sent successfully.\n\nAmount: {currency}{amount}\nMode: {payment_mode}\n\n Regards,\n{company_name}',
   cancelled: 'Dear {customer_name},\n\nInvoice {invoice_number} has been cancelled.\n\nRegards,\n{company_name}',
+};
+
+// Base URL for links that go OUT to customers over WhatsApp. These must be publicly
+// reachable — never localhost — so prefer the public cloud URL (CLOUD_API_URL, e.g.
+// https://vypaar-website.onrender.com). CLIENT_URL stays for local CORS only and is the
+// last resort. Trailing slash is trimmed so we never produce a `//path`.
+const getPublicUrl = () => {
+  const url = process.env.CLOUD_API_URL || process.env.CLIENT_URL || 'http://localhost:3000';
+  return url.replace(/\/+$/, '');
+};
+
+// Map a transaction type to the PDF generator that renders it, so we can attach the REAL
+// invoice/document PDF to the WhatsApp message (the customer gets the actual file, not just
+// a link to a cold-starting website). Lazy-required to avoid circular-dependency load order.
+const getPdfHandler = (transactionType) => {
+  const { generateInvoicePDF, generatePurchasePDF } = require('../controllers/pdfController');
+  const map = {
+    invoice: generateInvoicePDF, estimate: generateInvoicePDF, order: generateInvoicePDF,
+    proforma: generateInvoicePDF, challan: generateInvoicePDF, credit_note: generateInvoicePDF,
+    purchase: generatePurchasePDF, purchase_return: generatePurchasePDF,
+  };
+  return map[transactionType] || null;
+};
+
+// Best-effort: render the transaction's PDF and send it as a WhatsApp document so the
+// recipient receives the actual invoice file. NEVER throws — a PDF failure must not break
+// the text message that already went out.
+const attachPdfDocument = async (userId, businessId, phone, transactionType, invoiceId, invoiceNumber) => {
+  try {
+    if (!invoiceId) return;
+    const handler = getPdfHandler(transactionType);
+    if (!handler) return;
+    const { renderPdfToBuffer } = require('../utils/renderPdfBuffer');
+    const pdfReq = { user: { _id: userId }, businessId, params: { id: invoiceId }, query: {} };
+    const buffer = await renderPdfToBuffer(handler, pdfReq);
+    const fileName = String(invoiceNumber || transactionType || 'document').replace(/[^a-zA-Z0-9._-]/g, '_') + '.pdf';
+    await sendDocument(userId, phone, buffer, fileName, 'application/pdf', '');
+  } catch (err) {
+    console.error('[messageService] PDF attach failed:', err.message);
+  }
 };
 
 const renderTemplate = (template, vars) => {
@@ -25,7 +65,7 @@ const renderTemplate = (template, vars) => {
 const buildVars = (data, settings) => {
   const bizName = settings?.businessName || 'Your Business';
   const phone = settings?.phone || '';
-  const baseUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const baseUrl = getPublicUrl();
   const currency = settings?.currency || '₹';
 
   const balanceLine = data.remainingBalance > 0
@@ -137,7 +177,7 @@ const sendAutoMessage = async (userId, businessId, transactionType, data) => {
     const currency = settings?.currency || '₹';
 
     if (msgPrefs.autoShareInvoices && data.invoiceId) {
-      const pdfLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/pdf/invoice/${data.invoiceId}`;
+      const pdfLink = `${getPublicUrl()}/api/pdf/invoice/${data.invoiceId}`;
       messageText += `\n\nView Invoice: ${pdfLink}`;
     }
 
@@ -146,13 +186,19 @@ const sendAutoMessage = async (userId, businessId, transactionType, data) => {
     }
 
     if (msgPrefs.webInvoiceLink !== false && data.invoiceId) {
-      const link = `${process.env.CLIENT_URL || 'http://localhost:3000'}/sales/view/${data.invoiceId}`;
+      const link = `${getPublicUrl()}/sales/view/${data.invoiceId}`;
       messageText += `\nView Online: ${link}`;
     }
 
     if (msgPrefs.paymentLink !== false && data.invoiceId) {
-      const payLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/payments/pay/${data.invoiceId}`;
-      messageText += `\nPay Now: ${payLink}`;
+      // Prefer a REAL Razorpay payment link (UPI/card/netbanking) when configured; fall back
+      // to the generic web link otherwise. Lazy-required to avoid circular dependencies.
+      let payLink = null;
+      try {
+        const { ensurePaymentLinkForSale } = require('../controllers/paymentLinkController');
+        payLink = await ensurePaymentLinkForSale(userId, businessId, data.invoiceId);
+      } catch (_) {}
+      if (payLink) messageText += `\nPay Now: ${payLink}`;
     }
 
     const phone = data.customerPhone || data.phone;
@@ -173,6 +219,8 @@ const sendAutoMessage = async (userId, businessId, transactionType, data) => {
     if (msgPrefs.sendMessageToParty !== false && deliverViaWhatsApp) {
       try {
         const result = await sendMessage(userId, phone, messageText);
+        // Attach the actual invoice/document PDF so the customer receives the real file.
+        await attachPdfDocument(userId, businessId, phone, transactionType, data.invoiceId, data.invoiceNumber);
         await logMessage(userId, businessId, {
           to: phone,
           message: messageText,
@@ -248,7 +296,7 @@ const sendPaymentMessage = async (userId, businessId, paymentData) => {
     const currency = settings?.currency || '₹';
 
     if (msgPrefs.autoShareInvoices && paymentData.invoiceId) {
-      const pdfLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/pdf/invoice/${paymentData.invoiceId}`;
+      const pdfLink = `${getPublicUrl()}/api/pdf/invoice/${paymentData.invoiceId}`;
       messageText += `\n\nView Invoice: ${pdfLink}`;
     }
 
@@ -257,12 +305,12 @@ const sendPaymentMessage = async (userId, businessId, paymentData) => {
     }
 
     if (msgPrefs.webInvoiceLink !== false && paymentData.invoiceId) {
-      const link = `${process.env.CLIENT_URL || 'http://localhost:3000'}/sales/view/${paymentData.invoiceId}`;
+      const link = `${getPublicUrl()}/sales/view/${paymentData.invoiceId}`;
       messageText += `\nView Online: ${link}`;
     }
 
     if (msgPrefs.paymentLink !== false && paymentData.invoiceId) {
-      const payLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/payments/pay/${paymentData.invoiceId}`;
+      const payLink = `${getPublicUrl()}/payments/pay/${paymentData.invoiceId}`;
       messageText += `\nPay Now: ${payLink}`;
     }
 

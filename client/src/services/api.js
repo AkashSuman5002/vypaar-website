@@ -508,6 +508,14 @@ export const whatsappAPI = {
   saveTemplates: (templates) => API.post('/whatsapp/templates', { templates }),
 };
 
+export const paymentAPI = {
+  getConfig: () => API.get('/payments/config'),
+  saveConfig: (data) => API.post('/payments/config', data),
+  createLink: (invoiceId) => API.post('/payments/link', { invoiceId }),
+  getStatus: (invoiceId) => API.get(`/payments/link/${invoiceId}/status`),
+  refund: (invoiceId, amount) => API.post('/payments/refund', { invoiceId, amount }),
+};
+
 export const godownTransferAPI = {
   getAll: (params) => API.get('/godown-transfers', { params }),
   getById: (id) => API.get(`/godown-transfers/${id}`),

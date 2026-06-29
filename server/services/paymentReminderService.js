@@ -135,7 +135,7 @@ const checkPaymentReminders = async () => {
 
       // Auto follow-up via WhatsApp (if serviceReminders.autoFollowUp enabled)
       if (userSetting.preferences?.serviceReminders?.autoFollowUp && serviceRemindersEnabled) {
-        const { sendManualMessage } = require('./whatsappService');
+        const { sendManualMessage } = require('./messageService');
         const overdueForFollowUp = [...overdueSales, ...overduePurchases];
         for (const txn of overdueForFollowUp) {
           const phone = txn.customerPhone || txn.supplierPhone || txn.customer?.phone || txn.supplier?.phone;

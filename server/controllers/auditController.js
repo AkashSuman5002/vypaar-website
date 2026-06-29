@@ -18,7 +18,7 @@ const getAuditLogs = async (req, res) => {
     if (dateFrom || dateTo) {
       filter.createdAt = {};
       if (dateFrom) filter.createdAt.$gte = new Date(dateFrom);
-      if (dateTo) filter.createdAt.$lte = new Date(dateTo + 'T23:59:59.999Z');
+      if (dateTo) filter.createdAt.$lte = (dateTo.includes('T') ? new Date(dateTo) : new Date(dateTo + 'T23:59:59.999Z'));
     }
     const total = await AuditLog.countDocuments(filter);
     const logs = await AuditLog.find(filter)
