@@ -8,12 +8,62 @@ const Purchase = require('../models/Purchase');
 const StockMovement = require('../models/StockMovement');
 const Transaction = require('../models/Transaction');
 const Expense = require('../models/Expense');
+const Business = require('../models/Business');
 const sqliteService = require('../services/sqliteService');
 const path = require('path');
 const fs = require('fs');
 const AdmZip = require('adm-zip');
 const { getBaseFilter, getCreateData } = require('../utils/queryHelper');
 const { recordStockMovement } = require('./stockController');
+
+// Ensure req.businessId is set for import handlers. On some requests (observed with multipart
+// uploads) businessContext leaves it undefined; without a business, the ImportHistory and the
+// imported records would be saved with business=undefined — invisible to the user and breaking
+// the analyze/execute lookups. So resolve the user's OWN business and pin it on req.
+const ensureBusinessId = async (req) => {
+  if (req.businessId) return req.businessId;
+  const b = await Business.findOne({ owner: req.user._id, isActive: true }).select('_id').lean()
+    || await Business.findOne({ owner: req.user._id }).select('_id').lean();
+  if (b) req.businessId = b._id.toString();
+  return req.businessId;
+};
+
+// Derive payment status for an imported invoice/bill from whatever the source provides.
+// Priority: (1) explicit paid amount, (2) balance/due column, (3) a textual status column
+// (paid / unpaid / partial), (4) otherwise treat the imported (historical) document as
+// SETTLED/PAID. This reads the real paid/unpaid status from the file instead of forcing
+// everything to "Unpaid".
+const num = (...vals) => { for (const v of vals) { if (v != null && v !== '') { const n = parseFloat(v); if (!isNaN(n)) return n; } } return null; };
+// Map a textual status column to a paid fraction of the total. Returns null if unrecognised.
+const statusToPaid = (r, total) => {
+  const raw = [r.payment_status, r.paymentStatus, r.paid_status, r.paidStatus, r.status, r.is_paid, r.isPaid, r.paid_flag]
+    .find(v => v != null && v !== '');
+  if (raw == null) return null;
+  const s = String(raw).toLowerCase().trim();
+  if (/(^|[^n])\bunpaid\b|^unpaid|pending|^due$|outstanding|not\s*paid|^no$|^false$|^0$/.test(s)) return 0;
+  if (/partial|part\s*paid|partly/.test(s)) return total / 2; // some paid, exact amount unknown
+  if (/paid|settled|complete|cleared|^yes$|^true$|^1$/.test(s)) return total;
+  return null;
+};
+const derivePayment = (r) => {
+  const total = num(r.total, r.total_amount, r.grand_total, r.totalAmount, r.txn_total_amount, r.amount) || 0;
+  const paidCol = num(r.paid_amount, r.paidAmount, r.received, r.amount_paid, r.txn_cash_amount, r.cash_amount, r.paid_amt);
+  const balCol = num(r.balance, r.due, r.remaining, r.remainingBalance, r.txn_balance_amount, r.balance_amount, r.balance_amt);
+  // `paid` can be EITHER an amount (e.g. 1500) or a flag ("yes"/"true"); only treat it as an amount.
+  const paidFlex = num(r.paid);
+  let paid;
+  if (paidCol != null) paid = paidCol;
+  else if (paidFlex != null) paid = paidFlex;
+  else if (balCol != null) paid = Math.max(0, total - balCol);
+  else {
+    const fromStatus = statusToPaid(r, total);
+    paid = fromStatus != null ? fromStatus : total; // status column wins; else assume settled
+  }
+  paid = Math.min(Math.max(0, paid), total);
+  const remaining = Math.max(0, total - paid);
+  const status = remaining <= 0.01 ? 'paid' : (paid > 0 ? 'partial' : 'unpaid');
+  return { total, paid, remaining, status };
+};
 const { IMPORTS_DIR } = require('../config/paths');
 
 const UPLOAD_DIR = IMPORTS_DIR;
@@ -258,6 +308,7 @@ const excelPreview = async (req, res) => {
 
 const excelExecute = async (req, res) => {
   try {
+    await ensureBusinessId(req);
     const baseFilter = getBaseFilter(req);
     const { files, columnMapping, duplicateHandling, financialYear } = req.body;
     const mode = duplicateHandling || 'skip';
@@ -510,6 +561,7 @@ const excelExecute = async (req, res) => {
 
 const backupUpload = async (req, res) => {
   try {
+    await ensureBusinessId(req);
     const baseFilter = getBaseFilter(req);
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
     const uploadPath = req.file.path;
@@ -640,9 +692,10 @@ const backupUpload = async (req, res) => {
 
 const backupAnalyze = async (req, res) => {
   try {
+    await ensureBusinessId(req);
     const baseFilter = getBaseFilter(req);
     const { historyId } = req.params;
-    const history = await ImportHistory.findOne({ _id: historyId, ...getBaseFilter(req) });
+    const history = await ImportHistory.findOne({ _id: historyId, user: req.user._id });
     if (!history) return res.status(404).json({ message: 'Import history not found' });
 
     const detected = { customers: 0, suppliers: 0, products: 0, sales: 0, purchases: 0, expenses: 0, stock: 0, payments: 0, gstRecords: 0 };
@@ -716,10 +769,11 @@ const upsertEntity = async (Model, query, doc, mode) => {
 
 const backupExecute = async (req, res) => {
   try {
+    await ensureBusinessId(req);
     const baseFilter = getBaseFilter(req);
     const { historyId, selectedTables, duplicateHandling } = req.body;
     const mode = duplicateHandling || 'skip';
-    const history = await ImportHistory.findOne({ _id: historyId, ...getBaseFilter(req) });
+    const history = await ImportHistory.findOne({ _id: historyId, user: req.user._id });
     if (!history) return res.status(404).json({ message: 'Import not found' });
 
     const results = { customers: 0, suppliers: 0, products: 0, sales: 0, purchases: 0, expenses: 0, stockMovements: 0, payments: 0, gstRecords: 0 };
@@ -821,13 +875,15 @@ const backupExecute = async (req, res) => {
             return { ...baseFilter, name };
           }, model: Product, resultsKey: 'products' },
           sales: { candidates: ['sales', 'sale', 'invoice', 'kb_transactions'], filter: (r) => r.txn_type == null || Number(r.txn_type) === 1, fn: (r) => {
-            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || r.txn_ref_number_char || `VI-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: r.customer_name || r.party_name || r.customerName || customerLookup[String(r.customer_id != null ? r.customer_id : (r.customerId != null ? r.customerId : r.txn_name_id))] || 'Unknown', date: r.date || r.invoice_date || r.txn_date || new Date(), items: (itemsBySale[String(r.id != null ? r.id : (r.sale_id != null ? r.sale_id : (r.invoice_id != null ? r.invoice_id : r.txn_id)))] || []), taxableAmount: parseFloat(r.taxable_amount || r.taxableAmount || r.taxable) || 0, cgstTotal: parseFloat(r.cgst_total || r.cgstTotal || r.cgst) || 0, sgstTotal: parseFloat(r.sgst_total || r.sgstTotal || r.sgst) || 0, totalAmount: parseFloat(r.total || r.total_amount || r.grand_total || r.totalAmount || r.txn_total_amount) || 0, paidAmount: parseFloat(r.paid || r.paid_amount || r.paidAmount) || 0, remainingBalance: parseFloat(r.balance || r.due || r.remaining || r.remainingBalance) || 0, paymentStatus: 'unpaid', paymentMethod: (r.payment_method || r.paymentMode || 'cash').toLowerCase() };
+            const pay = derivePayment(r);
+            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || r.txn_ref_number_char || `VI-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: r.customer_name || r.party_name || r.customerName || customerLookup[String(r.customer_id != null ? r.customer_id : (r.customerId != null ? r.customerId : r.txn_name_id))] || 'Unknown', date: r.date || r.invoice_date || r.txn_date || new Date(), items: (itemsBySale[String(r.id != null ? r.id : (r.sale_id != null ? r.sale_id : (r.invoice_id != null ? r.invoice_id : r.txn_id)))] || []), taxableAmount: parseFloat(r.taxable_amount || r.taxableAmount || r.taxable) || 0, cgstTotal: parseFloat(r.cgst_total || r.cgstTotal || r.cgst) || 0, sgstTotal: parseFloat(r.sgst_total || r.sgstTotal || r.sgst) || 0, totalAmount: pay.total, paidAmount: pay.paid, remainingBalance: pay.remaining, paymentStatus: pay.status, paymentMethod: (r.payment_method || r.paymentMode || 'cash').toLowerCase() };
           }, queryFn: (r) => {
             const inv = r.invoice_no || r.invoice_number || r.invoiceNumber || 'Unknown';
             return { ...baseFilter, invoiceNumber: inv };
           }, model: Sale, resultsKey: 'sales' },
           purchases: { candidates: ['purchases', 'purchase', 'kb_transactions'], filter: (r) => r.txn_type == null || Number(r.txn_type) === 2, fn: (r) => {
-            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || r.bill_no || r.txn_ref_number_char || `PI-${Date.now()}`, supplierName: r.supplier_name || r.party_name || r.supplierName || supplierLookup[String(r.supplier_id != null ? r.supplier_id : (r.supplierId != null ? r.supplierId : r.txn_name_id))] || 'Unknown', date: r.date || r.purchase_date || r.txn_date || new Date(), items: (itemsByPurchase[String(r.id != null ? r.id : (r.purchase_id != null ? r.purchase_id : (r.bill_id != null ? r.bill_id : r.txn_id)))] || []), totalAmount: parseFloat(r.total || r.total_amount || r.totalAmount || r.txn_total_amount) || 0, paidAmount: parseFloat(r.paid || r.paid_amount || r.paidAmount) || 0, remainingBalance: parseFloat(r.balance || r.due || r.remainingBalance) || 0, paymentStatus: 'unpaid' };
+            const pay = derivePayment(r);
+            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || r.bill_no || r.txn_ref_number_char || `PI-${Date.now()}`, supplierName: r.supplier_name || r.party_name || r.supplierName || supplierLookup[String(r.supplier_id != null ? r.supplier_id : (r.supplierId != null ? r.supplierId : r.txn_name_id))] || 'Unknown', date: r.date || r.purchase_date || r.txn_date || new Date(), items: (itemsByPurchase[String(r.id != null ? r.id : (r.purchase_id != null ? r.purchase_id : (r.bill_id != null ? r.bill_id : r.txn_id)))] || []), totalAmount: pay.total, paidAmount: pay.paid, remainingBalance: pay.remaining, paymentStatus: pay.status };
           }, queryFn: (r) => {
             const inv = r.invoice_no || r.invoice_number || r.invoiceNumber || r.bill_no || 'Unknown';
             return { ...baseFilter, invoiceNumber: inv };

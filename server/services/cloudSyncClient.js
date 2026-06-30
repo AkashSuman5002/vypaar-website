@@ -115,6 +115,12 @@ const currentBusinessId = async () => {
   if (!token) return null;
   try {
     const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf8'));
+    const Business = mongoose.model('Business');
+    // Prefer a business this user OWNS — a stale/cross-account `user.business` pointer must
+    // not make us collect/sync another account's business data.
+    const owned = await Business.findOne({ owner: payload.id, isActive: true }).select('_id').lean()
+      || await Business.findOne({ owner: payload.id }).select('_id').lean();
+    if (owned) return owned._id;
     const u = await mongoose.model('User').findById(payload.id).select('business').lean();
     return u && u.business ? u.business : null;
   } catch (_) { return null; }

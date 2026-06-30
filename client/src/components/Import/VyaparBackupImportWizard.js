@@ -72,9 +72,18 @@ const VyaparBackupImportWizard = ({ onComplete }) => {
         return;
       }
       setHistoryId(res.data.historyId);
-      toast.success('Backup uploaded successfully');
+      // Auto-run analysis so the Analysis step actually shows content. (It only renders when
+      // `analysis` is set; advancing to it without analysing left a blank, stuck page.)
+      setImportTask('Analyzing backup…');
+      try {
+        const ares = await importAPI.backupAnalyze(res.data.historyId);
+        setAnalysis(ares.data);
+        setStep(1);
+        toast.success('Backup analyzed');
+      } catch (e2) {
+        toast.error(e2.response?.data?.message || 'Analysis failed');
+      }
       setImporting(false);
-      setStep(1);
     } catch (e) {
       toast.error(e.response?.data?.message || 'Upload failed');
       setImporting(false);
