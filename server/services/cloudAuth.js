@@ -55,7 +55,15 @@ const mirrorIdentity = async (bundle, plainPassword) => {
 
   // User: mirror with exact _id + a LOCAL password hash so offline login works later.
   const hash = await bcrypt.hash(plainPassword, 12);
+  // Preserve DEVICE-LOCAL 2FA. It's configured on this device and the cloud account does not
+  // track it, so a blind replace would wipe twoFactorEnabled/Secret and silently skip 2FA at
+  // login. Keep the local values when 2FA is enabled here so login still enforces it.
+  const prior = await User.findById(user._id).select('+twoFactorSecret twoFactorEnabled').lean();
   const localUser = { ...stripMeta(user), password: hash, business: business ? business._id : user.business };
+  if (prior && prior.twoFactorEnabled && prior.twoFactorSecret) {
+    localUser.twoFactorEnabled = true;
+    localUser.twoFactorSecret = prior.twoFactorSecret;
+  }
   await User.replaceOne({ _id: user._id }, localUser, { upsert: true });
 
   // Return a fresh local copy (without password) for the session.

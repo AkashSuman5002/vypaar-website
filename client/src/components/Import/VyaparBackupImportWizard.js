@@ -19,7 +19,7 @@ const VyaparBackupImportWizard = ({ onComplete }) => {
   const [file, setFile] = useState(null);
   const [historyId, setHistoryId] = useState(null);
   const [analysis, setAnalysis] = useState(null);
-  const [selectedTables, setSelectedTables] = useState(['customers', 'products', 'sales', 'purchases', 'expenses', 'stockMovements', 'payments', 'gstRecords']);
+  const [selectedTables, setSelectedTables] = useState(['customers', 'suppliers', 'products', 'sales', 'purchases', 'expenses', 'stockMovements', 'payments', 'gstRecords']);
   const [duplicateHandling, setDuplicateHandling] = useState('skip');
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
@@ -63,6 +63,14 @@ const VyaparBackupImportWizard = ({ onComplete }) => {
       const formData = new FormData();
       formData.append('backup', file);
       const res = await importAPI.backupUpload(formData);
+      // A zip of Excel/CSV files is imported directly (no SQLite to analyze) — jump to results.
+      if (res.data.directImport) {
+        setImportResult(res.data);
+        toast.success('Import completed!');
+        setImporting(false);
+        setStep(5);
+        return;
+      }
       setHistoryId(res.data.historyId);
       toast.success('Backup uploaded successfully');
       setImporting(false);

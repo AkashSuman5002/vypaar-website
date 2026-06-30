@@ -178,6 +178,63 @@ const mapRow = (row, type, userMapping) => {
   return mapped;
 };
 
+// Map a file name inside a zip to an import type (so a zip of spreadsheets auto-routes).
+const detectTypeFromName = (name) => {
+  const n = String(name).toLowerCase();
+  if (/(supplier|vendor)/.test(n)) return 'Suppliers';
+  if (/(customer|part(y|ies)|client)/.test(n)) return 'Parties';
+  if (/(item|product)/.test(n)) return 'Items';
+  if (/(sale|invoice)/.test(n)) return 'Sales';
+  if (/(purchase|bill)/.test(n)) return 'Purchases';
+  if (/expense/.test(n)) return 'Expenses';
+  if (/(stock|inventory)/.test(n)) return 'Stock';
+  return null;
+};
+
+// Import already-parsed tabular rows (from Excel/CSV inside a zip). Self-contained so it never
+// touches the SQLite/backup path. Returns a results count object. mode: 'skip' | 'update' | 'add'.
+const importTabularFiles = async (req, typedFiles, mode = 'skip') => {
+  const baseFilter = getBaseFilter(req);
+  const uid = req.user._id, biz = req.businessId;
+  const results = { customers: 0, suppliers: 0, products: 0, sales: 0, purchases: 0, expenses: 0 };
+  const put = async (Model, query, doc, key) => {
+    const exists = query ? await Model.findOne(query) : null;
+    if (exists && mode === 'skip') return;
+    if (exists && mode === 'update') await Model.updateOne({ _id: exists._id }, doc);
+    else await Model.create(doc);
+    results[key]++;
+  };
+  for (const { type, data } of typedFiles) {
+    for (const row of data) {
+      try {
+        const m = mapRow(row, type === 'Suppliers' ? 'Parties' : type);
+        if ((type === 'Parties' || type === 'Suppliers')) {
+          if (!m.name) continue;
+          const isSup = type === 'Suppliers' || /supp/i.test(String(m.type || ''));
+          const Model = isSup ? Supplier : Customer;
+          await put(Model, { ...baseFilter, name: m.name }, { user: uid, business: biz, name: m.name, phone: m.phone || '', gstNumber: m.gstNumber || '', address: m.address || '', email: m.email || '', openingBalance: parseFloat(m.openingBalance) || 0 }, isSup ? 'suppliers' : 'customers');
+        } else if (type === 'Items') {
+          if (!m.name) continue;
+          await put(Product, { ...baseFilter, name: m.name }, { user: uid, business: biz, name: m.name, price: parseFloat(m.price) || 0, costPrice: parseFloat(m.costPrice) || 0, stock: parseInt(m.stock) || 0, gstRate: parseInt(m.gstRate) || 0, unit: m.unit || 'Pcs', hsn: m.hsn || '', isActive: true }, 'products');
+        } else if (type === 'Sales') {
+          const qty = parseFloat(m.quantity) || 1, rate = parseFloat(m.rate) || 0;
+          const total = parseFloat(m.totalAmount) || (rate * qty);
+          const items = (m.itemName || m.rate) ? [{ productName: m.itemName || 'Item', quantity: qty, rate, amount: rate * qty || total }] : [];
+          await put(Sale, { ...baseFilter, invoiceNumber: m.invoiceNumber || '__none__' }, { user: uid, business: biz, invoiceNumber: m.invoiceNumber || `XI-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: m.customerName || 'Unknown', date: m.date || new Date(), items, totalAmount: total, paidAmount: parseFloat(m.paidAmount) || 0, remainingBalance: Math.max(0, total - (parseFloat(m.paidAmount) || 0)), paymentMethod: (m.paymentMethod || 'cash').toLowerCase(), paymentStatus: 'unpaid' }, 'sales');
+        } else if (type === 'Purchases') {
+          const qty = parseFloat(m.quantity) || 1, rate = parseFloat(m.rate) || 0;
+          const total = parseFloat(m.totalAmount) || (rate * qty);
+          const items = (m.itemName || m.rate) ? [{ productName: m.itemName || 'Item', quantity: qty, rate, amount: rate * qty || total }] : [];
+          await put(Purchase, { ...baseFilter, invoiceNumber: m.invoiceNumber || '__none__' }, { user: uid, business: biz, invoiceNumber: m.invoiceNumber || `XP-${Date.now()}`, supplierName: m.supplierName || 'Unknown', date: m.date || new Date(), items, totalAmount: total, paidAmount: parseFloat(m.paidAmount) || 0, remainingBalance: Math.max(0, total - (parseFloat(m.paidAmount) || 0)), paymentStatus: 'unpaid' }, 'purchases');
+        } else if (type === 'Expenses') {
+          await put(Expense, null, { user: uid, business: biz, category: m.category || 'General', amount: parseFloat(m.amount) || 0, description: m.description || '', date: m.date || new Date() }, 'expenses');
+        }
+      } catch (_) { /* skip a bad row, keep importing */ }
+    }
+  }
+  return results;
+};
+
 const excelPreview = async (req, res) => {
   try {
     const { files, columnMapping } = req.body;
@@ -503,8 +560,31 @@ const backupUpload = async (req, res) => {
           }
         }
         if (!dbEntry) {
+          // No SQLite db inside — fall back to importing Excel/CSV files in the archive.
+          const XLSX = require('xlsx');
+          const sheetEntries = entries.filter(e => !e.isDirectory && /\.(xlsx|xls|csv)$/i.test(e.entryName));
+          if (sheetEntries.length) {
+            const typedFiles = [];
+            for (const e of sheetEntries) {
+              const type = detectTypeFromName(e.entryName);
+              if (!type) continue;
+              try {
+                const wb = XLSX.read(zip.readFile(e), { type: 'buffer' });
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+                if (rows.length) typedFiles.push({ type, data: rows });
+              } catch (_) { /* skip unreadable sheet */ }
+            }
+            if (typedFiles.length) {
+              const results = await importTabularFiles(req, typedFiles, (req.body && req.body.duplicateHandling) || 'skip');
+              await ImportHistory.create({ user: req.user._id, business: req.businessId, importType: 'zip_spreadsheets', status: 'completed', fileName: req.file.originalname, fileSize, completedAt: new Date() }).catch(() => {});
+              try { fs.unlinkSync(uploadPath); } catch {}
+              return res.json({ directImport: true, message: 'Imported from spreadsheets in archive', results });
+            }
+            fs.unlinkSync(uploadPath);
+            return res.status(400).json({ message: 'Archive has spreadsheets but none matched a type. Name files like customers/suppliers/items/sales/purchases/expenses.' });
+          }
           fs.unlinkSync(uploadPath);
-          return res.status(400).json({ message: 'No database file found in archive' });
+          return res.status(400).json({ message: 'No database or spreadsheet file found in archive' });
         }
         const extractDir = path.join(UPLOAD_DIR, `extracted-${req.user._id}-${Date.now()}`);
         if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir, { recursive: true });
@@ -588,11 +668,11 @@ const backupAnalyze = async (req, res) => {
     try {
       const tables = sqliteService.getTables(sql);
       const tableMap = {
-        customers: ['parties', 'customers', 'party'],
+        customers: ['parties', 'customers', 'party', 'kb_names'],
         suppliers: ['suppliers', 'supplier'],
-        products: ['items', 'products', 'item'],
-        sales: ['sales', 'sale', 'invoice'],
-        purchases: ['purchases', 'purchase'],
+        products: ['items', 'products', 'item', 'kb_items'],
+        sales: ['sales', 'sale', 'invoice', 'kb_transactions'],
+        purchases: ['purchases', 'purchase', 'kb_transactions'],
         expenses: ['expenses', 'expense'],
         stock: ['stock', 'stock_movements', 'inventory'],
         payments: ['payments', 'payment'],
@@ -667,28 +747,87 @@ const backupExecute = async (req, res) => {
       try {
         const tables = sqliteService.getTables(sql);
 
+        // Build id -> name lookups so sales/purchases can resolve customer_id / supplier_id
+        // (backups link parties by id, not name). Returns {} when the table isn't present.
+        const buildLookup = (candidates) => {
+          const t = tables.find(x => candidates.some(c => x.toLowerCase() === c));
+          const map = {};
+          if (!t) return map;
+          try {
+            for (const row of sqliteService.extractRowsAsObjects(sql, t)) {
+              const id = row.id != null ? row.id : (row._id != null ? row._id : (row.party_id != null ? row.party_id : row.name_id));
+              const name = row.name || row.full_name || row.party_name || row.customer_name || row.supplier_name || row.partyName;
+              if (id != null && name) map[String(id)] = name;
+            }
+          } catch (_) { /* lookup is best-effort */ }
+          return map;
+        };
+        const customerLookup = buildLookup(['customers', 'parties', 'party', 'kb_names']);
+        const supplierLookup = buildLookup(['suppliers', 'supplier', 'parties', 'party', 'kb_names']);
+
+        // Product id -> name, so line-items that reference a product by id resolve to a name.
+        const productLookup = buildLookup(['products', 'items', 'item']);
+
+        // Read a line-items table (if any) and group rows by their parent invoice/bill id, so
+        // sales/purchases import WITH their per-product lines (not just totals). Best-effort:
+        // returns {} when no line-items table is present.
+        const num = (...vals) => { for (const v of vals) { const n = parseFloat(v); if (!isNaN(n)) return n; } return 0; };
+        const buildLineItems = (parentFks) => {
+          const cands = ['line_items', 'lineitems', 'sale_items', 'purchase_items', 'invoice_items', 'bill_items', 'items_sold', 'transaction_items', 'txn_lineitems', 'kb_lineitems'];
+          const t = tables.find(x => cands.some(c => x.toLowerCase() === c));
+          const map = {};
+          if (!t) return map;
+          try {
+            for (const li of sqliteService.extractRowsAsObjects(sql, t)) {
+              let parentId = null;
+              for (const k of parentFks) { if (li[k] != null) { parentId = li[k]; break; } }
+              if (parentId == null) continue;
+              const qty = num(li.quantity, li.qty, li.lineitem_quantity, li.item_quantity) || 1;
+              const rate = num(li.rate, li.price, li.unit_price, li.unitprice, li.lineitem_unitprice, li.lineitem_unit_price, li.item_unit_price, li.sale_price);
+              let amount = num(li.amount, li.total, li.total_amount, li.lineitem_total, li.lineitem_total_amount, li.line_total);
+              if (!amount) amount = qty * rate;
+              const pid = li.product_id != null ? li.product_id : (li.item_id != null ? li.item_id : li.lineitem_item_id);
+              const pname = li.product_name || li.item_name || li.itemName || li.name || (pid != null ? productLookup[String(pid)] : '') || 'Item';
+              const item = { productName: pname, quantity: qty, rate, amount: amount || rate, unit: li.unit || 'Pcs', hsn: li.hsn || '', gstRate: parseInt(li.gst_rate || li.gstRate || li.gst) || 0 };
+              (map[String(parentId)] = map[String(parentId)] || []).push(item);
+            }
+          } catch (_) { /* line-items are best-effort */ }
+          return map;
+        };
+        // txn_id / lineitem_txn_id cover real-Vyapar (kb_lineitems). Transaction ids are unique
+        // per record, so a sale and a purchase never collide even though both maps read the
+        // same line-items table.
+        const itemsBySale = buildLineItems(['sale_id', 'saleid', 'invoice_id', 'invoiceid', 'order_id', 'txn_id', 'lineitem_txn_id', 'transaction_id']);
+        const itemsByPurchase = buildLineItems(['purchase_id', 'purchaseid', 'bill_id', 'billid', 'txn_id', 'lineitem_txn_id', 'transaction_id']);
+
         const tableMap = {
-          customers: { candidates: ['parties', 'customers', 'party'], fn: (r) => {
+          customers: { candidates: ['parties', 'customers', 'party', 'kb_names'], fn: (r) => {
             const entity = r;
-            return { user: req.user._id, business: req.businessId, name: entity.name || entity.party_name || entity.customer_name || entity.partyName || 'Unknown', phone: entity.phone || entity.mobile || '', gstNumber: entity.gstin || entity.gst_number || entity.gstNumber || '', address: entity.address || '', email: entity.email || '' };
+            return { user: req.user._id, business: req.businessId, name: entity.name || entity.full_name || entity.party_name || entity.customer_name || entity.partyName || 'Unknown', phone: entity.phone || entity.phone_number || entity.mobile || entity.contact || '', gstNumber: entity.gstin || entity.gstin_number || entity.gst_number || entity.gstNumber || '', address: entity.address || entity.city || '', email: entity.email || '' };
           }, queryFn: (r) => {
-            const name = r.name || r.party_name || r.customer_name || r.partyName || 'Unknown';
+            const name = r.name || r.full_name || r.party_name || r.customer_name || r.partyName || 'Unknown';
             return { ...baseFilter, name };
           }, model: Customer, resultsKey: 'customers' },
-          products: { candidates: ['items', 'products', 'item'], fn: (r) => {
-            return { user: req.user._id, business: req.businessId, name: r.name || r.item_name || r.product_name || r.itemName || 'Unknown', price: parseFloat(r.price || r.sale_price || r.selling_price) || 0, costPrice: parseFloat(r.cost_price || r.costPrice || r.purchase_price) || 0, stock: parseInt(r.stock || r.quantity || r.current_stock) || 0, gstRate: parseInt(r.gst_rate || r.gstRate || r.gst) || 0, unit: r.unit || 'Pcs', hsn: r.hsn || '', isActive: true };
+          suppliers: { candidates: ['suppliers', 'supplier'], fn: (r) => {
+            return { user: req.user._id, business: req.businessId, name: r.name || r.supplier_name || r.party_name || r.supplierName || 'Unknown', phone: r.phone || r.mobile || r.contact || '', gstNumber: r.gstin || r.gst_number || r.gstNumber || '', address: r.address || r.city || '', email: r.email || '' };
+          }, queryFn: (r) => {
+            const name = r.name || r.supplier_name || r.party_name || r.supplierName || 'Unknown';
+            return { ...baseFilter, name };
+          }, model: Supplier, resultsKey: 'suppliers' },
+          products: { candidates: ['items', 'products', 'item', 'kb_items'], fn: (r) => {
+            return { user: req.user._id, business: req.businessId, name: r.name || r.item_name || r.product_name || r.itemName || 'Unknown', price: parseFloat(r.price || r.sale_price || r.selling_price || r.item_sale_unit_price) || 0, costPrice: parseFloat(r.cost_price || r.costPrice || r.purchase_price || r.item_purchase_unit_price) || 0, stock: parseInt(r.stock || r.quantity || r.current_stock || r.item_stock_quantity) || 0, gstRate: parseInt(r.gst_rate || r.gstRate || r.gst || r.item_tax_percent) || 0, unit: r.unit || 'Pcs', hsn: r.hsn || r.item_hsn_sac_code || '', isActive: true };
           }, queryFn: (r) => {
             const name = r.name || r.item_name || r.product_name || r.itemName || 'Unknown';
             return { ...baseFilter, name };
           }, model: Product, resultsKey: 'products' },
-          sales: { candidates: ['sales', 'sale', 'invoice'], fn: (r) => {
-            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || `VI-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: r.customer_name || r.party_name || r.customerName || 'Unknown', date: r.date || r.invoice_date || new Date(), items: [], taxableAmount: parseFloat(r.taxable_amount || r.taxableAmount || r.taxable) || 0, cgstTotal: parseFloat(r.cgst_total || r.cgstTotal || r.cgst) || 0, sgstTotal: parseFloat(r.sgst_total || r.sgstTotal || r.sgst) || 0, totalAmount: parseFloat(r.total || r.total_amount || r.grand_total || r.totalAmount) || 0, paidAmount: parseFloat(r.paid || r.paid_amount || r.paidAmount) || 0, remainingBalance: parseFloat(r.balance || r.due || r.remaining || r.remainingBalance) || 0, paymentStatus: 'unpaid', paymentMethod: (r.payment_method || r.paymentMode || 'cash').toLowerCase() };
+          sales: { candidates: ['sales', 'sale', 'invoice', 'kb_transactions'], filter: (r) => r.txn_type == null || Number(r.txn_type) === 1, fn: (r) => {
+            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || r.txn_ref_number_char || `VI-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, customerName: r.customer_name || r.party_name || r.customerName || customerLookup[String(r.customer_id != null ? r.customer_id : (r.customerId != null ? r.customerId : r.txn_name_id))] || 'Unknown', date: r.date || r.invoice_date || r.txn_date || new Date(), items: (itemsBySale[String(r.id != null ? r.id : (r.sale_id != null ? r.sale_id : (r.invoice_id != null ? r.invoice_id : r.txn_id)))] || []), taxableAmount: parseFloat(r.taxable_amount || r.taxableAmount || r.taxable) || 0, cgstTotal: parseFloat(r.cgst_total || r.cgstTotal || r.cgst) || 0, sgstTotal: parseFloat(r.sgst_total || r.sgstTotal || r.sgst) || 0, totalAmount: parseFloat(r.total || r.total_amount || r.grand_total || r.totalAmount || r.txn_total_amount) || 0, paidAmount: parseFloat(r.paid || r.paid_amount || r.paidAmount) || 0, remainingBalance: parseFloat(r.balance || r.due || r.remaining || r.remainingBalance) || 0, paymentStatus: 'unpaid', paymentMethod: (r.payment_method || r.paymentMode || 'cash').toLowerCase() };
           }, queryFn: (r) => {
             const inv = r.invoice_no || r.invoice_number || r.invoiceNumber || 'Unknown';
             return { ...baseFilter, invoiceNumber: inv };
           }, model: Sale, resultsKey: 'sales' },
-          purchases: { candidates: ['purchases', 'purchase'], fn: (r) => {
-            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || r.bill_no || `PI-${Date.now()}`, supplierName: r.supplier_name || r.party_name || r.supplierName || 'Unknown', date: r.date || r.purchase_date || new Date(), items: [], totalAmount: parseFloat(r.total || r.total_amount || r.totalAmount) || 0, paidAmount: parseFloat(r.paid || r.paid_amount || r.paidAmount) || 0, remainingBalance: parseFloat(r.balance || r.due || r.remainingBalance) || 0, paymentStatus: 'unpaid' };
+          purchases: { candidates: ['purchases', 'purchase', 'kb_transactions'], filter: (r) => r.txn_type == null || Number(r.txn_type) === 2, fn: (r) => {
+            return { user: req.user._id, business: req.businessId, invoiceNumber: r.invoice_no || r.invoice_number || r.invoiceNumber || r.bill_no || r.txn_ref_number_char || `PI-${Date.now()}`, supplierName: r.supplier_name || r.party_name || r.supplierName || supplierLookup[String(r.supplier_id != null ? r.supplier_id : (r.supplierId != null ? r.supplierId : r.txn_name_id))] || 'Unknown', date: r.date || r.purchase_date || r.txn_date || new Date(), items: (itemsByPurchase[String(r.id != null ? r.id : (r.purchase_id != null ? r.purchase_id : (r.bill_id != null ? r.bill_id : r.txn_id)))] || []), totalAmount: parseFloat(r.total || r.total_amount || r.totalAmount || r.txn_total_amount) || 0, paidAmount: parseFloat(r.paid || r.paid_amount || r.paidAmount) || 0, remainingBalance: parseFloat(r.balance || r.due || r.remainingBalance) || 0, paymentStatus: 'unpaid' };
           }, queryFn: (r) => {
             const inv = r.invoice_no || r.invoice_number || r.invoiceNumber || r.bill_no || 'Unknown';
             return { ...baseFilter, invoiceNumber: inv };
@@ -716,6 +855,9 @@ const backupExecute = async (req, res) => {
             const records = sqliteService.extractRowsAsObjects(sql, match);
             for (const record of records) {
               try {
+                // For combined tables (e.g. real-Vyapar kb_transactions holds BOTH sales and
+                // purchases), the config can filter which rows belong to it.
+                if (config.filter && !config.filter(record)) continue;
                 const doc = config.fn(record);
                 const query = config.queryFn ? config.queryFn(record) : null;
                 let inserted = true;

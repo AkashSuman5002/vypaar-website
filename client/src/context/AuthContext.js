@@ -48,6 +48,11 @@ export const AuthProvider = ({ children }) => {
 
   const loadActiveBusiness = async () => {
     try {
+      // Clear any previously-cached scope first so this status request is NOT sent with a
+      // stale x-business-id header (that would 403 and prevent us from learning the correct
+      // business for the current account). The backend resolves the user's own business
+      // when no header is present.
+      localStorage.removeItem('activeBusiness');
       const res = await businessAPI.getStatus();
       if (res.data.business) {
         localStorage.setItem('activeBusiness', res.data.business._id);
@@ -60,12 +65,7 @@ export const AuthProvider = ({ children }) => {
     // If 2FA is enabled the server withholds the token and asks for a TOTP code. Bubble the
     // flag up so the UI can prompt for the 6-digit code; do NOT store a (non-existent) session.
     if (data?.twoFactorRequired) return data;
-    localStorage.setItem('user', JSON.stringify(data));
-    setUser(data);
-    clearCache();
-    fetchCsrfToken().catch(() => null);
-    setTimeout(() => loadActiveBusiness(), 500);
-    return data;
+    return finishAuth(data);
   };
 
   // Complete login by submitting the second factor (TOTP). On success the server returns the
@@ -77,20 +77,23 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (name, email, password) => {
     const { data } = await authAPI.register({ name, email, password });
-    localStorage.setItem('user', JSON.stringify(data));
-    setUser(data);
-    fetchCsrfToken().catch(() => null);
-    setTimeout(() => loadActiveBusiness(), 500);
-    return data;
+    return finishAuth(data);
   };
 
   // --- Passwordless OTP ---
-  const finishAuth = (data) => {
+  const finishAuth = async (data) => {
+    // Switching accounts: drop the previous account's cached business scope and cached data
+    // BEFORE any request fires. Otherwise the API interceptor keeps sending the old
+    // `x-business-id` header, which the backend rejects with 403 — leaving the UI stuck on the
+    // previous account's data (the "shivam sees akash's data" bug).
+    localStorage.removeItem('activeBusiness');
+    clearCache();
     localStorage.setItem('user', JSON.stringify(data));
     setUser(data);
-    clearCache();
-    fetchCsrfToken().catch(() => null);
-    setTimeout(() => loadActiveBusiness(), 500);
+    await fetchCsrfToken().catch(() => null);
+    // Resolve THIS account's business now (awaited, not a 500ms timer) so data requests are
+    // scoped to the correct business from the first render.
+    await loadActiveBusiness();
     return data;
   };
   // Returns the server response (may include devOtp in non-production).
